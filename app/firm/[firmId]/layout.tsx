@@ -1,6 +1,5 @@
-import { AppSidebar } from "@/components/app-sidebar";
+import { FirmSidebar } from "@/components/firm-sidebar";
 import { 
-  SidebarProvider, 
   SidebarInset, 
   SidebarTrigger 
 } from "@/components/ui/sidebar";
@@ -37,9 +36,9 @@ export default function FirmLayout({
   params: Promise<{ firmId: string }>;
 }) {
   return (
-    <SidebarProvider>
+    <>
       <Suspense fallback={<div className="w-[--sidebar-width] bg-sidebar border-r h-screen" />}>
-        <AppSidebar />
+        <FirmSidebar />
       </Suspense>
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
@@ -57,6 +56,6 @@ export default function FirmLayout({
           {children}
         </div>
       </SidebarInset>
-    </SidebarProvider>
+    </>
   );
 }

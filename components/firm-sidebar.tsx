@@ -24,7 +24,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-export function AppSidebar() {
+export function FirmSidebar() {
   const router = useRouter();
   const supabase = createClient();
   const { firmId } = useParams() as { firmId: string };
@@ -35,10 +35,10 @@ export function AppSidebar() {
   };
 
   const items = [
-    { title: "Dashboard", url: `/${firmId}/dashboard`, icon: LayoutDashboard },
-    { title: "Clients", url: `/${firmId}/clients`, icon: Users },
-    { title: "Invoices", url: `/${firmId}/invoices`, icon: FileText },
-    { title: "Settings", url: `/${firmId}/settings`, icon: Settings },
+    { title: "首頁", url: `/firm/${firmId}/dashboard`, icon: LayoutDashboard },
+    { title: "客戶管理", url: `/firm/${firmId}/client`, icon: Users },
+    { title: "發票管理", url: `/firm/${firmId}/invoice`, icon: FileText },
+    { title: "設定", url: `/firm/${firmId}/settings`, icon: Settings },
   ];
 
   return (
@@ -47,7 +47,7 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <Link href={`/${firmId}/dashboard`}>
+              <Link href={`/firm/${firmId}/dashboard`}>
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
                   <LayoutDashboard className="size-4" />
                 </div>
@@ -61,7 +61,7 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Application</SidebarGroupLabel>
+          <SidebarGroupLabel>管理模組</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {items.map((item) => (

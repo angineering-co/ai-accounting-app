@@ -23,7 +23,7 @@ export async function createClient(data: CreateClientInput) {
     throw new Error("Database error: " + error.message);
   }
 
-  revalidatePath("/firm/[firmId]/client");
+  revalidatePath(`/firm/${data.firm_id}/client`);
 }
 
 export async function updateClient(clientId: string, data: UpdateClientInput) {
@@ -34,14 +34,16 @@ export async function updateClient(clientId: string, data: UpdateClientInput) {
   }
 
   const supabase = await createSupabaseClient();
-  const { error } = await supabase
+  const { data: updatedClient, error } = await supabase
     .from("clients")
     .update(validation.data)
-    .eq("id", clientId);
+    .eq("id", clientId)
+    .select()
+    .single();
 
   if (error) {
     throw new Error("Database error: " + error.message);
   }
 
-  revalidatePath("/firm/[firmId]/client");
+  revalidatePath(`/firm/${updatedClient.firm_id}/client`);
 }

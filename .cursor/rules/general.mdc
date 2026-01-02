@@ -3,7 +3,7 @@ alwaysApply: true
 ---
 Frontend
 - UI Components: Use shadcn library. Only build custom components if necessary
-- Use modal component (e.g. dialog) to get user input
+- Use modal component (e.g. dialog) + react-hook-form (i.e. https://ui.shadcn.com/docs/components/form) to get user input
 - Use toast component (e.g. sonner) to show API response to the user
 - UI Styles: Reference the existing UI/UX patterns in the code base to build new flows
 - Use swr library to fetch data with cache and deduping

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, use, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useEffect, useState, use } from "react";
+import useSWR from "swr";
+import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { Database } from "@/supabase/database.types";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,15 +29,15 @@ import { toast } from "sonner";
 
 type Client = Database["public"]["Tables"]["clients"]["Row"];
 
+import { updateClient, createClient } from "@/lib/services/client";
+
 export default function ClientPage({
   params,
 }: {
   params: Promise<{ firmId: string }>;
 }) {
   const { firmId } = use(params);
-  const supabase = createClient();
-  const [clients, setClients] = useState<Client[]>([]);
-  const [loading, setLoading] = useState(true);
+  const supabase = createSupabaseClient();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
@@ -51,31 +52,29 @@ export default function ClientPage({
     industry: "",
   });
 
-  const fetchClients = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("clients")
-        .select("*")
-        .eq("firm_id", firmId)
-        .order("created_at", { ascending: false });
+  const fetcher = async () => {
+    const { data, error } = await supabase
+      .from("clients")
+      .select("*")
+      .eq("firm_id", firmId)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return data || [];
+  };
 
-      if (error) {
-        throw error;
-      } else {
-        setClients(data || []);
-      }
-    } catch (error) {
-      console.error("Error fetching clients:", error);
-      toast.error("取得客戶資料失敗。");
-    } finally {
-      setLoading(false);
-    }
-  }, [firmId, supabase]);
+  const {
+    data: clients = [],
+    error,
+    isLoading,
+    mutate: fetchClients,
+  } = useSWR(["clients", firmId], fetcher);
 
   useEffect(() => {
-    fetchClients();
-  }, [fetchClients]);
+    if (error) {
+      console.error("Error fetching clients:", error);
+      toast.error("取得客戶資料失敗。");
+    }
+  }, [error]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -98,27 +97,22 @@ export default function ClientPage({
     setIsSubmitting(true);
 
     try {
-      const { error } = await supabase
-        .from("clients")
-        .insert([
-          {
-            ...formData,
-            firm_id: firmId,
-          },
-        ])
-        .select();
+      await createClient({
+        ...formData,
+        firm_id: firmId,
+      });
 
-      if (error) {
-        throw error;
-      } else {
-        toast.success("新增客戶成功。");
-        setIsAddModalOpen(false);
-        resetForm();
-        fetchClients();
-      }
+      toast.success("新增客戶成功。");
+      setIsAddModalOpen(false);
+      resetForm();
+      fetchClients();
     } catch (error) {
       console.error("Error adding client:", error);
-      toast.error("新增客戶失敗。請檢查您的輸入。");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "新增客戶失敗。請檢查您的輸入。"
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -130,22 +124,21 @@ export default function ClientPage({
     setIsSubmitting(true);
 
     try {
-      const { error } = await supabase
-        .from("clients")
-        .update(formData)
-        .eq("id", editingClient.id);
+      await updateClient(editingClient.id, {
+        ...formData,
+      });
 
-      if (error) {
-        throw error;
-      } else {
-        toast.success("更新客戶成功。");
-        setEditingClient(null);
-        resetForm();
-        fetchClients();
-      }
+      toast.success("更新客戶成功。");
+      setEditingClient(null);
+      resetForm();
+      fetchClients();
     } catch (error) {
       console.error("Error updating client:", error);
-      toast.error("更新客戶失敗。請檢查您的輸入。");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "更新客戶失敗。請檢查您的輸入。"
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -288,7 +281,7 @@ export default function ClientPage({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
+            {isLoading ? (
               <TableRow>
                 <TableCell colSpan={5} className="h-24 text-center">
                   <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />

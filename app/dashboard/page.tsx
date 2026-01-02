@@ -24,7 +24,7 @@ async function Redirector() {
   const firmId = profile?.firm_id;
 
   if (firmId) {
-    redirect(`/${firmId}/dashboard`);
+    redirect(`/firm/${firmId}/dashboard`);
   }
 
   // Fallback if no firm is found

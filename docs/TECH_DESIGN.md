@@ -55,9 +55,11 @@ Represents the uploaded documents (Receipts/Invoices) to be processed.
 *   **storage_path**: `TEXT` (Not Null)
 *   **filename**: `TEXT` (Not Null)
 *   **in_or_out**: (Check: `IN ('in', 'out')`)
-*   **status**: `TEXT` (Check: `IN ('pending', 'processing', 'completed', 'failed')`, Default: `pending`)
+*   **status**: `TEXT` (Check: `IN ('uploaded', 'processing', 'processed', 'confirmed', 'failed')`, Default: `uploaded`)
+*   **extracted_data**: `JSONB` (Nullable) - Stores AI-extracted fields (amount, date, tax_id, vendor info, etc.)
 *   **uploaded_by**: `UUID` (Foreign Key -> `profiles.id`)
 *   **created_at**: `TIMESTAMPTZ` (Default: `now()`)
+*   **Status Flow**: `uploaded` → `processing` → `processed` → `confirmed` (or `failed` at any stage)
 *   **RLS Policy**:
     *   `ALL`: `firm_id` matches the authenticated user's `firm_id` OR `auth.jwt() ->> 'role' = 'super_admin'`.
 
@@ -154,7 +156,8 @@ export const invoiceSchema = z.object({
   clientId: z.string().uuid().optional(),
   filename: z.string(),
   storagePath: z.string(),
-  status: z.enum(['pending', 'processing', 'completed', 'failed']),
+  status: z.enum(['uploaded', 'processing', 'processed', 'confirmed', 'failed']),
+  extractedData: z.record(z.unknown()).nullable().optional(), // JSONB field for AI-extracted data
   uploadedBy: z.string().uuid(),
   createdAt: z.date(),
 });

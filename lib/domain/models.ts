@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 export const clientSchema = z.object({
-  id: z.uuid(),
-  firm_id: z.uuid(),
+  id: z.string().uuid(),
+  firm_id: z.string().uuid(),
   name: z.string().min(1, "客戶名稱為必填"),
   contact_person: z.string().nullable().optional(),
   tax_id: z.string().min(8, "統一編號格式錯誤").max(8, "統一編號格式錯誤"),

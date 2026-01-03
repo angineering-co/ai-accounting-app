@@ -22,14 +22,23 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Form } from "@/components/ui/form";
 import { Plus, Pencil, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { ClientFormFields } from "@/components/client-form-fields";
 
 type Client = Database["public"]["Tables"]["clients"]["Row"];
 
 import { updateClient, createClient } from "@/lib/services/client";
+import {
+  UpdateClientInput,
+  updateClientSchema,
+  CreateClientInput,
+  createClientSchema,
+} from "@/lib/domain/models";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { ResponsiveDialogContent } from "@/components/ui/responsive-dialog";
 
 export default function ClientPage({
   params,
@@ -41,15 +50,30 @@ export default function ClientPage({
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  // Form State
-  const [formData, setFormData] = useState({
-    name: "",
-    contact_person: "",
-    tax_id: "",
-    tax_payer_id: "",
-    industry: "",
+  // Separate forms for create and update to handle different schemas and default values
+  const createForm = useForm<CreateClientInput>({
+    resolver: zodResolver(createClientSchema),
+    defaultValues: {
+      name: "",
+      contact_person: "",
+      tax_id: "",
+      tax_payer_id: "",
+      industry: "",
+      firm_id: firmId,
+    },
+  });
+
+  const updateForm = useForm<UpdateClientInput>({
+    resolver: zodResolver(updateClientSchema),
+    defaultValues: {
+      name: "",
+      contact_person: "",
+      tax_id: "",
+      tax_payer_id: "",
+      industry: "",
+    },
   });
 
   const fetcher = async () => {
@@ -76,35 +100,26 @@ export default function ClientPage({
     }
   }, [error]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const resetForm = () => {
-    setFormData({
+  const openAddModal = () => {
+    createForm.reset({
       name: "",
       contact_person: "",
       tax_id: "",
       tax_payer_id: "",
       industry: "",
+      firm_id: firmId,
     });
     setEditingClient(null);
+    setIsAddModalOpen(true);
   };
 
-  const handleAddClient = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-
+  const handleAddClient = async (data: CreateClientInput) => {
     try {
-      await createClient({
-        ...formData,
-        firm_id: firmId,
-      });
+      await createClient(data);
 
       toast.success("新增客戶成功。");
       setIsAddModalOpen(false);
-      resetForm();
+      createForm.reset();
       fetchClients();
     } catch (error) {
       console.error("Error adding client:", error);
@@ -113,24 +128,18 @@ export default function ClientPage({
           ? error.message
           : "新增客戶失敗。請檢查您的輸入。"
       );
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
-  const handleEditClient = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleEditClient = async (data: UpdateClientInput) => {
     if (!editingClient) return;
-    setIsSubmitting(true);
 
     try {
-      await updateClient(editingClient.id, {
-        ...formData,
-      });
+      await updateClient(editingClient.id, data);
 
       toast.success("更新客戶成功。");
       setEditingClient(null);
-      resetForm();
+      updateForm.reset();
       fetchClients();
     } catch (error) {
       console.error("Error updating client:", error);
@@ -139,15 +148,13 @@ export default function ClientPage({
           ? error.message
           : "更新客戶失敗。請檢查您的輸入。"
       );
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
   const handleDeleteClient = async () => {
     if (!clientToDelete) return;
 
-    setIsSubmitting(true);
+    setIsDeleting(true);
     try {
       const { error } = await supabase
         .from("clients")
@@ -165,13 +172,13 @@ export default function ClientPage({
       console.error("Error deleting client:", error);
       toast.error("刪除客戶失敗。");
     } finally {
-      setIsSubmitting(false);
+      setIsDeleting(false);
     }
   };
 
   const openEditModal = (client: Client) => {
     setEditingClient(client);
-    setFormData({
+    updateForm.reset({
       name: client.name,
       contact_person: client.contact_person || "",
       tax_id: client.tax_id,
@@ -189,83 +196,39 @@ export default function ClientPage({
         </div>
         <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
           <DialogTrigger asChild>
-            <Button onClick={() => resetForm()}>
+            <Button onClick={openAddModal}>
               <Plus className="mr-2 h-4 w-4" /> Add Client
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
-            <form onSubmit={handleAddClient}>
-              <DialogHeader>
-                <DialogTitle>新增客戶</DialogTitle>
-                <DialogDescription>
-                  請在此輸入新客戶的詳細資料。點擊保存當您完成時。
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="name">客戶名稱 (公司)</Label>
-                  <Input
-                    id="name"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    placeholder="例如：Acme Corp"
-                    required
-                  />
+          <ResponsiveDialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>新增客戶</DialogTitle>
+              <DialogDescription>
+                請在此輸入新客戶的詳細資料。點擊保存當您完成時。
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...createForm}>
+              <form
+                onSubmit={createForm.handleSubmit(handleAddClient)}
+                className="flex flex-col flex-1 min-h-0"
+              >
+                <div className="grid gap-4 py-4 flex-1 overflow-y-auto px-1">
+                  <ClientFormFields form={createForm} />
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="tax_id">統一編號</Label>
-                  <Input
-                    id="tax_id"
-                    name="tax_id"
-                    value={formData.tax_id}
-                    onChange={handleInputChange}
-                    placeholder="例如：12345678"
-                    required
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="tax_payer_id">稅籍編號</Label>
-                  <Input
-                    id="tax_payer_id"
-                    name="tax_payer_id"
-                    value={formData.tax_payer_id}
-                    onChange={handleInputChange}
-                    placeholder="例如：123456789"
-                    required
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="contact_person">負責人</Label>
-                  <Input
-                    id="contact_person"
-                    name="contact_person"
-                    value={formData.contact_person}
-                    onChange={handleInputChange}
-                    placeholder="公司負責人姓名"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="industry">產業</Label>
-                  <Input
-                    id="industry"
-                    name="industry"
-                    value={formData.industry}
-                    onChange={handleInputChange}
-                    placeholder="產業描述，用於AI分析發票摘要"
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  保存
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
+                <DialogFooter className="pt-2">
+                  <Button
+                    type="submit"
+                    disabled={createForm.formState.isSubmitting}
+                  >
+                    {createForm.formState.isSubmitting && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    保存
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </ResponsiveDialogContent>
         </Dialog>
       </div>
 
@@ -332,76 +295,37 @@ export default function ClientPage({
       {/* Edit Modal */}
       <Dialog
         open={!!editingClient}
-        onOpenChange={(open) => !open && resetForm()}
+        onOpenChange={(open) => !open && setEditingClient(null)}
       >
-        <DialogContent className="sm:max-w-[425px]">
-          <form onSubmit={handleEditClient}>
-            <DialogHeader>
-              <DialogTitle>編輯客戶</DialogTitle>
-              <DialogDescription>
-                請在此編輯客戶的詳細資料。點擊保存當您完成時。
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="edit-name">客戶名稱 (公司)</Label>
-                <Input
-                  id="edit-name"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  required
-                />
+        <ResponsiveDialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>編輯客戶</DialogTitle>
+            <DialogDescription>
+              請在此編輯客戶的詳細資料。點擊保存當您完成時。
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...updateForm}>
+            <form
+              onSubmit={updateForm.handleSubmit(handleEditClient)}
+              className="flex flex-col flex-1 min-h-0"
+            >
+              <div className="grid gap-4 py-4 flex-1 overflow-y-auto px-1">
+                <ClientFormFields form={updateForm} />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="edit-tax_id">統一編號</Label>
-                <Input
-                  id="edit-tax_id"
-                  name="tax_id"
-                  value={formData.tax_id}
-                  onChange={handleInputChange}
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="edit-tax_payer_id">稅籍編號</Label>
-                <Input
-                  id="edit-tax_payer_id"
-                  name="tax_payer_id"
-                  value={formData.tax_payer_id}
-                  onChange={handleInputChange}
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="edit-contact_person">負責人</Label>
-                <Input
-                  id="edit-contact_person"
-                  name="contact_person"
-                  value={formData.contact_person}
-                  onChange={handleInputChange}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="edit-industry">產業</Label>
-                <Input
-                  id="edit-industry"
-                  name="industry"
-                  value={formData.industry}
-                  onChange={handleInputChange}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                保存
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
+              <DialogFooter className="pt-2">
+                <Button
+                  type="submit"
+                  disabled={updateForm.formState.isSubmitting}
+                >
+                  {updateForm.formState.isSubmitting && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  保存
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </ResponsiveDialogContent>
       </Dialog>
 
       {/* Delete Confirmation Modal */}
@@ -420,16 +344,16 @@ export default function ClientPage({
             <Button
               variant="ghost"
               onClick={() => setClientToDelete(null)}
-              disabled={isSubmitting}
+              disabled={isDeleting}
             >
               取消
             </Button>
             <Button
               variant="destructive"
               onClick={handleDeleteClient}
-              disabled={isSubmitting}
+              disabled={isDeleting}
             >
-              {isSubmitting && (
+              {isDeleting && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
               確認刪除

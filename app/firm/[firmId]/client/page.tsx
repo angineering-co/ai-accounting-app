@@ -22,17 +22,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
+import { Form } from "@/components/ui/form";
 import { Plus, Pencil, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { ClientFormFields } from "@/components/client-form-fields";
 
 type Client = Database["public"]["Tables"]["clients"]["Row"];
 
@@ -57,7 +50,7 @@ export default function ClientPage({
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Separate forms for create and update to handle different schemas and default values
   const createForm = useForm<CreateClientInput>({
@@ -121,8 +114,6 @@ export default function ClientPage({
   };
 
   const handleAddClient = async (data: CreateClientInput) => {
-    setIsSubmitting(true);
-
     try {
       await createClient(data);
 
@@ -137,14 +128,11 @@ export default function ClientPage({
           ? error.message
           : "新增客戶失敗。請檢查您的輸入。"
       );
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
   const handleEditClient = async (data: UpdateClientInput) => {
     if (!editingClient) return;
-    setIsSubmitting(true);
 
     try {
       await updateClient(editingClient.id, data);
@@ -160,15 +148,13 @@ export default function ClientPage({
           ? error.message
           : "更新客戶失敗。請檢查您的輸入。"
       );
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
   const handleDeleteClient = async () => {
     if (!clientToDelete) return;
 
-    setIsSubmitting(true);
+    setIsDeleting(true);
     try {
       const { error } = await supabase
         .from("clients")
@@ -186,7 +172,7 @@ export default function ClientPage({
       console.error("Error deleting client:", error);
       toast.error("刪除客戶失敗。");
     } finally {
-      setIsSubmitting(false);
+      setIsDeleting(false);
     }
   };
 
@@ -227,83 +213,14 @@ export default function ClientPage({
                 className="flex flex-col flex-1 min-h-0"
               >
                 <div className="grid gap-4 py-4 flex-1 overflow-y-auto px-1">
-                  <FormField
-                    control={createForm.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>客戶名稱 (公司)</FormLabel>
-                        <FormControl>
-                          <Input placeholder="例如：Acme Corp" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={createForm.control}
-                    name="tax_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>統一編號</FormLabel>
-                        <FormControl>
-                          <Input placeholder="例如：12345678" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={createForm.control}
-                    name="tax_payer_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>稅籍編號</FormLabel>
-                        <FormControl>
-                          <Input placeholder="例如：123456789" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={createForm.control}
-                    name="contact_person"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>負責人</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="公司負責人姓名"
-                            {...field}
-                            value={field.value || ""}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={createForm.control}
-                    name="industry"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>產業</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="產業描述，用於AI分析發票摘要"
-                            {...field}
-                            value={field.value || ""}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <ClientFormFields form={createForm} />
                 </div>
                 <DialogFooter className="pt-2">
-                  <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting && (
+                  <Button
+                    type="submit"
+                    disabled={createForm.formState.isSubmitting}
+                  >
+                    {createForm.formState.isSubmitting && (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     )}
                     保存
@@ -393,75 +310,14 @@ export default function ClientPage({
               className="flex flex-col flex-1 min-h-0"
             >
               <div className="grid gap-4 py-4 flex-1 overflow-y-auto px-1">
-                <FormField
-                  control={updateForm.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>客戶名稱 (公司)</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={updateForm.control}
-                  name="tax_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>統一編號</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={updateForm.control}
-                  name="tax_payer_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>稅籍編號</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={updateForm.control}
-                  name="contact_person"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>負責人</FormLabel>
-                      <FormControl>
-                        <Input {...field} value={field.value || ""} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={updateForm.control}
-                  name="industry"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>產業</FormLabel>
-                      <FormControl>
-                        <Input {...field} value={field.value || ""} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <ClientFormFields form={updateForm} />
               </div>
               <DialogFooter className="pt-2">
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting && (
+                <Button
+                  type="submit"
+                  disabled={updateForm.formState.isSubmitting}
+                >
+                  {updateForm.formState.isSubmitting && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
                   保存
@@ -488,16 +344,16 @@ export default function ClientPage({
             <Button
               variant="ghost"
               onClick={() => setClientToDelete(null)}
-              disabled={isSubmitting}
+              disabled={isDeleting}
             >
               取消
             </Button>
             <Button
               variant="destructive"
               onClick={handleDeleteClient}
-              disabled={isSubmitting}
+              disabled={isDeleting}
             >
-              {isSubmitting && (
+              {isDeleting && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
               確認刪除

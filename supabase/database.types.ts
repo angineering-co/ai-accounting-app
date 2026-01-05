@@ -96,6 +96,67 @@ export type Database = {
         }
         Relationships: []
       }
+      invoices: {
+        Row: {
+          client_id: string | null
+          created_at: string | null
+          extracted_data: Json | null
+          filename: string
+          firm_id: string
+          id: string
+          in_or_out: string
+          status: string | null
+          storage_path: string
+          uploaded_by: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string | null
+          extracted_data?: Json | null
+          filename: string
+          firm_id: string
+          id?: string
+          in_or_out: string
+          status?: string | null
+          storage_path: string
+          uploaded_by: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string | null
+          extracted_data?: Json | null
+          filename?: string
+          firm_id?: string
+          id?: string
+          in_or_out?: string
+          status?: string | null
+          storage_path?: string
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string | null

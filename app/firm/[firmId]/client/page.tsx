@@ -23,9 +23,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
-import { Plus, Pencil, Loader2, Trash2 } from "lucide-react";
+import { Plus, Pencil, Loader2, Trash2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { ClientFormFields } from "@/components/client-form-fields";
+import Link from "next/link";
 
 type Client = Database["public"]["Tables"]["clients"]["Row"];
 
@@ -262,7 +263,15 @@ export default function ClientPage({
             ) : (
               clients.map((client) => (
                 <TableRow key={client.id}>
-                  <TableCell className="font-medium">{client.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link 
+                      href={`/firm/${firmId}/client/${client.id}`}
+                      className="hover:underline flex items-center gap-1 text-primary"
+                    >
+                      {client.name}
+                      <ExternalLink className="h-3 w-3" />
+                    </Link>
+                  </TableCell>
                   <TableCell>{client.tax_id}</TableCell>
                   <TableCell>{client.contact_person || "-"}</TableCell>
                   <TableCell>{client.industry || "-"}</TableCell>

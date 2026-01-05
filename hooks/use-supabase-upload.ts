@@ -48,6 +48,11 @@ type UseSupabaseUploadOptions = {
    * When set to false, an error is thrown if the object already exists. Defaults to `false`
    */
   upsert?: boolean
+  /**
+   * Custom function to generate the storage key for a file.
+   * If not provided, the file name will be used.
+   */
+  getStorageKey?: (file: File) => string
 }
 
 type UseSupabaseUploadReturn = ReturnType<typeof useSupabaseUpload>
@@ -61,12 +66,14 @@ const useSupabaseUpload = (options: UseSupabaseUploadOptions) => {
     maxFiles = 1,
     cacheControl = 3600,
     upsert = false,
+    getStorageKey,
   } = options
 
   const [files, setFiles] = useState<FileWithPreview[]>([])
   const [loading, setLoading] = useState<boolean>(false)
   const [errors, setErrors] = useState<{ name: string; message: string }[]>([])
   const [successes, setSuccesses] = useState<string[]>([])
+  const [uploadedFiles, setUploadedFiles] = useState<{ name: string; path: string }[]>([])
 
   const isSuccess = useMemo(() => {
     if (errors.length === 0 && successes.length === 0) {
@@ -113,36 +120,31 @@ const useSupabaseUpload = (options: UseSupabaseUploadOptions) => {
   const onUpload = useCallback(async () => {
     setLoading(true)
 
-    // [Joshen] This is to support handling partial successes
-    // If any files didn't upload for any reason, hitting "Upload" again will only upload the files that had errors
-    const filesWithErrors = errors.map((x) => x.name)
-    const filesToUpload =
-      filesWithErrors.length > 0
-        ? [
-            ...files.filter((f) => filesWithErrors.includes(f.name)),
-            ...files.filter((f) => !successes.includes(f.name)),
-          ]
-        : files
+    // Only upload files that are not already in the successes list
+    const filesToUpload = files.filter((f) => !successes.includes(f.name));
 
     const responses = await Promise.all(
       filesToUpload.map(async (file) => {
+        const fileName = getStorageKey ? getStorageKey(file) : file.name
+        const storageKey = !!path ? `${path}/${fileName}` : fileName
+
         const { error } = await supabase.storage
           .from(bucketName)
-          .upload(!!path ? `${path}/${file.name}` : file.name, file, {
+          .upload(storageKey, file, {
             cacheControl: cacheControl.toString(),
             upsert,
           })
         if (error) {
-          return { name: file.name, message: error.message }
+          return { name: file.name, path: storageKey, message: error.message }
         } else {
-          return { name: file.name, message: undefined }
+          return { name: file.name, path: storageKey, message: undefined }
         }
       })
     )
 
     const responseErrors = responses.filter((x) => x.message !== undefined)
     // if there were errors previously, this function tried to upload the files again so we should clear/overwrite the existing errors.
-    setErrors(responseErrors)
+    setErrors(responseErrors.map(x => ({ name: x.name, message: x.message! })))
 
     const responseSuccesses = responses.filter((x) => x.message === undefined)
     const newSuccesses = Array.from(
@@ -150,12 +152,19 @@ const useSupabaseUpload = (options: UseSupabaseUploadOptions) => {
     )
     setSuccesses(newSuccesses)
 
+    setUploadedFiles(prev => [
+      ...prev,
+      ...responseSuccesses.map(x => ({ name: x.name, path: x.path }))
+    ])
+
     setLoading(false)
-  }, [files, path, bucketName, errors, successes])
+  }, [files, path, bucketName, successes, cacheControl, upsert, getStorageKey])
 
   useEffect(() => {
     if (files.length === 0) {
       setErrors([])
+      setSuccesses([])
+      setUploadedFiles([])
     }
 
     // If the number of files doesn't exceed the maxFiles parameter, remove the error 'Too many files' from each file
@@ -172,12 +181,14 @@ const useSupabaseUpload = (options: UseSupabaseUploadOptions) => {
         setFiles(newFiles)
       }
     }
-  }, [files.length, setFiles, maxFiles])
+  }, [files, setFiles, maxFiles])
 
   return {
     files,
     setFiles,
     successes,
+    uploadedFiles,
+    setUploadedFiles,
     isSuccess,
     loading,
     errors,

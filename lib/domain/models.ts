@@ -56,7 +56,7 @@ export const invoiceSchema = z.object({
   status: z.enum(['uploaded', 'processing', 'processed', 'confirmed', 'failed']),
   extracted_data: extractedInvoiceDataSchema.nullable().optional(),
   uploaded_by: z.string().uuid(),
-  created_at: z.string().datetime(),
+  created_at: z.coerce.date(),
 });
 
 export const createInvoiceSchema = z.object({

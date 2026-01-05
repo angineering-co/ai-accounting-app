@@ -116,7 +116,7 @@ export function InvoiceTable({
                 </TableCell>
                 <TableCell>{getStatusBadge(invoice.status || "uploaded")}</TableCell>
                 <TableCell>
-                  {invoice.created_at ? new Date(invoice.created_at).toLocaleDateString("zh-TW") : "-"}
+                  {invoice.created_at ? invoice.created_at.toLocaleDateString("zh-TW") : "-"}
                 </TableCell>
                 <TableCell className="text-right flex items-center justify-end gap-1">
                   {(invoice.status === "processed" || invoice.status === "confirmed") && onReview && (

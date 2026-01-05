@@ -214,7 +214,7 @@ export const supabaseInvoiceStorage: InvoiceStorage = {
       storagePath: row.storage_path,
       status: row.status,
       uploadedBy: row.uploaded_by,
-      createdAt: new Date(row.created_at)
+      createdAt: row.created_at
     }));
   },
   

@@ -184,7 +184,7 @@ export function InvoiceReviewDialog({
                         <Input 
                           {...field} 
                           type="number" 
-                          onChange={e => field.onChange(parseFloat(e.target.value))} 
+                          onChange={e => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)} 
                         />
                       </FormControl>
                       <FormMessage />
@@ -201,7 +201,7 @@ export function InvoiceReviewDialog({
                         <Input 
                           {...field} 
                           type="number" 
-                          onChange={e => field.onChange(parseFloat(e.target.value))} 
+                          onChange={e => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)} 
                         />
                       </FormControl>
                       <FormMessage />
@@ -220,7 +220,7 @@ export function InvoiceReviewDialog({
                       <Input 
                         {...field} 
                         type="number" 
-                        onChange={e => field.onChange(parseFloat(e.target.value))} 
+                        onChange={e => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)} 
                       />
                     </FormControl>
                     <FormMessage />

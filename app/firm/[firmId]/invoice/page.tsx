@@ -22,8 +22,8 @@ import { ResponsiveDialogContent } from "@/components/ui/responsive-dialog";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { createInvoice, updateInvoice } from "@/lib/services/invoice";
-import { updateInvoiceSchema, type UpdateInvoiceInput, type Invoice as DomainInvoice } from "@/lib/domain/models";
+import { createInvoice, updateInvoice, deleteInvoice } from "@/lib/services/invoice";
+import { updateInvoiceSchema, type UpdateInvoiceInput, type Invoice as DomainInvoice, invoiceSchema } from "@/lib/domain/models";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -56,7 +56,7 @@ export default function InvoicePage({
   const [isDeleting, setIsDeleting] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [uploadFolderId, setUploadFolderId] = useState<string>(crypto.randomUUID());
+  const [uploadFolderId, setUploadFolderId] = useState<string>(() => crypto.randomUUID());
   const [isProcessingUpload, setIsProcessingUpload] = useState(false);
   const [reviewingInvoice, setReviewingInvoice] = useState<Invoice | null>(null);
 
@@ -102,7 +102,11 @@ export default function InvoicePage({
       .eq("firm_id", firmId)
       .order("created_at", { ascending: false });
     if (error) throw error;
-    return (data || []) as unknown as Invoice[];
+    
+    const invoiceWithClientSchema = invoiceSchema.extend({
+      client: z.object({ id: z.string(), name: z.string() }).nullable().optional(),
+    });
+    return z.array(invoiceWithClientSchema).parse(data || []);
   };
 
   const {
@@ -248,26 +252,10 @@ export default function InvoicePage({
 
     setIsDeleting(true);
     try {
-      // Delete file from storage
-      const { error: storageError } = await supabase.storage
-        .from("invoices")
-        .remove([invoiceToDelete.storage_path]);
-
-      if (storageError) throw storageError;
-
-      // Delete database record
-      const { error } = await supabase
-        .from("invoices")
-        .delete()
-        .eq("id", invoiceToDelete.id);
-
-      if (error) {
-        throw error;
-      } else {
-        toast.success("刪除發票成功。");
-        setInvoiceToDelete(null);
-        fetchInvoices();
-      }
+      await deleteInvoice(invoiceToDelete.id);
+      toast.success("刪除發票成功。");
+      setInvoiceToDelete(null);
+      fetchInvoices();
     } catch (error) {
       console.error("Error deleting invoice:", error);
       toast.error("刪除發票失敗。");
@@ -355,12 +343,7 @@ export default function InvoicePage({
       {/* Upload Modal */}
       <Dialog 
         open={isUploadModalOpen} 
-        onOpenChange={(open) => {
-          setIsUploadModalOpen(open);
-          if (!open) {
-            uploadProps.setFiles([]);
-          }
-        }}
+        onOpenChange={setIsUploadModalOpen}
       >
         <ResponsiveDialogContent className="sm:max-w-[600px]">
           <DialogHeader>

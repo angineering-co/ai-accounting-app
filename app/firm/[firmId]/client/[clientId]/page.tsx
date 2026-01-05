@@ -10,9 +10,9 @@ import { Loader2, ArrowLeft, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { InvoiceTable } from "@/components/invoice-table";
 import { InvoiceReviewDialog } from "@/components/invoice-review-dialog";
-import { updateInvoice, createInvoice } from "@/lib/services/invoice";
+import { updateInvoice, createInvoice, deleteInvoice } from "@/lib/services/invoice";
 import { toast } from "sonner";
-import { type Invoice } from "@/lib/domain/models";
+import { type Invoice, invoiceSchema } from "@/lib/domain/models";
 import { 
   Dialog, 
   DialogContent, 
@@ -55,7 +55,7 @@ export default function ClientDetailPage({
   const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [uploadFolderId, setUploadFolderId] = useState<string>(crypto.randomUUID());
+  const [uploadFolderId, setUploadFolderId] = useState<string>(() => crypto.randomUUID());
   const [isProcessingUpload, setIsProcessingUpload] = useState(false);
 
   // Fetch client details
@@ -82,7 +82,7 @@ export default function ClientDetailPage({
         .eq("client_id", clientId)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data || []) as unknown as Invoice[];
+      return invoiceSchema.array().parse(data || []);
     }
   );
 
@@ -168,8 +168,7 @@ export default function ClientDetailPage({
     if (!invoiceToDelete) return;
     setIsDeleting(true);
     try {
-      await supabase.storage.from("invoices").remove([invoiceToDelete.storage_path]);
-      await supabase.from("invoices").delete().eq("id", invoiceToDelete.id);
+      await deleteInvoice(invoiceToDelete.id);
       toast.success("刪除成功");
       setInvoiceToDelete(null);
       fetchInvoices();

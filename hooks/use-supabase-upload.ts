@@ -76,14 +76,11 @@ const useSupabaseUpload = (options: UseSupabaseUploadOptions) => {
   const [uploadedFiles, setUploadedFiles] = useState<{ name: string; path: string }[]>([])
 
   const isSuccess = useMemo(() => {
-    if (errors.length === 0 && successes.length === 0) {
-      return false
+    if (files.length === 0) {
+      return false;
     }
-    if (errors.length === 0 && successes.length === files.length) {
-      return true
-    }
-    return false
-  }, [errors.length, successes.length, files.length])
+    return successes.length === files.length && errors.length === 0;
+  }, [files.length, successes.length, errors.length]);
 
   const onDrop = useCallback(
     (acceptedFiles: File[], fileRejections: FileRejection[]) => {

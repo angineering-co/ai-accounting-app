@@ -63,22 +63,25 @@ export async function deleteInvoice(invoiceId: string) {
   if (fetchError) throw fetchError;
   if (!invoice) throw new Error('Invoice not found');
 
-  // Delete the file from storage
-  if (invoice.storage_path) {
-    const { error: storageError } = await supabase.storage
-      .from('invoices')
-      .remove([invoice.storage_path]);
-    
-    if (storageError) throw storageError;
-  }
-
-  // Delete the database record
+  // Delete the database record first
   const { error } = await supabase
     .from('invoices')
     .delete()
     .eq('id', invoiceId);
 
   if (error) throw error;
+
+  // After successfully deleting the DB record, remove the file from storage
+  if (invoice.storage_path) {
+    const { error: storageError } = await supabase.storage
+      .from('invoices')
+      .remove([invoice.storage_path]);
+    
+    if (storageError) {
+      // Log this error but don't throw, as the DB record is already gone.
+      console.error(`Failed to delete storage object ${invoice.storage_path}:`, storageError);
+    }
+  }
 }
 
 export async function getInvoices(firmId: string) {

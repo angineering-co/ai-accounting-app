@@ -1,7 +1,15 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
-import { createInvoiceSchema, updateInvoiceSchema, type CreateInvoiceInput, type UpdateInvoiceInput } from '@/lib/domain/models';
+import { createClient } from "@/lib/supabase/server";
+import {
+  createInvoiceSchema,
+  updateInvoiceSchema,
+  type CreateInvoiceInput,
+  type UpdateInvoiceInput,
+  extractedInvoiceDataSchema,
+} from "@/lib/domain/models";
+import { extractInvoiceData, type ClientInfo } from "@/lib/services/gemini";
+import { getAccountListString } from "@/lib/services/account";
 
 export async function createInvoice(data: CreateInvoiceInput) {
   const supabase = await createClient();
@@ -111,5 +119,181 @@ export async function getInvoicesByClient(clientId: string) {
 
   if (error) throw error;
   return data;
+}
+
+/**
+ * Extract invoice data using Gemini AI
+ * @param invoiceId - Invoice ID to extract data from
+ * @returns Extracted invoice data
+ */
+export async function extractInvoiceDataAction(invoiceId: string) {
+  const supabase = await createClient();
+  
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Unauthorized');
+
+  // Fetch invoice record
+  const { data: invoice, error: fetchError } = await supabase
+    .from('invoices')
+    .select('*')
+    .eq('id', invoiceId)
+    .single();
+
+  if (fetchError) throw fetchError;
+  if (!invoice) throw new Error('Invoice not found');
+
+  // Fetch client data if client_id exists
+  let client = null;
+  if (invoice.client_id) {
+    const { data: clientData, error: clientError } = await supabase
+      .from('clients')
+      .select('id, name, tax_id, industry')
+      .eq('id', invoice.client_id)
+      .single();
+    
+    if (!clientError && clientData) {
+      client = clientData;
+    }
+  }
+
+  // Update status to processing
+  const { error: updateError } = await supabase
+    .from('invoices')
+    .update({ status: 'processing' })
+    .eq('id', invoiceId);
+
+  if (updateError) throw updateError;
+
+  try {
+    // Download invoice file from Supabase Storage
+    const { data: fileData, error: downloadError } = await supabase.storage
+      .from('invoices')
+      .download(invoice.storage_path);
+
+    if (downloadError) {
+      throw new Error(`Failed to download invoice file: ${downloadError.message}`);
+    }
+
+    if (!fileData) {
+      throw new Error('Invoice file not found in storage');
+    }
+
+    // Convert Blob to ArrayBuffer
+    const arrayBuffer = await fileData.arrayBuffer();
+    
+    // Get MIME type - prefer Blob's type, fallback to extension-based detection
+    const getMimeType = (blob: Blob, filename: string): string => {
+      // First, try to use the Blob's content-type if available and valid
+      if (blob.type && blob.type !== 'application/octet-stream') {
+        // Validate it's a supported type
+        const supportedTypes = [
+          'application/pdf',
+          'image/png',
+          'image/jpeg',
+          'image/gif',
+          'image/webp',
+        ];
+        if (supportedTypes.includes(blob.type)) {
+          return blob.type;
+        }
+      }
+      
+      // Fallback to extension-based detection
+      const ext = filename.split('.').pop()?.toLowerCase();
+      const mimeTypes: Record<string, string> = {
+        'pdf': 'application/pdf',
+        'png': 'image/png',
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'gif': 'image/gif',
+        'webp': 'image/webp',
+      };
+      
+      // Special handling for HEIC/HEIF - not supported by Gemini
+      if (ext === 'heic' || ext === 'heif') {
+        throw new Error(
+          `HEIC/HEIF format is not supported by Gemini API. ` +
+          `Please convert your image to JPEG or PNG format before uploading. ` +
+          `You can use online converters or image editing software to convert the file.`
+        );
+      }
+      
+      const detectedType = mimeTypes[ext || ''];
+      if (!detectedType) {
+        throw new Error(
+          `Unsupported file format: ${ext || 'unknown'}. ` +
+          `Supported formats: PDF, PNG, JPEG, GIF, WEBP. ` +
+          `For HEIC files, please convert to JPEG or PNG first.`
+        );
+      }
+      
+      return detectedType;
+    };
+
+    const mimeType = getMimeType(fileData, invoice.filename);
+
+    // Prepare client info
+    const clientInfo: ClientInfo = client
+      ? {
+          name: client.name,
+          taxId: client.tax_id || '',
+          industry: client.industry || '',
+        }
+      : {
+          name: '',
+          taxId: '',
+          industry: '',
+        };
+
+    // Convert in_or_out to Chinese format
+    const inOrOut = invoice.in_or_out === 'in' ? '進項' : '銷項';
+
+    // Get account list if it's an "進項" invoice
+    const accountListString = invoice.in_or_out === 'in' 
+      ? getAccountListString() 
+      : '';
+
+    // Call Gemini service to extract data
+    const extractedData = await extractInvoiceData(
+      arrayBuffer,
+      mimeType,
+      clientInfo,
+      inOrOut,
+      accountListString
+    );
+
+    // Validate extracted data against schema
+    const validatedData = extractedInvoiceDataSchema.parse(extractedData);
+
+    // Update invoice with extracted data and set status to processed
+    // Convert to plain object for Supabase JSONB column
+    const extractedDataJson = JSON.parse(JSON.stringify(validatedData));
+    
+    const { error: finalUpdateError } = await supabase
+      .from('invoices')
+      .update({
+        extracted_data: extractedDataJson,
+        status: 'processed',
+      })
+      .eq('id', invoiceId);
+
+    if (finalUpdateError) throw finalUpdateError;
+
+    return validatedData;
+  } catch (error) {
+    // Update status to failed on error
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    
+    await supabase
+      .from('invoices')
+      .update({ 
+        status: 'failed',
+      })
+      .eq('id', invoiceId);
+
+    console.error('Error extracting invoice data:', error);
+    throw new Error(`Failed to extract invoice data: ${errorMessage}`);
+  }
 }
 

@@ -31,6 +31,7 @@ import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Image from "next/image";
+import { Select, SelectItem, SelectContent, SelectValue, SelectTrigger } from "@/components/ui/select";
 
 interface InvoiceReviewDialogProps {
   invoice: Invoice | null;
@@ -51,27 +52,45 @@ export function InvoiceReviewDialog({
   const form = useForm<ExtractedInvoiceData>({
     resolver: zodResolver(extractedInvoiceDataSchema),
     defaultValues: {
-      invoice_number: "",
-      invoice_date: "",
-      amount: 0,
-      tax_amount: 0,
-      total_amount: 0,
-      vendor_name: "",
-      vendor_tax_id: "",
+      invoiceSerialCode: "",
+      date: "",
+      totalSales: 0,
+      tax: 0,
+      totalAmount: 0,
+      sellerName: "",
+      sellerTaxId: "",
+      buyerName: "",
+      buyerTaxId: "",
+      summary: "",
+      deductible: false,
+      account: "",
+      taxType: "應稅",
+      invoiceType: "手開三聯式",
+      inOrOut: "進項",
     },
   });
 
   useEffect(() => {
     if (invoice && isOpen) {
+      // Use the extracted_data directly, ensuring all fields are properly mapped
+      const extractedData = invoice.extracted_data || {};
       form.reset({
-        invoice_number: invoice.extracted_data?.invoice_number || "",
-        invoice_date: invoice.extracted_data?.invoice_date || "",
-        amount: invoice.extracted_data?.amount || 0,
-        tax_amount: invoice.extracted_data?.tax_amount || 0,
-        total_amount: invoice.extracted_data?.total_amount || 0,
-        vendor_name: invoice.extracted_data?.vendor_name || "",
-        vendor_tax_id: invoice.extracted_data?.vendor_tax_id || "",
-        ...invoice.extracted_data
+        invoiceSerialCode: extractedData.invoiceSerialCode || "",
+        date: extractedData.date || "",
+        totalSales: extractedData.totalSales ?? 0,
+        tax: extractedData.tax ?? 0,
+        totalAmount: extractedData.totalAmount ?? 0,
+        sellerName: extractedData.sellerName || "",
+        sellerTaxId: extractedData.sellerTaxId || "",
+        buyerName: extractedData.buyerName || "",
+        buyerTaxId: extractedData.buyerTaxId || "",
+        summary: extractedData.summary || "",
+        deductible: extractedData.deductible || false,
+        account: extractedData.account || "",
+        taxType: extractedData.taxType || "應稅",
+        invoiceType: extractedData.invoiceType || "手開三聯式",
+        inOrOut: extractedData.inOrOut || (invoice.in_or_out === "in" ? "進項" : "銷項"),
+        ...extractedData, // Include any additional fields
       });
 
       // Get signed URL for preview
@@ -147,12 +166,12 @@ export function InvoiceReviewDialog({
             <form className="space-y-4">
               <FormField
                 control={form.control}
-                name="invoice_number"
+                name="invoiceSerialCode"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>發票號碼</FormLabel>
+                    <FormLabel>發票字軌號碼</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="例如: AB-12345678" />
+                      <Input {...field} placeholder="例如: AB12345678" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -161,12 +180,12 @@ export function InvoiceReviewDialog({
 
               <FormField
                 control={form.control}
-                name="invoice_date"
+                name="date"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>發票日期</FormLabel>
                     <FormControl>
-                      <Input {...field} type="date" />
+                      <Input {...field} placeholder="YYYY/MM/DD" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -176,7 +195,7 @@ export function InvoiceReviewDialog({
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
-                  name="amount"
+                  name="totalSales"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>銷售額</FormLabel>
@@ -184,6 +203,7 @@ export function InvoiceReviewDialog({
                         <Input 
                           {...field} 
                           type="number" 
+                          value={field.value ?? ""}
                           onChange={e => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)} 
                         />
                       </FormControl>
@@ -193,7 +213,7 @@ export function InvoiceReviewDialog({
                 />
                 <FormField
                   control={form.control}
-                  name="tax_amount"
+                  name="tax"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>稅額</FormLabel>
@@ -201,6 +221,7 @@ export function InvoiceReviewDialog({
                         <Input 
                           {...field} 
                           type="number" 
+                          value={field.value ?? ""}
                           onChange={e => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)} 
                         />
                       </FormControl>
@@ -212,7 +233,7 @@ export function InvoiceReviewDialog({
 
               <FormField
                 control={form.control}
-                name="total_amount"
+                name="totalAmount"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>總計</FormLabel>
@@ -220,6 +241,7 @@ export function InvoiceReviewDialog({
                       <Input 
                         {...field} 
                         type="number" 
+                        value={field.value ?? ""}
                         onChange={e => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)} 
                       />
                     </FormControl>
@@ -228,33 +250,164 @@ export function InvoiceReviewDialog({
                 )}
               />
 
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="sellerName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>賣方名稱</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="sellerTaxId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>賣方統編</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="buyerName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>買方名稱</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="buyerTaxId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>買方統編</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
               <FormField
                 control={form.control}
-                name="vendor_name"
+                name="summary"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>供應商名稱</FormLabel>
+                    <FormLabel>摘要</FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input {...field} placeholder="簡要描述" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="vendor_tax_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>供應商統編</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="account"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>會計科目</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="例如: 5102 旅費" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="taxType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>課稅別</FormLabel>
+                      <FormControl>
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="選擇課稅別" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="應稅">應稅</SelectItem>
+                            <SelectItem value="零稅率">零稅率</SelectItem>
+                            <SelectItem value="免稅">免稅</SelectItem>
+                            <SelectItem value="作廢">作廢</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="invoiceType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>發票類型</FormLabel>
+                      <FormControl>
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="選擇發票類型" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="手開二聯式">手開二聯式</SelectItem>
+                            <SelectItem value="手開三聯式">手開三聯式</SelectItem>
+                            <SelectItem value="電子發票">電子發票</SelectItem>
+                            <SelectItem value="二聯式收銀機">二聯式收銀機</SelectItem>
+                            <SelectItem value="三聯式收銀機">三聯式收銀機</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="deductible"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>可扣抵</FormLabel>
+                      <FormControl>
+                        <Select value={field.value ? "true" : "false"} onValueChange={value => field.onChange(value === "true")}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="選擇可扣抵" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="true">是</SelectItem>
+                            <SelectItem value="false">否</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </form>
           </Form>
         </div>

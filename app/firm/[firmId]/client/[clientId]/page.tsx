@@ -10,7 +10,7 @@ import { Loader2, ArrowLeft, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { InvoiceTable } from "@/components/invoice-table";
 import { InvoiceReviewDialog } from "@/components/invoice-review-dialog";
-import { updateInvoice, createInvoice, deleteInvoice } from "@/lib/services/invoice";
+import { createInvoice, deleteInvoice, extractInvoiceDataAction } from "@/lib/services/invoice";
 import { toast } from "sonner";
 import { type Invoice, invoiceSchema } from "@/lib/domain/models";
 import { 
@@ -143,25 +143,18 @@ export default function ClientDetailPage({
     }
   }, [uploadProps.isSuccess, isProcessingUpload, handleUploadComplete]);
 
-  const simulateAIProcessing = async (invoiceId: string) => {
-    await updateInvoice(invoiceId, { status: "processing" });
-    fetchInvoices();
-    setTimeout(async () => {
-      await updateInvoice(invoiceId, {
-        status: "processed",
-        extracted_data: {
-          invoice_number: "INV-" + Math.floor(Math.random() * 1000000),
-          invoice_date: new Date().toISOString().split('T')[0],
-          amount: 1000,
-          tax_amount: 50,
-          total_amount: 1050,
-          vendor_name: "模擬供應商股份有限公司",
-          vendor_tax_id: "12345678"
-        }
-      });
+  const handleExtractInvoice = async (invoiceId: string) => {
+    try {
+      toast.info("AI 正在處理中...");
+      await extractInvoiceDataAction(invoiceId);
       fetchInvoices();
-      toast.success("AI 處理完成");
-    }, 2000);
+      toast.success("AI 處理完成，請進行確認");
+    } catch (error) {
+      console.error("Error extracting invoice data:", error);
+      const errorMessage = error instanceof Error ? error.message : "AI 提取失敗";
+      toast.error(errorMessage);
+      fetchInvoices(); // Refresh to show updated status (likely "failed")
+    }
   };
 
   const handleDeleteInvoice = async () => {
@@ -236,7 +229,7 @@ export default function ClientDetailPage({
             invoices={invoices}
             isLoading={isInvoicesLoading}
             onReview={setReviewingInvoice}
-            onSimulateAI={simulateAIProcessing}
+            onExtractAI={handleExtractInvoice}
             onDelete={setInvoiceToDelete}
             showClientColumn={false}
           />

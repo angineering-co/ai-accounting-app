@@ -22,7 +22,7 @@ import { ResponsiveDialogContent } from "@/components/ui/responsive-dialog";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { createInvoice, updateInvoice, deleteInvoice } from "@/lib/services/invoice";
+import { createInvoice, updateInvoice, deleteInvoice, extractInvoiceDataAction } from "@/lib/services/invoice";
 import { updateInvoiceSchema, type UpdateInvoiceInput, type Invoice as DomainInvoice, invoiceSchema } from "@/lib/domain/models";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -216,34 +216,18 @@ export default function InvoicePage({
     }
   };
 
-  // Mock AI Processing Simulation
-  const simulateAIProcessing = async (invoiceId: string) => {
+  // AI Invoice Extraction
+  const handleExtractInvoice = async (invoiceId: string) => {
     try {
-      // Step 1: Status -> processing
-      await updateInvoice(invoiceId, { status: "processing" });
-      fetchInvoices();
       toast.info("AI 正在處理中...");
-
-      // Step 2: Simulate delay then status -> processed + mock data
-      setTimeout(async () => {
-        await updateInvoice(invoiceId, {
-          status: "processed",
-          extracted_data: {
-            invoice_number: "INV-" + Math.floor(Math.random() * 1000000),
-            invoice_date: new Date().toISOString().split('T')[0],
-            amount: 1000,
-            tax_amount: 50,
-            total_amount: 1050,
-            vendor_name: "模擬供應商股份有限公司",
-            vendor_tax_id: "12345678"
-          }
-        });
-        fetchInvoices();
-        toast.success("AI 處理完成，請進行確認");
-      }, 3000);
+      await extractInvoiceDataAction(invoiceId);
+      fetchInvoices();
+      toast.success("AI 處理完成，請進行確認");
     } catch (error) {
-      console.error("Error simulating AI:", error);
-      toast.error("模擬 AI 處理失敗");
+      console.error("Error extracting invoice data:", error);
+      const errorMessage = error instanceof Error ? error.message : "AI 提取失敗";
+      toast.error(errorMessage);
+      fetchInvoices(); // Refresh to show updated status (likely "failed")
     }
   };
 
@@ -335,7 +319,7 @@ export default function InvoicePage({
         invoices={filteredInvoices}
         isLoading={isLoading}
         onReview={setReviewingInvoice}
-        onSimulateAI={simulateAIProcessing}
+        onExtractAI={handleExtractInvoice}
         onEdit={openEditModal}
         onDelete={setInvoiceToDelete}
       />

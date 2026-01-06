@@ -35,15 +35,23 @@ export type CreateClientInput = z.infer<typeof createClientSchema>;
 // ===== Invoice Schemas =====
 
 // Schema for extracted invoice data (stored in JSONB column)
+// Matches InvoiceData interface from examples/invoice-reader/src/Models.ts
 export const extractedInvoiceDataSchema = z.object({
-  invoice_number: z.string().optional(),
-  invoice_date: z.string().optional(), // ISO date string
-  amount: z.number().optional(),
-  tax_amount: z.number().optional(),
-  total_amount: z.number().optional(),
-  vendor_name: z.string().optional(),
-  vendor_tax_id: z.string().optional(),
-  // Add other extracted fields as needed
+  invoiceSerialCode: z.string().optional(), // 發票字軌號碼
+  date: z.string().optional(), // YYYY/MM/DD format
+  sellerName: z.string().optional(), // 賣方名稱
+  sellerTaxId: z.string().optional(), // 賣方統一編號
+  buyerName: z.string().optional(), // 買方名稱
+  buyerTaxId: z.string().optional(), // 買方統一編號
+  totalSales: z.number().optional(), // 銷售額
+  tax: z.number().optional(), // 營業稅
+  totalAmount: z.number().optional(), // 總計
+  summary: z.string().optional(), // 摘要
+  deductible: z.boolean().optional(), // 是否可扣抵
+  account: z.string().optional(), // 會計科目 (e.g., "5102 旅費")
+  taxType: z.enum(['應稅', '零稅率', '免稅', '作廢']).optional(), // 課稅別
+  invoiceType: z.enum(['手開二聯式', '手開三聯式', '電子發票', '二聯式收銀機', '三聯式收銀機']).optional(), // 發票類型
+  inOrOut: z.enum(['進項', '銷項']).optional(), // 進銷項
 }).passthrough(); // Allow additional fields from AI extraction
 
 export const invoiceSchema = z.object({

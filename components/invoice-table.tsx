@@ -1,26 +1,32 @@
 "use client";
 
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import { useState, useEffect } from "react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  FileText, 
-  Eye, 
-  Loader2, 
-  Pencil, 
-  Trash2,
-  ExternalLink
+import {
+  FileText,
+  Loader2,
+  ExternalLink,
+  MoreHorizontal,
+  Sparkles
 } from "lucide-react";
 import { type Invoice } from "@/lib/domain/models";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type JoinedInvoice = Invoice & {
   client?: { id: string; name: string } | null;
@@ -30,7 +36,7 @@ interface InvoiceTableProps {
   invoices: JoinedInvoice[];
   isLoading: boolean;
   onReview?: (invoice: Invoice) => void;
-  onSimulateAI?: (invoiceId: string) => void;
+  onExtractAI?: (invoiceId: string) => void;
   onEdit?: (invoice: Invoice) => void;
   onDelete?: (invoice: Invoice) => void;
   showClientColumn?: boolean;
@@ -40,12 +46,41 @@ export function InvoiceTable({
   invoices,
   isLoading,
   onReview,
-  onSimulateAI,
+  onExtractAI,
   onEdit,
   onDelete,
   showClientColumn = true
 }: InvoiceTableProps) {
   const { firmId } = useParams() as { firmId: string };
+  const [processingInvoiceIds, setProcessingInvoiceIds] = useState<Set<string>>(new Set());
+
+  // Sync processing state with actual invoice statuses
+  // This effect runs when invoices data refreshes (after SWR fetches new data from parent)
+  // The parent component calls fetchInvoices() after extractInvoiceDataAction completes
+  useEffect(() => {
+    setProcessingInvoiceIds(prev => {
+      const next = new Set(prev);
+      
+      // Add all invoices that backend says are processing
+      invoices.forEach(invoice => {
+        if (invoice.status === "processing") {
+          next.add(invoice.id);
+        }
+      });
+      
+      // Remove invoices that are no longer processing
+      // But only if they were in the previous set (to avoid removing user-clicked items prematurely)
+      invoices.forEach(invoice => {
+        if (invoice.status !== "processing" && prev.has(invoice.id)) {
+          // Only remove if it was previously processing and now it's not
+          // This ensures user-clicked items stay until backend confirms the status change
+          next.delete(invoice.id);
+        }
+      });
+      
+      return next;
+    });
+  }, [invoices]);
 
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -92,9 +127,16 @@ export function InvoiceTable({
           ) : (
             invoices.map((invoice) => (
               <TableRow key={invoice.id}>
-                <TableCell className="font-medium flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  {invoice.filename}
+                <TableCell className="font-medium">
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 text-left hover:text-primary hover:underline focus:outline-none"
+                    onClick={() => onReview?.(invoice)}
+                    title="點擊預覽發票影像與內容"
+                  >
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <span>{invoice.filename}</span>
+                  </button>
                 </TableCell>
                 {showClientColumn && (
                   <TableCell>
@@ -119,48 +161,82 @@ export function InvoiceTable({
                   {invoice.created_at ? invoice.created_at.toLocaleDateString("zh-TW") : "-"}
                 </TableCell>
                 <TableCell className="text-right flex items-center justify-end gap-1">
-                  {(invoice.status === "processed" || invoice.status === "confirmed") && onReview && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-primary hover:text-primary hover:bg-primary/10"
-                      onClick={() => onReview(invoice)}
-                      title="確認內容"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                  )}
-                  {invoice.status === "uploaded" && onSimulateAI && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-amber-600 hover:text-amber-600 hover:bg-amber-100"
-                      onClick={() => onSimulateAI(invoice.id)}
-                      title="模擬 AI 處理"
-                    >
-                      <Loader2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                  {onEdit && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => onEdit(invoice)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                      <span className="sr-only">編輯</span>
-                    </Button>
-                  )}
-                  {onDelete && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => onDelete(invoice)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      <span className="sr-only">刪除</span>
-                    </Button>
+                  {onExtractAI && (() => {
+                    const isProcessing = invoice.status === "processing" || processingInvoiceIds.has(invoice.id);
+                    return (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-blue-600 hover:text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-400 dark:hover:bg-blue-950/20"
+                        onClick={() => {
+                          // Immediately show spinner
+                          setProcessingInvoiceIds(prev => new Set(prev).add(invoice.id));
+                          // Call the handler
+                          onExtractAI(invoice.id);
+                          // The useEffect will sync with actual status once data refreshes
+                        }}
+                        title={isProcessing ? "AI 處理中，請稍候..." : "AI 提取 / 重新提取"}
+                        disabled={isProcessing}
+                      >
+                        {isProcessing ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Sparkles className="h-4 w-4" />
+                        )}
+                      </Button>
+                    );
+                  })()}
+
+                  {(onReview || onExtractAI || onEdit || onDelete) && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-muted-foreground hover:text-foreground"
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                          <span className="sr-only">更多操作</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {onReview && (
+                          <DropdownMenuItem onClick={() => onReview(invoice)}>
+                            預覽與確認
+                          </DropdownMenuItem>
+                        )}
+                        {onExtractAI && (() => {
+                          const isProcessing = invoice.status === "processing" || processingInvoiceIds.has(invoice.id);
+                          return (
+                            <DropdownMenuItem
+                              onClick={() => {
+                                if (!isProcessing) {
+                                  setProcessingInvoiceIds(prev => new Set(prev).add(invoice.id));
+                                  onExtractAI(invoice.id);
+                                  // The useEffect will sync with actual status once data refreshes
+                                }
+                              }}
+                              disabled={isProcessing}
+                            >
+                              {isProcessing ? "AI 處理中..." : "AI 提取 / 重新提取"}
+                            </DropdownMenuItem>
+                          );
+                        })()}
+                        {onEdit && (
+                          <DropdownMenuItem onClick={() => onEdit(invoice)}>
+                            編輯帳務資料
+                          </DropdownMenuItem>
+                        )}
+                        {onDelete && (
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => onDelete(invoice)}
+                          >
+                            刪除發票
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   )}
                 </TableCell>
               </TableRow>

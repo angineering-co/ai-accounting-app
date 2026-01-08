@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState, useCallback } from "react";
 import useSWR from "swr";
+import { useDebounce } from "use-debounce";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,8 +12,10 @@ import { useRouter } from "next/navigation";
 import { InvoiceTable } from "@/components/invoice-table";
 import { InvoiceReviewDialog } from "@/components/invoice-review-dialog";
 import { createInvoice, deleteInvoice, extractInvoiceDataAction } from "@/lib/services/invoice";
+import { RangeManagement } from "@/components/range-management";
+import { ReportGeneration } from "@/components/report-generation";
 import { toast } from "sonner";
-import { type Invoice, invoiceSchema } from "@/lib/domain/models";
+import { type Invoice, invoiceSchema, clientSchema } from "@/lib/domain/models";
 import { 
   Dialog, 
   DialogContent, 
@@ -26,6 +29,7 @@ import { ResponsiveDialogContent } from "@/components/ui/responsive-dialog";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { Input } from "@/components/ui/input";
 import { 
   Select, 
   SelectContent, 
@@ -57,6 +61,15 @@ export default function ClientDetailPage({
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [uploadFolderId, setUploadFolderId] = useState<string>(() => crypto.randomUUID());
   const [isProcessingUpload, setIsProcessingUpload] = useState(false);
+  
+  // Period for reports (ROC format YYYMM)
+  const [reportPeriod, setReportPeriod] = useState<string>(() => {
+    const now = new Date();
+    const rocYear = now.getFullYear() - 1911;
+    const month = (now.getMonth() + 1).toString().padStart(2, "0");
+    return `${rocYear}${month}`;
+  });
+  const [debouncedReportPeriod] = useDebounce(reportPeriod, 500);
 
   // Fetch client details
   const { data: client, isLoading: isClientLoading } = useSWR(
@@ -68,7 +81,7 @@ export default function ClientDetailPage({
         .eq("id", clientId)
         .single();
       if (error) throw error;
-      return data;
+      return clientSchema.parse(data);
     }
   );
 
@@ -189,6 +202,7 @@ export default function ClientDetailPage({
         <TabsList>
           <TabsTrigger value="basic">基本資料</TabsTrigger>
           <TabsTrigger value="invoices">發票管理</TabsTrigger>
+          <TabsTrigger value="reports">報表與字軌</TabsTrigger>
         </TabsList>
         
         <TabsContent value="basic" className="mt-6">
@@ -233,6 +247,24 @@ export default function ClientDetailPage({
             onDelete={setInvoiceToDelete}
             showClientColumn={false}
           />
+        </TabsContent>
+
+        <TabsContent value="reports" className="mt-6 space-y-6">
+          <div className="flex items-center gap-4">
+            <Label className="text-lg font-semibold">選擇期別:</Label>
+            <Input 
+              type="text" 
+              className="w-32"
+              value={reportPeriod}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReportPeriod(e.target.value)}
+              placeholder="YYYMM"
+            />
+            <p className="text-sm text-muted-foreground">格式: 民國年(3碼) + 月份(2碼)，例如 11309</p>
+          </div>
+
+          <RangeManagement clientId={clientId} yearMonth={debouncedReportPeriod} />
+          
+          <ReportGeneration client={client} yearMonth={debouncedReportPeriod} />
         </TabsContent>
       </Tabs>
 

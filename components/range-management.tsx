@@ -69,7 +69,7 @@ export function RangeManagement({ clientId, yearMonth }: RangeManagementProps) {
 
   const form = useForm<CreateInvoiceRangeInput>({
     resolver: zodResolver(createInvoiceRangeSchema),
-    defaultValues: {
+    values: {
       client_id: clientId,
       year_month: yearMonth,
       invoice_type: "手開三聯式",

@@ -138,19 +138,15 @@ export async function generateTxtReport(clientId: string, yearMonth: string) {
   // yearMonth is like "11309" -> need to match extracted_data.date
   // "11309" -> ROC 113年 09月 -> covers 2024/09 and 2024/10
   const rocYear = parseInt(yearMonth.substring(0, 3), 10);
-  const month = yearMonth.substring(3);
-  const startMonth = parseInt(month, 10);
+  const month = parseInt(yearMonth.substring(3), 10);
   const gregorianYear = rocYear + 1911;
-  
-  const prefix1 = `${gregorianYear}/${month}`;
-  
-  let endMonth = startMonth + 1;
-  let endGregorianYear = gregorianYear;
-  if (endMonth > 12) {
-    endMonth = 1;
-    endGregorianYear++;
-  }
-  const prefix2 = `${endGregorianYear}/${endMonth.toString().padStart(2, '0')}`;
+
+  // Determine the correct bimonthly period
+  const periodStartMonth = Math.floor((month - 1) / 2) * 2 + 1;
+  const periodEndMonth = periodStartMonth + 1;
+
+  const prefix1 = `${gregorianYear}/${periodStartMonth.toString().padStart(2, '0')}`;
+  const prefix2 = `${gregorianYear}/${periodEndMonth.toString().padStart(2, '0')}`;
 
   const { data: invoicesData, error: invoicesError } = await supabase
     .from("invoices")
@@ -351,19 +347,15 @@ export async function generateTetUReport(clientId: string, yearMonth: string, co
 
   // 2. Fetch Invoices
   const rocYear = parseInt(yearMonth.substring(0, 3), 10);
-  const month = yearMonth.substring(3);
-  const startMonth = parseInt(month, 10);
+  const month = parseInt(yearMonth.substring(3), 10);
   const gregorianYear = rocYear + 1911;
-  
-  const prefix1 = `${gregorianYear}/${month}`;
-  
-  let endMonth = startMonth + 1;
-  let endGregorianYear = gregorianYear;
-  if (endMonth > 12) {
-    endMonth = 1;
-    endGregorianYear++;
-  }
-  const prefix2 = `${endGregorianYear}/${endMonth.toString().padStart(2, '0')}`;
+
+  // Determine the correct bimonthly period
+  const periodStartMonth = Math.floor((month - 1) / 2) * 2 + 1;
+  const periodEndMonth = periodStartMonth + 1;
+
+  const prefix1 = `${gregorianYear}/${periodStartMonth.toString().padStart(2, '0')}`;
+  const prefix2 = `${gregorianYear}/${periodEndMonth.toString().padStart(2, '0')}`;
 
   const { data: invoicesData } = await supabase
     .from("invoices")
@@ -405,7 +397,7 @@ export async function generateTetUReport(clientId: string, yearMonth: string, co
   fields.push(formatX('1', 1));                                   // Field 1: 資料別 (always '1' for 401)
   fields.push(formatX(config.fileNumber || '        ', 8));       // Field 2: 檔案編號
   fields.push(formatX(client.tax_id, 8));                         // Field 3: 統一編號
-  fields.push(formatX(getFilingYearMonth(rocYear, endMonth), 5)); // Field 4: 所屬年月
+  fields.push(formatX(getFilingYearMonth(rocYear, periodEndMonth), 5)); // Field 4: 所屬年月
   fields.push(formatX(getDeclarationCode(config), 1));            // Field 5: 申報代號
   fields.push(formatX(config.taxPayerId, 9));                     // Field 6: 稅籍編號
   fields.push(formatX(config.consolidatedDeclarationCode, 1));    // Field 7: 總繳代號

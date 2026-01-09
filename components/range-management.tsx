@@ -131,7 +131,12 @@ export function RangeManagement({ clientId, yearMonth }: RangeManagementProps) {
                     <FormItem>
                       <FormLabel>所屬年月 (YYYMM)</FormLabel>
                       <FormControl>
-                        <Input placeholder="例如: 11309" {...field} />
+                        <Input
+                          placeholder="例如: 11309"
+                          {...field}
+                          readOnly
+                          disabled
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

@@ -49,7 +49,7 @@ export const extractedInvoiceDataSchema = z.object({
   summary: z.string().optional(), // 摘要
   deductible: z.boolean().optional(), // 是否可扣抵
   account: z.string().optional(), // 會計科目 (e.g., "5102 旅費")
-  taxType: z.enum(['應稅', '零稅率', '免稅', '作廢']).optional(), // 課稅別
+  taxType: z.enum(['應稅', '零稅率', '免稅', '作廢', '彙加']).optional(), // 課稅別
   invoiceType: z.enum(['手開二聯式', '手開三聯式', '電子發票', '二聯式收銀機', '三聯式收銀機']).optional(), // 發票類型
   inOrOut: z.enum(['進項', '銷項']).optional(), // 進銷項
 }).passthrough(); // Allow additional fields from AI extraction
@@ -86,3 +86,49 @@ export type Invoice = z.infer<typeof invoiceSchema>;
 export type ExtractedInvoiceData = z.infer<typeof extractedInvoiceDataSchema>;
 export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
 export type UpdateInvoiceInput = z.infer<typeof updateInvoiceSchema>;
+
+// ===== Invoice Range Schemas =====
+export const invoiceRangeSchema = z.object({
+  id: z.string().uuid(),
+  client_id: z.string().uuid(),
+  year_month: z.string().min(5, "所屬年月格式錯誤 (YYYMM)"),
+  invoice_type: z.enum(['手開二聯式', '手開三聯式', '電子發票', '二聯式收銀機', '三聯式收銀機']),
+  start_number: z.string().length(10, "發票起始號碼長度應為 10 碼"),
+  end_number: z.string().length(10, "發票結束號碼長度應為 10 碼"),
+  created_at: z.coerce.date(),
+});
+
+export const createInvoiceRangeSchema = invoiceRangeSchema.omit({ 
+  id: true, 
+  created_at: true 
+});
+
+export type InvoiceRange = z.infer<typeof invoiceRangeSchema>;
+export type CreateInvoiceRangeInput = z.infer<typeof createInvoiceRangeSchema>;
+
+// ===== TET_U Config Schemas =====
+export const tetUConfigSchema = z.object({
+  // Basic File Info
+  fileNumber: z.string(),
+  consolidatedDeclarationCode: z.enum(['0', '1', '2']), // 0=單一, 1=總機構, 2=分別
+  declarationCode: z.string(), // Field 5
+  taxPayerId: z.string().min(9, "稅籍編號為 9 碼").max(9, "稅籍編號為 9 碼"),
+  
+  // Tax Calculation Fields
+  midYearClosureTaxPayable: z.number(),
+  previousPeriodCarryForwardTax: z.number(),
+  midYearClosureTaxRefundable: z.number(),
+  
+  // Declarer Information
+  declarationType: z.enum(['1', '2']), // 1=按期, 2=按月
+  countyCity: z.string(),
+  declarationMethod: z.enum(['1', '2']), // 1=自行, 2=委託
+  declarerId: z.string(),
+  declarerName: z.string(),
+  declarerPhoneAreaCode: z.string(),
+  declarerPhone: z.string(),
+  declarerPhoneExtension: z.string(),
+  agentRegistrationNumber: z.string(),
+});
+
+export type TetUConfig = z.infer<typeof tetUConfigSchema>;

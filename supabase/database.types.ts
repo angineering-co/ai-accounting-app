@@ -96,6 +96,44 @@ export type Database = {
         }
         Relationships: []
       }
+      invoice_ranges: {
+        Row: {
+          client_id: string
+          created_at: string | null
+          end_number: string
+          id: string
+          invoice_type: string
+          start_number: string
+          year_month: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string | null
+          end_number: string
+          id?: string
+          invoice_type: string
+          start_number: string
+          year_month: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string | null
+          end_number?: string
+          id?: string
+          invoice_type?: string
+          start_number?: string
+          year_month?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_ranges_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoices: {
         Row: {
           client_id: string | null

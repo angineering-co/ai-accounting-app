@@ -2,7 +2,6 @@
 
 import { use, useEffect, useState, useCallback } from "react";
 import useSWR from "swr";
-import { useDebounce } from "use-debounce";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,7 +28,6 @@ import { ResponsiveDialogContent } from "@/components/ui/responsive-dialog";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Input } from "@/components/ui/input";
 import { 
   Select, 
   SelectContent, 
@@ -40,6 +38,9 @@ import {
 import { Dropzone, DropzoneContent, DropzoneEmptyState } from "@/components/dropzone";
 import { useSupabaseUpload } from "@/hooks/use-supabase-upload";
 import { Label } from "@/components/ui/label";
+import { PeriodSelector } from "@/components/period-selector";
+
+import { RocPeriod } from "@/lib/domain/roc-period";
 
 const uploadFormSchema = z.object({
   in_or_out: z.enum(["in", "out"]),
@@ -62,14 +63,8 @@ export default function ClientDetailPage({
   const [uploadFolderId, setUploadFolderId] = useState<string>(() => crypto.randomUUID());
   const [isProcessingUpload, setIsProcessingUpload] = useState(false);
   
-  // Period for reports (ROC format YYYMM)
-  const [reportPeriod, setReportPeriod] = useState<string>(() => {
-    const now = new Date();
-    const rocYear = now.getFullYear() - 1911;
-    const month = (now.getMonth() + 1).toString().padStart(2, "0");
-    return `${rocYear}${month}`;
-  });
-  const [debouncedReportPeriod] = useDebounce(reportPeriod, 500);
+  // Period for reports
+  const [reportPeriod, setReportPeriod] = useState<RocPeriod>(() => RocPeriod.now());
 
   // Fetch client details
   const { data: client, isLoading: isClientLoading } = useSWR(
@@ -252,19 +247,15 @@ export default function ClientDetailPage({
         <TabsContent value="reports" className="mt-6 space-y-6">
           <div className="flex items-center gap-4">
             <Label className="text-lg font-semibold">選擇期別:</Label>
-            <Input 
-              type="text" 
-              className="w-32"
-              value={reportPeriod}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReportPeriod(e.target.value)}
-              placeholder="YYYMM"
+            <PeriodSelector 
+              value={reportPeriod} 
+              onChange={setReportPeriod} 
             />
-            <p className="text-sm text-muted-foreground">格式: 民國年(3碼) + 月份(2碼)，例如 11309</p>
           </div>
 
-          <RangeManagement clientId={clientId} yearMonth={debouncedReportPeriod} />
+          <RangeManagement clientId={clientId} period={reportPeriod} />
           
-          <ReportGeneration client={client} yearMonth={debouncedReportPeriod} />
+          <ReportGeneration client={client} period={reportPeriod} />
         </TabsContent>
       </Tabs>
 

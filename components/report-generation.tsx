@@ -31,16 +31,17 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { type Client, tetUConfigSchema, type TetUConfig } from "@/lib/domain/models";
 import { generateTxtReport, generateTetUReport } from "@/lib/services/reports";
 import { toast } from "sonner";
+import { RocPeriod } from "@/lib/domain/roc-period";
 import { Download, FileText, Loader2 } from "lucide-react";
 
 interface ReportGenerationProps {
   client: Client;
-  yearMonth: string;
+  period: RocPeriod;
 }
 
 export function ReportGeneration({
   client,
-  yearMonth,
+  period,
 }: ReportGenerationProps) {
   const clientId = client.id;
   const taxId = client.tax_id;
@@ -84,7 +85,7 @@ export function ReportGeneration({
   const handleGenerateTxt = async () => {
     setIsGeneratingTxt(true);
     try {
-      const content = await generateTxtReport(clientId, yearMonth);
+      const content = await generateTxtReport(clientId, period.toString());
       downloadFile(content, `${taxId}.TXT`);
       toast.success(".TXT 報表產生成功");
     } catch (error) {
@@ -99,7 +100,7 @@ export function ReportGeneration({
 
   const onTetUSubmit = async (values: TetUConfig) => {
     try {
-      const content = await generateTetUReport(clientId, yearMonth, values);
+      const content = await generateTetUReport(clientId, period.toString(), values);
       downloadFile(content, `${taxId}.TET_U`);
       toast.success(".TET_U 報表產生成功");
       setIsTetUModalOpen(false);
@@ -115,7 +116,7 @@ export function ReportGeneration({
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>報表產生 ({yearMonth})</CardTitle>
+          <CardTitle>報表產生 ({period.format()})</CardTitle>
         </CardHeader>
         <CardContent className="flex gap-4">
           <Button

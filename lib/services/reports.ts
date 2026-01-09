@@ -7,6 +7,7 @@ import {
 } from "@/lib/domain/models";
 import { getInvoiceRanges } from "./invoice-range";
 import { toRocYearMonth } from "@/lib/utils";
+import { RocPeriod } from "@/lib/domain/roc-period";
 import iconv from "iconv-lite";
 
 function formatX(value: string, length: number): string {
@@ -123,9 +124,11 @@ function sortBySerialCodeNum(a: ExtractedInvoiceData, b: ExtractedInvoiceData) {
 /**
  * .TXT Report Generation (81-byte format)
  */
-export async function generateTxtReport(clientId: string, yearMonth: string) {
+export async function generateTxtReport(clientId: string, serializedReportPeriod: string) {
   const supabase = await createSupabaseClient();
   
+  const period = RocPeriod.fromYYYMM(serializedReportPeriod);
+
   // 1. Fetch Client
   const { data: client, error: clientError } = await supabase
     .from("clients")
@@ -135,18 +138,10 @@ export async function generateTxtReport(clientId: string, yearMonth: string) {
   if (clientError || !client) throw new Error("Client not found");
 
   // 2. Fetch Invoices for the period (Confirmed status)
-  // yearMonth is like "11309" -> need to match extracted_data.date
-  // "11309" -> ROC 113年 09月 -> covers 2024/09 and 2024/10
-  const rocYear = parseInt(yearMonth.substring(0, 3), 10);
-  const month = parseInt(yearMonth.substring(3), 10);
-  const gregorianYear = rocYear + 1911;
+  const gregorianYear = period.gregorianYear;
 
-  // Determine the correct bimonthly period
-  const periodStartMonth = Math.floor((month - 1) / 2) * 2 + 1;
-  const periodEndMonth = periodStartMonth + 1;
-
-  const prefix1 = `${gregorianYear}/${periodStartMonth.toString().padStart(2, '0')}`;
-  const prefix2 = `${gregorianYear}/${periodEndMonth.toString().padStart(2, '0')}`;
+  const prefix1 = `${gregorianYear}/${period.startMonth.toString().padStart(2, '0')}`;
+  const prefix2 = `${gregorianYear}/${period.endMonth.toString().padStart(2, '0')}`;
 
   const { data: invoicesData, error: invoicesError } = await supabase
     .from("invoices")
@@ -161,7 +156,7 @@ export async function generateTxtReport(clientId: string, yearMonth: string) {
     .filter(data => data && data.date && (data.date.startsWith(prefix1) || data.date.startsWith(prefix2)));
 
   // 3. Fetch Invoice Ranges
-  const ranges = await getInvoiceRanges(clientId, yearMonth);
+  const ranges = await getInvoiceRanges(clientId, period.toString());
 
   // 4. Generate Rows
   const rows: string[] = [];
@@ -229,7 +224,7 @@ export async function generateTxtReport(clientId: string, yearMonth: string) {
           inOrOut: "銷項",
           invoiceType:
             range.invoice_type as ExtractedInvoiceData["invoiceType"],
-          date: `${gregorianYear}/${month}/01`,
+          date: `${gregorianYear}/${period.startMonth.toString().padStart(2, '0')}/01`,
           buyerTaxId: unusedEnd.substring(2),
           sellerTaxId: client.tax_id,
           invoiceSerialCode: unusedStart,
@@ -334,9 +329,11 @@ function generateTxtRow(inv: ExtractedInvoiceData, rowNum: number, taxPayerId: s
 /**
  * .TET_U Report Generation (112-field pipe-separated)
  */
-export async function generateTetUReport(clientId: string, yearMonth: string, config: TetUConfig) {
+export async function generateTetUReport(clientId: string, serializedReportPeriod: string, config: TetUConfig) {
   const supabase = await createSupabaseClient();
   
+  const period = RocPeriod.fromYYYMM(serializedReportPeriod);
+
   // 1. Fetch Client
   const { data: client, error: clientError } = await supabase
     .from("clients")
@@ -346,16 +343,10 @@ export async function generateTetUReport(clientId: string, yearMonth: string, co
   if (clientError || !client) throw new Error("Client not found");
 
   // 2. Fetch Invoices
-  const rocYear = parseInt(yearMonth.substring(0, 3), 10);
-  const month = parseInt(yearMonth.substring(3), 10);
-  const gregorianYear = rocYear + 1911;
+  const gregorianYear = period.gregorianYear;
 
-  // Determine the correct bimonthly period
-  const periodStartMonth = Math.floor((month - 1) / 2) * 2 + 1;
-  const periodEndMonth = periodStartMonth + 1;
-
-  const prefix1 = `${gregorianYear}/${periodStartMonth.toString().padStart(2, '0')}`;
-  const prefix2 = `${gregorianYear}/${periodEndMonth.toString().padStart(2, '0')}`;
+  const prefix1 = `${gregorianYear}/${period.startMonth.toString().padStart(2, '0')}`;
+  const prefix2 = `${gregorianYear}/${period.endMonth.toString().padStart(2, '0')}`;
 
   const { data: invoicesData } = await supabase
     .from("invoices")
@@ -388,16 +379,12 @@ export async function generateTetUReport(clientId: string, yearMonth: string, co
   const getCountyCityCode = (name: string) => {
     return COUNTY_CITY_CODES[name] || 'A';
   };
-
-  const getFilingYearMonth = (rocYear: number, endMonth: number) => {
-    return `${rocYear}${endMonth.toString().padStart(2, '0')}`;
-  };
   
   // Section 1: 檔案基本資訊
   fields.push(formatX('1', 1));                                   // Field 1: 資料別 (always '1' for 401)
   fields.push(formatX(config.fileNumber || '        ', 8));       // Field 2: 檔案編號
   fields.push(formatX(client.tax_id, 8));                         // Field 3: 統一編號
-  fields.push(formatX(getFilingYearMonth(rocYear, periodEndMonth), 5)); // Field 4: 所屬年月
+  fields.push(formatX(period.toEndYYYMM(), 5));                   // Field 4: 所屬年月
   fields.push(formatX(getDeclarationCode(config), 1));            // Field 5: 申報代號
   fields.push(formatX(config.taxPayerId, 9));                     // Field 6: 稅籍編號
   fields.push(formatX(config.consolidatedDeclarationCode, 1));    // Field 7: 總繳代號

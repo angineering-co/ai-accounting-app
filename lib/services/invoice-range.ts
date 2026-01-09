@@ -6,9 +6,10 @@ import {
   createInvoiceRangeSchema,
   type CreateInvoiceRangeInput,
 } from "@/lib/domain/models";
+import { RocPeriod } from "@/lib/domain/roc-period";
 import { revalidatePath } from "next/cache";
 
-export async function getInvoiceRanges(clientId: string, yearMonth?: string) {
+export async function getInvoiceRanges(clientId: string, serializedReportPeriod?: string) {
   const supabase = await createSupabaseClient();
   let query = supabase
     .from("invoice_ranges")
@@ -17,8 +18,8 @@ export async function getInvoiceRanges(clientId: string, yearMonth?: string) {
     .order("year_month", { ascending: false })
     .order("start_number", { ascending: true });
 
-  if (yearMonth) {
-    query = query.eq("year_month", yearMonth);
+  if (serializedReportPeriod) {
+    query = query.eq("year_month", serializedReportPeriod);
   }
 
   const { data, error } = await query;
@@ -39,11 +40,17 @@ export async function createInvoiceRange(data: CreateInvoiceRangeInput) {
 
   const supabase = await createSupabaseClient();
   
+  // Normalize year_month to the start of the period
+  const normalizedData = {
+    ...validation.data,
+    year_month: RocPeriod.fromYYYMM(validation.data.year_month).toString()
+  };
+
   // Fetch firm_id for the client to revalidate the correct path
   const { data: client, error: clientError } = await supabase
     .from("clients")
     .select("firm_id")
-    .eq("id", data.client_id)
+    .eq("id", normalizedData.client_id)
     .single();
 
   if (clientError || !client) {
@@ -52,7 +59,7 @@ export async function createInvoiceRange(data: CreateInvoiceRangeInput) {
 
   const { data: created, error } = await supabase
     .from("invoice_ranges")
-    .insert(validation.data)
+    .insert(normalizedData)
     .select()
     .single();
 

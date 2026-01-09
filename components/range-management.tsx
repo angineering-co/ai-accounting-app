@@ -50,12 +50,14 @@ import {
 import { toast } from "sonner";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 
+import { RocPeriod } from "@/lib/domain/roc-period";
+
 interface RangeManagementProps {
   clientId: string;
-  yearMonth: string;
+  period: RocPeriod;
 }
 
-export function RangeManagement({ clientId, yearMonth }: RangeManagementProps) {
+export function RangeManagement({ clientId, period }: RangeManagementProps) {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
@@ -63,15 +65,15 @@ export function RangeManagement({ clientId, yearMonth }: RangeManagementProps) {
     data: ranges = [],
     mutate,
     isLoading,
-  } = useSWR(["invoice-ranges", clientId, yearMonth], () =>
-    getInvoiceRanges(clientId, yearMonth)
+  } = useSWR(["invoice-ranges", clientId, period.toString()], () =>
+    getInvoiceRanges(clientId, period.toString())
   );
 
   const form = useForm<CreateInvoiceRangeInput>({
     resolver: zodResolver(createInvoiceRangeSchema),
     values: {
       client_id: clientId,
-      year_month: yearMonth,
+      year_month: period.toString(),
       invoice_type: "手開三聯式",
       start_number: "",
       end_number: "",
@@ -108,7 +110,7 @@ export function RangeManagement({ clientId, yearMonth }: RangeManagementProps) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>發票字軌管理 ({yearMonth})</CardTitle>
+        <CardTitle>發票字軌管理 ({period.format()})</CardTitle>
         <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
           <DialogTrigger asChild>
             <Button size="sm">

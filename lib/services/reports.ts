@@ -618,7 +618,7 @@ function aggregateInvoiceData(invoices: ExtractedInvoiceData[]) {
           result.output.duplicateCashRegister.tax += tax;
         } else {
           // Note: this should not happen. 
-          console.error(`Unsupported invoice type: ${invoiceType}`);
+          throw new Error(`Unsupported invoice type: ${invoiceType}`);
         }
       }
     } else if (inv.taxType === '零稅率') {
@@ -636,7 +636,7 @@ function aggregateInvoiceData(invoices: ExtractedInvoiceData[]) {
     } else if (inv.taxType === '作廢') {
       console.log(`skipping voided invoice: ${inv.invoiceSerialCode}`);
     } else {
-      console.error(`Unsupported tax type: ${inv.taxType}`);
+      throw new Error(`Unsupported tax type: ${inv.taxType}`);
     }
     
     // Check for land or fixed asset sales (simplified check)

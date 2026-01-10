@@ -19,6 +19,7 @@ import {
   Sparkles
 } from "lucide-react";
 import { type Invoice } from "@/lib/domain/models";
+import { RocPeriod } from "@/lib/domain/roc-period";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -102,6 +103,7 @@ export function InvoiceTable({
           <TableRow>
             <TableHead>檔案名稱</TableHead>
             {showClientColumn && <TableHead>客戶</TableHead>}
+            <TableHead>所屬期別</TableHead>
             <TableHead>類型</TableHead>
             <TableHead>狀態</TableHead>
             <TableHead>上傳時間</TableHead>
@@ -153,6 +155,15 @@ export function InvoiceTable({
                     )}
                   </TableCell>
                 )}
+                <TableCell>
+                  {invoice.year_month ? (
+                    <span className="text-sm">
+                      {RocPeriod.fromYYYMM(invoice.year_month).format()}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground text-sm">-</span>
+                  )}
+                </TableCell>
                 <TableCell>
                   {invoice.in_or_out === "in" ? "進項發票" : "銷項發票"}
                 </TableCell>

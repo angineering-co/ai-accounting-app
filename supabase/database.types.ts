@@ -146,6 +146,7 @@ export type Database = {
           status: string | null
           storage_path: string
           uploaded_by: string
+          year_month: string | null
         }
         Insert: {
           client_id?: string | null
@@ -158,6 +159,7 @@ export type Database = {
           status?: string | null
           storage_path: string
           uploaded_by: string
+          year_month?: string | null
         }
         Update: {
           client_id?: string | null
@@ -170,6 +172,7 @@ export type Database = {
           status?: string | null
           storage_path?: string
           uploaded_by?: string
+          year_month?: string | null
         }
         Relationships: [
           {

@@ -325,6 +325,21 @@ const TEST_TET_U_CONFIG: TetUConfig = {
   agentRegistrationNumber: '104台財稅登字第4656號                             ',
 };
 
+// Helper to create a chainable mock
+const createChainableMock = <T>(data: T) => {
+  const mock = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    single: vi.fn().mockImplementation(async () => ({ data, error: null })),
+    // Make it thenable so it can be awaited
+    then: vi.fn().mockImplementation((onFulfilled: (value: { data: T; error: null }) => unknown) => 
+      Promise.resolve({ data, error: null }).then(onFulfilled)
+    ),
+  };
+  return mock;
+};
+
 describe('Report Generation', () => {
   let mockSupabase: {
     from: ReturnType<typeof vi.fn>;
@@ -339,65 +354,19 @@ describe('Report Generation', () => {
     
     // Create mock Supabase client
     mockSupabase = {
-      from: vi.fn((table: string) => ({
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            single: vi.fn(async () => {
-              if (table === 'clients') {
-                return { data: TEST_CLIENT, error: null };
-              }
-              return { data: null, error: new Error('Not found') };
-            }),
-            eq: vi.fn(() => ({
-              single: vi.fn(async () => {
-                if (table === 'clients') {
-                  return { data: TEST_CLIENT, error: null };
-                }
-                return { data: null, error: new Error('Not found') };
-              }),
-            })),
-          })),
-          single: vi.fn(async () => {
-            if (table === 'clients') {
-              return { data: TEST_CLIENT, error: null };
-            }
-            return { data: null, error: new Error('Not found') };
-          }),
-        })),
-      })),
+      from: vi.fn((table: string) => {
+        if (table === 'clients') {
+          return createChainableMock(TEST_CLIENT);
+        }
+        if (table === 'invoices') {
+          return createChainableMock(TEST_INVOICES);
+        }
+        if (table === 'invoice_ranges') {
+          return createChainableMock(TEST_INVOICE_RANGES);
+        }
+        return createChainableMock(null);
+      }),
     };
-
-    // Mock the invoice queries
-    mockSupabase.from = vi.fn((table: string) => {
-      if (table === 'clients') {
-        return {
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              single: vi.fn(async () => ({ data: TEST_CLIENT, error: null })),
-            })),
-          })),
-        };
-      }
-      if (table === 'invoices') {
-        return {
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              eq: vi.fn(async () => ({ data: TEST_INVOICES, error: null })),
-            })),
-          })),
-        };
-      }
-      if (table === 'invoice_ranges') {
-        return {
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              eq: vi.fn(async () => ({ data: TEST_INVOICE_RANGES, error: null })),
-            })),
-          })),
-        };
-      }
-      return mockSupabase;
-    });
 
     // Mock the createClient function
     mockCreateClient.mockResolvedValue(mockSupabase);
@@ -694,33 +663,15 @@ describe('Report Generation', () => {
     it('should handle empty invoice list', async () => {
       mockSupabase.from = vi.fn((table: string) => {
         if (table === 'clients') {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                single: vi.fn(async () => ({ data: TEST_CLIENT, error: null })),
-              })),
-            })),
-          };
+          return createChainableMock(TEST_CLIENT);
         }
         if (table === 'invoices') {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                eq: vi.fn(async () => ({ data: [], error: null })),
-              })),
-            })),
-          };
+          return createChainableMock([]);
         }
         if (table === 'invoice_ranges') {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                eq: vi.fn(async () => ({ data: [], error: null })),
-              })),
-            })),
-          };
+          return createChainableMock([]);
         }
-        return mockSupabase;
+        return createChainableMock(null);
       });
 
       mockCreateClient.mockResolvedValue(mockSupabase);
@@ -731,13 +682,7 @@ describe('Report Generation', () => {
     });
 
     it('should throw error for non-existent client', async () => {
-      mockSupabase.from = vi.fn(() => ({
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            single: vi.fn(async () => ({ data: null, error: new Error('Not found') })),
-          })),
-        })),
-      }));
+      mockSupabase.from = vi.fn(() => createChainableMock(null));
 
       mockCreateClient.mockResolvedValue(mockSupabase);
 

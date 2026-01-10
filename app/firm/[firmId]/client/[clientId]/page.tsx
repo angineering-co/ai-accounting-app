@@ -10,11 +10,11 @@ import { Loader2, ArrowLeft, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { InvoiceTable } from "@/components/invoice-table";
 import { InvoiceReviewDialog } from "@/components/invoice-review-dialog";
-import { createInvoice, deleteInvoice, extractInvoiceDataAction } from "@/lib/services/invoice";
+import { createInvoice, updateInvoice, deleteInvoice, extractInvoiceDataAction } from "@/lib/services/invoice";
 import { RangeManagement } from "@/components/range-management";
 import { ReportGeneration } from "@/components/report-generation";
 import { toast } from "sonner";
-import { type Invoice, invoiceSchema, clientSchema } from "@/lib/domain/models";
+import { type Invoice, invoiceSchema, clientSchema, updateInvoiceSchema, type UpdateInvoiceInput } from "@/lib/domain/models";
 import { 
   Dialog, 
   DialogContent, 
@@ -23,7 +23,7 @@ import {
   DialogDescription, 
   DialogFooter
 } from "@/components/ui/dialog";
-import { Form } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { ResponsiveDialogContent } from "@/components/ui/responsive-dialog";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -44,9 +44,16 @@ import { RocPeriod } from "@/lib/domain/roc-period";
 
 const uploadFormSchema = z.object({
   in_or_out: z.enum(["in", "out"]),
+  period: z.instanceof(RocPeriod),
 });
 
 type UploadFormInput = z.infer<typeof uploadFormSchema>;
+
+const updateFormSchema = updateInvoiceSchema.extend({
+  period: z.instanceof(RocPeriod),
+});
+
+type UpdateFormInput = z.infer<typeof updateFormSchema>;
 
 export default function ClientDetailPage({
   params,
@@ -60,6 +67,7 @@ export default function ClientDetailPage({
   const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [uploadFolderId, setUploadFolderId] = useState<string>(() => crypto.randomUUID());
   const [isProcessingUpload, setIsProcessingUpload] = useState(false);
   
@@ -98,6 +106,17 @@ export default function ClientDetailPage({
     resolver: zodResolver(uploadFormSchema),
     defaultValues: {
       in_or_out: "in",
+      period: RocPeriod.now(),
+    },
+  });
+
+  const updateForm = useForm<UpdateFormInput>({
+    resolver: zodResolver(updateFormSchema),
+    defaultValues: {
+      client_id: clientId,
+      in_or_out: "in",
+      status: "uploaded",
+      period: RocPeriod.now(),
     },
   });
 
@@ -126,13 +145,17 @@ export default function ClientDetailPage({
           storage_path: uploadedFile.path,
           filename: uploadedFile.name,
           in_or_out: formData.in_or_out,
+          year_month: formData.period.toString(),
         });
       });
 
       await Promise.all(promises);
       toast.success("發票上傳成功");
       setIsUploadModalOpen(false);
-      uploadForm.reset();
+      uploadForm.reset({
+        in_or_out: "in",
+        period: RocPeriod.now(),
+      });
       uploadProps.setFiles([]);
       uploadProps.setUploadedFiles([]);
       setUploadFolderId(crypto.randomUUID());
@@ -144,6 +167,36 @@ export default function ClientDetailPage({
       setIsProcessingUpload(false);
     }
   }, [clientId, fetchInvoices, firmId, isProcessingUpload, uploadForm, uploadProps]);
+
+  const handleEditInvoice = async (values: UpdateFormInput) => {
+    if (!editingInvoice) return;
+
+    try {
+      const { period, ...rest } = values;
+      await updateInvoice(editingInvoice.id, {
+        ...rest,
+        year_month: period.toString(),
+      });
+
+      toast.success("更新發票成功");
+      setEditingInvoice(null);
+      updateForm.reset();
+      fetchInvoices();
+    } catch (error) {
+      console.error("Error updating invoice:", error);
+      toast.error("更新失敗");
+    }
+  };
+
+  const openEditModal = (invoice: Invoice) => {
+    setEditingInvoice(invoice);
+    updateForm.reset({
+      client_id: invoice.client_id || clientId,
+      in_or_out: invoice.in_or_out as "in" | "out",
+      status: invoice.status as UpdateInvoiceInput["status"] || "uploaded",
+      period: invoice.year_month ? RocPeriod.fromYYYMM(invoice.year_month) : RocPeriod.now(),
+    });
+  };
 
   useEffect(() => {
     if (uploadProps.isSuccess && !isProcessingUpload) {
@@ -239,6 +292,7 @@ export default function ClientDetailPage({
             isLoading={isInvoicesLoading}
             onReview={setReviewingInvoice}
             onExtractAI={handleExtractInvoice}
+            onEdit={openEditModal}
             onDelete={setInvoiceToDelete}
             showClientColumn={false}
           />
@@ -267,21 +321,46 @@ export default function ClientDetailPage({
           </DialogHeader>
           <Form {...uploadForm}>
             <form className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>發票類型</Label>
-                <Select 
-                  onValueChange={(val: "in" | "out") => uploadForm.setValue("in_or_out", val)}
-                  defaultValue="in"
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="in">進項發票</SelectItem>
-                    <SelectItem value="out">銷項發票</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <FormField
+                control={uploadForm.control}
+                name="period"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>所屬期別</FormLabel>
+                    <FormControl>
+                      <PeriodSelector
+                        value={field.value}
+                        onChange={field.onChange}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={uploadForm.control}
+                name="in_or_out"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>發票類型</FormLabel>
+                    <Select 
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="in">進項發票</SelectItem>
+                        <SelectItem value="out">銷項發票</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <div className="space-y-2">
                 <Label>檔案</Label>
                 <Dropzone {...uploadProps}>
@@ -300,6 +379,82 @@ export default function ClientDetailPage({
         onOpenChange={(open) => !open && setReviewingInvoice(null)}
         onSuccess={fetchInvoices}
       />
+
+      {/* Edit Modal */}
+      <Dialog
+        open={!!editingInvoice}
+        onOpenChange={(open) => !open && setEditingInvoice(null)}
+      >
+        <ResponsiveDialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>編輯發票</DialogTitle>
+            <DialogDescription>
+              編輯發票的類型與期別。
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...updateForm}>
+            <form
+              onSubmit={updateForm.handleSubmit(handleEditInvoice)}
+              className="flex flex-col flex-1 min-h-0"
+            >
+              <div className="grid gap-4 py-4 flex-1 overflow-y-auto px-1">
+                <FormField
+                  control={updateForm.control}
+                  name="period"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>所屬期別</FormLabel>
+                      <FormControl>
+                        <PeriodSelector
+                          value={field.value}
+                          onChange={field.onChange}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={updateForm.control}
+                  name="in_or_out"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>發票類型</FormLabel>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="in">進項發票</SelectItem>
+                          <SelectItem value="out">銷項發票</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <DialogFooter className="pt-2">
+                <Button
+                  type="submit"
+                  disabled={updateForm.formState.isSubmitting}
+                >
+                  {updateForm.formState.isSubmitting && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  保存
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </ResponsiveDialogContent>
+      </Dialog>
 
       <Dialog open={!!invoiceToDelete} onOpenChange={(open) => !open && setInvoiceToDelete(null)}>
         <DialogContent>

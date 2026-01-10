@@ -30,6 +30,9 @@ import { Label } from "@/components/ui/label";
 import { InvoiceReviewDialog } from "@/components/invoice-review-dialog";
 import { InvoiceTable } from "@/components/invoice-table";
 
+import { RocPeriod } from "@/lib/domain/roc-period";
+import { PeriodSelector } from "@/components/period-selector";
+
 type Invoice = DomainInvoice & {
   client?: { id: string; name: string } | null;
 };
@@ -39,9 +42,16 @@ type Client = Database["public"]["Tables"]["clients"]["Row"];
 const uploadFormSchema = z.object({
   client_id: z.string().uuid().nullable().optional(),
   in_or_out: z.enum(["in", "out"]),
+  period: z.instanceof(RocPeriod),
 });
 
 type UploadFormInput = z.infer<typeof uploadFormSchema>;
+
+const updateFormSchema = updateInvoiceSchema.extend({
+  period: z.instanceof(RocPeriod),
+});
+
+type UpdateFormInput = z.infer<typeof updateFormSchema>;
 
 export default function InvoicePage({
   params,
@@ -66,16 +76,18 @@ export default function InvoicePage({
     defaultValues: {
       client_id: null,
       in_or_out: "in",
+      period: RocPeriod.now(),
     },
   });
 
   // Update form
-  const updateForm = useForm<UpdateInvoiceInput>({
-    resolver: zodResolver(updateInvoiceSchema),
+  const updateForm = useForm<UpdateFormInput>({
+    resolver: zodResolver(updateFormSchema),
     defaultValues: {
       client_id: null,
       in_or_out: "in",
       status: "uploaded",
+      period: RocPeriod.now(),
     },
   });
 
@@ -144,6 +156,7 @@ export default function InvoicePage({
           storage_path: uploadedFile.path,
           filename: uploadedFile.name,
           in_or_out: formData.in_or_out,
+          year_month: formData.period.toString(),
         });
       });
 
@@ -189,6 +202,7 @@ export default function InvoicePage({
     uploadForm.reset({
       client_id: null,
       in_or_out: "in",
+      period: RocPeriod.now(),
     });
     uploadProps.setFiles([]);
     uploadProps.setErrors([]);
@@ -196,11 +210,15 @@ export default function InvoicePage({
     setIsUploadModalOpen(true);
   };
 
-  const handleEditInvoice = async (data: UpdateInvoiceInput) => {
+  const handleEditInvoice = async (values: UpdateFormInput) => {
     if (!editingInvoice) return;
 
     try {
-      await updateInvoice(editingInvoice.id, data);
+      const { period, ...rest } = values;
+      await updateInvoice(editingInvoice.id, {
+        ...rest,
+        year_month: period.toString(),
+      });
 
       toast.success("更新發票成功。");
       setEditingInvoice(null);
@@ -254,6 +272,7 @@ export default function InvoicePage({
       client_id: invoice.client_id || null,
       in_or_out: invoice.in_or_out as "in" | "out",
       status: invoice.status as UpdateInvoiceInput["status"] || "uploaded",
+      period: invoice.year_month ? RocPeriod.fromYYYMM(invoice.year_month) : RocPeriod.now(),
     });
   };
 
@@ -369,6 +388,23 @@ export default function InvoicePage({
 
               <FormField
                 control={uploadForm.control}
+                name="period"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>所屬期別</FormLabel>
+                    <FormControl>
+                      <PeriodSelector
+                        value={field.value}
+                        onChange={field.onChange}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={uploadForm.control}
                 name="in_or_out"
                 render={({ field }) => (
                   <FormItem>
@@ -430,6 +466,23 @@ export default function InvoicePage({
               className="flex flex-col flex-1 min-h-0"
             >
               <div className="grid gap-4 py-4 flex-1 overflow-y-auto px-1">
+                <FormField
+                  control={updateForm.control}
+                  name="period"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>所屬期別</FormLabel>
+                      <FormControl>
+                        <PeriodSelector
+                          value={field.value}
+                          onChange={field.onChange}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
                 <FormField
                   control={updateForm.control}
                   name="client_id"

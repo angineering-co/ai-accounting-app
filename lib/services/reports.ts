@@ -147,6 +147,7 @@ export async function generateTxtReport(clientId: string, serializedReportPeriod
     .from("invoices")
     .select("*")
     .eq("client_id", clientId)
+    .eq("year_month", period.toString())
     .eq("status", "confirmed");
   
   if (invoicesError) throw new Error("Error fetching invoices");
@@ -154,6 +155,14 @@ export async function generateTxtReport(clientId: string, serializedReportPeriod
   const invoices = (invoicesData || [])
     .map(inv => inv.extracted_data as ExtractedInvoiceData)
     .filter(data => data && data.date && (data.date.startsWith(prefix1) || data.date.startsWith(prefix2)));
+
+  if (invoicesData && invoicesData.length !== invoices.length) {
+    throw new Error(
+      `Invoices count mismatch: period=${period.toString()} User declared=${
+        invoicesData.length
+      } AI extracted=${invoices.length} (only confirmed invoices are included)`
+    );
+  }
 
   // 3. Fetch Invoice Ranges
   const ranges = await getInvoiceRanges(clientId, period.toString());
@@ -352,11 +361,20 @@ export async function generateTetUReport(clientId: string, serializedReportPerio
     .from("invoices")
     .select("*")
     .eq("client_id", clientId)
+    .eq("year_month", period.toString())
     .eq("status", "confirmed");
 
   const invoices = (invoicesData || [])
     .map(inv => inv.extracted_data as ExtractedInvoiceData)
     .filter(data => data && data.date && (data.date.startsWith(prefix1) || data.date.startsWith(prefix2)));
+
+  if (invoicesData && invoicesData.length !== invoices.length) {
+    throw new Error(
+      `Invoices count mismatch: period=${period.toString()} User declared=${
+        invoicesData.length
+      } AI extracted=${invoices.length} (only confirmed invoices are included)`
+    );
+  }
 
   // Aggregate invoice data
   const aggregated = aggregateInvoiceData(invoices);

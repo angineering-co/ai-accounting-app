@@ -63,6 +63,7 @@ export const invoiceSchema = z.object({
   in_or_out: z.enum(['in', 'out']),
   status: z.enum(['uploaded', 'processing', 'processed', 'confirmed', 'failed']),
   extracted_data: extractedInvoiceDataSchema.nullable().optional(),
+  year_month: z.string().min(5, "所屬年月格式錯誤 (YYYMM)").nullable().optional(),
   uploaded_by: z.string().uuid(),
   created_at: z.coerce.date(),
 });
@@ -73,11 +74,13 @@ export const createInvoiceSchema = z.object({
   storage_path: z.string().min(1),
   filename: z.string().min(1),
   in_or_out: z.enum(['in', 'out']),
+  year_month: z.string().min(5, "所屬年月格式錯誤 (YYYMM)").optional(),
 });
 
 export const updateInvoiceSchema = z.object({
   client_id: z.string().uuid().nullable().optional(),
   in_or_out: z.enum(['in', 'out']).optional(),
+  year_month: z.string().min(5, "所屬年月格式錯誤 (YYYMM)").optional(),
   status: z.enum(['uploaded', 'processing', 'processed', 'confirmed', 'failed']).optional(),
   extracted_data: extractedInvoiceDataSchema.nullable().optional(),
 });

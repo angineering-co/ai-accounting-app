@@ -54,12 +54,11 @@ export class RocPeriod {
    * Create a RocPeriod from a "YYYMM" string.
    */
   static fromYYYMM(yyymm: string): RocPeriod {
-    if (!yyymm || yyymm.length < 5) {
-      throw new Error("Invalid YYYMM format");
+    if (!yyymm || !/^\d{5}$/.test(yyymm)) {
+      throw new Error("Invalid YYYMM format: must be a 5-digit string (YYYMM).");
     }
-    const rocYear = parseInt(yyymm.slice(0, -2), 10);
-    const month = parseInt(yyymm.slice(-2), 10);
-    
+    const rocYear = parseInt(yyymm.substring(0, 3), 10);
+    const month = parseInt(yyymm.substring(3, 5), 10);
     // Normalize to bi-monthly starting month (1, 3, 5, 7, 9, 11)
     const startMonth = Math.floor((month - 1) / 2) * 2 + 1;
     

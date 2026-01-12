@@ -158,9 +158,11 @@ export async function generateTxtReport(clientId: string, serializedReportPeriod
 
   if (invoicesData && invoicesData.length !== invoices.length) {
     throw new Error(
-      `Invoices count mismatch: period=${period.toString()} User declared=${
+      `Invoice data mismatch for period ${period.toString()}. The database has ${
         invoicesData.length
-      } AI extracted=${invoices.length} (only confirmed invoices are included)`
+      } invoices for this period, but only ${
+        invoices.length
+      } have a matching date in their extracted data. Please review the invoices.`
     );
   }
 
@@ -370,9 +372,11 @@ export async function generateTetUReport(clientId: string, serializedReportPerio
 
   if (invoicesData && invoicesData.length !== invoices.length) {
     throw new Error(
-      `Invoices count mismatch: period=${period.toString()} User declared=${
+      `Invoice data mismatch for period ${period.toString()}. The database has ${
         invoicesData.length
-      } AI extracted=${invoices.length} (only confirmed invoices are included)`
+      } invoices for this period, but only ${
+        invoices.length
+      } have a matching date in their extracted data. Please review the invoices.`
     );
   }
 

@@ -63,7 +63,7 @@ export const invoiceSchema = z.object({
   in_or_out: z.enum(['in', 'out']),
   status: z.enum(['uploaded', 'processing', 'processed', 'confirmed', 'failed']),
   extracted_data: extractedInvoiceDataSchema.nullable().optional(),
-  year_month: z.string().min(5, "所屬年月格式錯誤 (YYYMM)").nullable().optional(),
+  year_month: z.string().length(5, "所屬年月格式錯誤 (YYYMM)").nullable().optional(),
   uploaded_by: z.string().uuid(),
   created_at: z.coerce.date(),
 });
@@ -74,13 +74,13 @@ export const createInvoiceSchema = z.object({
   storage_path: z.string().min(1),
   filename: z.string().min(1),
   in_or_out: z.enum(['in', 'out']),
-  year_month: z.string().min(5, "所屬年月格式錯誤 (YYYMM)").optional(),
+  year_month: z.string().length(5, "所屬年月格式錯誤 (YYYMM)").optional(),
 });
 
 export const updateInvoiceSchema = z.object({
   client_id: z.string().uuid().nullable().optional(),
   in_or_out: z.enum(['in', 'out']).optional(),
-  year_month: z.string().min(5, "所屬年月格式錯誤 (YYYMM)").optional(),
+  year_month: z.string().length(5, "所屬年月格式錯誤 (YYYMM)").optional(),
   status: z.enum(['uploaded', 'processing', 'processed', 'confirmed', 'failed']).optional(),
   extracted_data: extractedInvoiceDataSchema.nullable().optional(),
 });
@@ -94,7 +94,7 @@ export type UpdateInvoiceInput = z.infer<typeof updateInvoiceSchema>;
 export const invoiceRangeSchema = z.object({
   id: z.string().uuid(),
   client_id: z.string().uuid(),
-  year_month: z.string().min(5, "所屬年月格式錯誤 (YYYMM)"),
+  year_month: z.string().length(5, "所屬年月格式錯誤 (YYYMM)"),
   invoice_type: z.enum(['手開二聯式', '手開三聯式', '電子發票', '二聯式收銀機', '三聯式收銀機']),
   start_number: z.string().length(10, "發票起始號碼長度應為 10 碼"),
   end_number: z.string().length(10, "發票結束號碼長度應為 10 碼"),

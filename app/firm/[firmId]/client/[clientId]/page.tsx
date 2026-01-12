@@ -14,7 +14,7 @@ import { createInvoice, updateInvoice, deleteInvoice, extractInvoiceDataAction }
 import { RangeManagement } from "@/components/range-management";
 import { ReportGeneration } from "@/components/report-generation";
 import { toast } from "sonner";
-import { type Invoice, invoiceSchema, clientSchema, updateInvoiceSchema, type UpdateInvoiceInput } from "@/lib/domain/models";
+import { type Invoice, invoiceSchema, clientSchema, updateInvoiceSchema } from "@/lib/domain/models";
 import { 
   Dialog, 
   DialogContent, 
@@ -192,8 +192,8 @@ export default function ClientDetailPage({
     setEditingInvoice(invoice);
     updateForm.reset({
       client_id: invoice.client_id || clientId,
-      in_or_out: invoice.in_or_out as "in" | "out",
-      status: invoice.status as UpdateInvoiceInput["status"] || "uploaded",
+      in_or_out: invoice.in_or_out,
+      status: invoice.status,
       period: invoice.year_month ? RocPeriod.fromYYYMM(invoice.year_month) : RocPeriod.now(),
     });
   };

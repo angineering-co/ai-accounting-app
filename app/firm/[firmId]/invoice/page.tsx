@@ -23,7 +23,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { createInvoice, updateInvoice, deleteInvoice, extractInvoiceDataAction } from "@/lib/services/invoice";
-import { updateInvoiceSchema, type UpdateInvoiceInput, type Invoice as DomainInvoice, invoiceSchema } from "@/lib/domain/models";
+import { updateInvoiceSchema, type Invoice as DomainInvoice, invoiceSchema } from "@/lib/domain/models";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -270,8 +270,8 @@ export default function InvoicePage({
     setEditingInvoice(invoice);
     updateForm.reset({
       client_id: invoice.client_id || null,
-      in_or_out: invoice.in_or_out as "in" | "out",
-      status: invoice.status as UpdateInvoiceInput["status"] || "uploaded",
+      in_or_out: invoice.in_or_out,
+      status: invoice.status,
       period: invoice.year_month ? RocPeriod.fromYYYMM(invoice.year_month) : RocPeriod.now(),
     });
   };

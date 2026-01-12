@@ -113,14 +113,14 @@ export function InvoiceTable({
         <TableBody>
           {isLoading ? (
             <TableRow>
-              <TableCell colSpan={showClientColumn ? 6 : 5} className="h-24 text-center">
+              <TableCell colSpan={showClientColumn ? 7 : 6} className="h-24 text-center">
                 <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
               </TableCell>
             </TableRow>
           ) : invoices.length === 0 ? (
             <TableRow>
               <TableCell
-                colSpan={showClientColumn ? 6 : 5}
+                colSpan={showClientColumn ? 7 : 6}
                 className="h-24 text-center text-muted-foreground"
               >
                 無發票資料。

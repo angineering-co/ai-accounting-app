@@ -6,11 +6,12 @@ import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, ArrowLeft, Plus } from "lucide-react";
+import { Loader2, ArrowLeft, Plus, FileText } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { InvoiceTable } from "@/components/invoice-table";
 import { InvoiceReviewDialog } from "@/components/invoice-review-dialog";
 import { createInvoice, updateInvoice, deleteInvoice, extractInvoiceDataAction } from "@/lib/services/invoice";
+import { processElectronicInvoiceFile } from "@/lib/services/invoice-import";
 import { RangeManagement } from "@/components/range-management";
 import { ReportGeneration } from "@/components/report-generation";
 import { toast } from "sonner";
@@ -70,6 +71,11 @@ export default function ClientDetailPage({
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [uploadFolderId, setUploadFolderId] = useState<string>(() => crypto.randomUUID());
   const [isProcessingUpload, setIsProcessingUpload] = useState(false);
+  
+  // Import Electronic Invoice State
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importPeriod, setImportPeriod] = useState<RocPeriod>(() => RocPeriod.now());
+  const [isProcessingImport, setIsProcessingImport] = useState(false);
   
   // Period for reports
   const [reportPeriod, setReportPeriod] = useState<RocPeriod>(() => RocPeriod.now());
@@ -132,6 +138,22 @@ export default function ClientDetailPage({
     },
   });
 
+  // Import Upload Hook
+  const importUploadProps = useSupabaseUpload({
+    bucketName: "electronic-invoices",
+    path: `${firmId}/${importPeriod.toString()}`,
+    allowedMimeTypes: ["text/plain"],
+    maxFiles: 1,
+    maxFileSize: 5 * 1024 * 1024,
+    getStorageKey: (file) => {
+      // Sanitize filename to ensure valid storage key
+      const cleanName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+      const timestamp = Date.now();
+      return `${timestamp}_${cleanName}`;
+    },
+    upsert: true, // Allow overwriting if same file uploaded again
+  });
+
   const handleUploadComplete = useCallback(async () => {
     if (isProcessingUpload) return;
     setIsProcessingUpload(true);
@@ -167,6 +189,51 @@ export default function ClientDetailPage({
       setIsProcessingUpload(false);
     }
   }, [clientId, fetchInvoices, firmId, isProcessingUpload, uploadForm, uploadProps]);
+
+  const handleImportComplete = useCallback(async () => {
+    if (isProcessingImport || !importUploadProps.uploadedFiles.length) return;
+    
+    setIsProcessingImport(true);
+    
+    try {
+      const file = importUploadProps.uploadedFiles[0];
+      
+      const result = await processElectronicInvoiceFile(
+        clientId,
+        firmId,
+        file.path,
+        file.name
+      );
+      
+      if (result.success > 0) {
+        toast.success(`成功匯入 ${result.success} 筆發票 (已忽略重複)`);
+        setIsImportModalOpen(false);
+        importUploadProps.setFiles([]);
+        importUploadProps.setUploadedFiles([]);
+        fetchInvoices();
+      }
+      
+      if (result.failed > 0) {
+        toast.error(`${result.failed} 筆發票匯入失敗，請查看詳情`);
+        // Maybe show error details in a toast or dialog?
+        // For now just toast.
+        console.error("Import errors:", result.errors);
+      }
+
+    } catch (error) {
+      console.error("Processing error:", error);
+      toast.error("處理檔案時發生錯誤");
+    } finally {
+      setIsProcessingImport(false);
+    }
+  }, [clientId, firmId, isProcessingImport, importUploadProps, fetchInvoices]);
+
+  // Trigger import processing when upload succeeds
+  useEffect(() => {
+    if (importUploadProps.isSuccess && !isProcessingImport && importUploadProps.uploadedFiles.length > 0) {
+      handleImportComplete();
+    }
+  }, [importUploadProps.isSuccess, isProcessingImport, handleImportComplete, importUploadProps.uploadedFiles.length]);
 
   const handleEditInvoice = async (values: UpdateFormInput) => {
     if (!editingInvoice) return;
@@ -282,9 +349,14 @@ export default function ClientDetailPage({
         <TabsContent value="invoices" className="mt-6 space-y-6">
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-semibold">發票列表</h2>
-            <Button onClick={() => setIsUploadModalOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" /> 上傳發票
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
+                <FileText className="mr-2 h-4 w-4" /> 匯入電子發票
+              </Button>
+              <Button onClick={() => setIsUploadModalOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" /> 上傳發票
+              </Button>
+            </div>
           </div>
 
           <InvoiceTable
@@ -312,6 +384,42 @@ export default function ClientDetailPage({
           <ReportGeneration client={client} period={reportPeriod} />
         </TabsContent>
       </Tabs>
+
+      {/* Import Modal */}
+      <Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
+        <ResponsiveDialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>匯入電子發票</DialogTitle>
+            <DialogDescription>
+              請選擇所屬期別並上傳電子發票 TXT 檔。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>所屬期別</Label>
+              <PeriodSelector
+                value={importPeriod}
+                onChange={setImportPeriod}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label>檔案 (TXT)</Label>
+              {isProcessingImport ? (
+                <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p className="text-sm text-muted-foreground">正在解析並匯入發票...</p>
+                </div>
+              ) : (
+                <Dropzone {...importUploadProps}>
+                  <DropzoneEmptyState />
+                  <DropzoneContent />
+                </Dropzone>
+              )}
+            </div>
+          </div>
+        </ResponsiveDialogContent>
+      </Dialog>
 
       {/* Upload Modal */}
       <Dialog open={isUploadModalOpen} onOpenChange={setIsUploadModalOpen}>

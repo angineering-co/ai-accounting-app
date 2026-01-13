@@ -47,6 +47,7 @@ export function InvoiceReviewDialog({
   onSuccess
 }: InvoiceReviewDialogProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewText, setPreviewText] = useState<string | null>(null);
   const supabase = createClient();
 
   const form = useForm<ExtractedInvoiceData>({
@@ -89,21 +90,58 @@ export function InvoiceReviewDialog({
         account: extractedData.account || "",
         taxType: extractedData.taxType || "應稅",
         invoiceType: extractedData.invoiceType || "手開三聯式",
-        inOrOut: extractedData.inOrOut || (invoice.in_or_out === "in" ? "進項" : "銷項"),
+        inOrOut:
+          extractedData.inOrOut ||
+          (invoice.in_or_out === "in" ? "進項" : "銷項"),
         ...extractedData, // Include any additional fields
       });
 
-      // Get signed URL for preview
+      // Get signed URL or text content for preview
       const getPreview = async () => {
-        const { data } = await supabase.storage
-          .from("invoices")
-          .createSignedUrl(invoice.storage_path, 3600);
-        
-        if (data) setPreviewUrl(data.signedUrl);
+        const extracted = invoice.extracted_data as ExtractedInvoiceData & {
+          source?: string;
+        };
+        const isImport = extracted?.source === "import";
+        const bucket = isImport ? "electronic-invoices" : "invoices";
+
+        if (isImport) {
+          try {
+            const { data, error } = await supabase.storage
+              .from(bucket)
+              .download(invoice.storage_path);
+
+            if (error) throw error;
+
+            if (data) {
+              const buffer = await data.arrayBuffer();
+              // Try Big5 first as it's common for these files
+              const text = new TextDecoder("big5").decode(buffer);
+
+              // Simple check if decode looks wrong (e.g. mostly replacement characters or garbage)
+              // But usually Big5 decoder handles ASCII fine.
+              // If the file was actually UTF-8, Big5 might mangle it if it has non-ASCII.
+              // Let's assume Big5 for now as per server-side logic.
+
+              setPreviewText(text);
+              setPreviewUrl(null);
+            }
+          } catch (e) {
+            console.error("Error downloading text file:", e);
+            toast.error("無法載入檔案預覽");
+          }
+        } else {
+          setPreviewText(null);
+          const { data } = await supabase.storage
+            .from(bucket)
+            .createSignedUrl(invoice.storage_path, 3600);
+
+          if (data) setPreviewUrl(data.signedUrl);
+        }
       };
       getPreview();
     } else {
       setPreviewUrl(null);
+      setPreviewText(null);
     }
   }, [invoice, isOpen, form, supabase.storage]);
 
@@ -138,8 +176,20 @@ export function InvoiceReviewDialog({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
           {/* Preview Section */}
-          <div className="border rounded-lg bg-muted flex items-center justify-center min-h-[300px] overflow-hidden">
-            {previewUrl ? (
+          <div className="border rounded-lg bg-muted flex items-center justify-center min-h-[300px] overflow-hidden relative">
+            {previewText ? (
+              <div className="w-full h-full max-h-[600px] overflow-auto p-4 bg-white text-xs font-mono whitespace-pre text-left">
+                {previewText.split('\n').map((line, i) => {
+                  // Highlight line if it contains the invoice number
+                  const isMatch = invoice?.extracted_data?.invoiceSerialCode && line.includes(invoice.extracted_data.invoiceSerialCode as string);
+                  return (
+                    <div key={i} className={`${isMatch ? 'bg-yellow-100 font-bold text-black' : 'text-gray-600'}`}>
+                      {line}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : previewUrl ? (
               isPdf ? (
                 <iframe src={previewUrl} className="w-full h-full min-h-[400px]" title="Invoice Preview" />
               ) : (

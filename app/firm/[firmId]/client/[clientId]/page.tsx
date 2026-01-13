@@ -154,6 +154,8 @@ export default function ClientDetailPage({
     upsert: true, // Allow overwriting if same file uploaded again
   });
 
+  const { uploadedFiles: importUploadedFiles, setFiles: setImportFiles, setUploadedFiles: setImportUploadedFiles } = importUploadProps;
+
   const handleUploadComplete = useCallback(async () => {
     if (isProcessingUpload) return;
     setIsProcessingUpload(true);
@@ -191,12 +193,12 @@ export default function ClientDetailPage({
   }, [clientId, fetchInvoices, firmId, isProcessingUpload, uploadForm, uploadProps]);
 
   const handleImportComplete = useCallback(async () => {
-    if (isProcessingImport || !importUploadProps.uploadedFiles.length) return;
+    if (isProcessingImport || !importUploadedFiles.length) return;
     
     setIsProcessingImport(true);
     
     try {
-      const file = importUploadProps.uploadedFiles[0];
+      const file = importUploadedFiles[0];
       
       const result = await processElectronicInvoiceFile(
         clientId,
@@ -205,18 +207,16 @@ export default function ClientDetailPage({
         file.name
       );
       
-      if (result.success > 0) {
-        toast.success(`成功匯入 ${result.success} 筆發票 (已忽略重複)`);
+      if (result.inserted > 0 || result.skipped > 0) {
+        toast.success(`成功匯入 ${result.inserted} 筆發票 (略過 ${result.skipped} 筆重複)`);
         setIsImportModalOpen(false);
-        importUploadProps.setFiles([]);
-        importUploadProps.setUploadedFiles([]);
+        setImportFiles([]);
+        setImportUploadedFiles([]);
         fetchInvoices();
       }
       
       if (result.failed > 0) {
         toast.error(`${result.failed} 筆發票匯入失敗，請查看詳情`);
-        // Maybe show error details in a toast or dialog?
-        // For now just toast.
         console.error("Import errors:", result.errors);
       }
 
@@ -226,14 +226,14 @@ export default function ClientDetailPage({
     } finally {
       setIsProcessingImport(false);
     }
-  }, [clientId, firmId, isProcessingImport, importUploadProps, fetchInvoices]);
+  }, [clientId, firmId, isProcessingImport, importUploadedFiles, setImportFiles, setImportUploadedFiles, fetchInvoices]);
 
   // Trigger import processing when upload succeeds
   useEffect(() => {
-    if (importUploadProps.isSuccess && !isProcessingImport && importUploadProps.uploadedFiles.length > 0) {
+    if (importUploadProps.isSuccess && !isProcessingImport && importUploadedFiles.length > 0) {
       handleImportComplete();
     }
-  }, [importUploadProps.isSuccess, isProcessingImport, handleImportComplete, importUploadProps.uploadedFiles.length]);
+  }, [importUploadProps.isSuccess, isProcessingImport, handleImportComplete, importUploadedFiles.length]);
 
   const handleEditInvoice = async (values: UpdateFormInput) => {
     if (!editingInvoice) return;

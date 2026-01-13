@@ -16,7 +16,8 @@ function substringBytes(buffer: Buffer, start: number, length: number): string {
 
 interface ImportResult {
   total: number;
-  success: number;
+  inserted: number;
+  skipped: number;
   failed: number;
   errors: string[];
 }
@@ -30,7 +31,8 @@ export async function processElectronicInvoiceFile(
   const supabase = await createClient();
   const result: ImportResult = {
     total: 0,
-    success: 0,
+    inserted: 0,
+    skipped: 0,
     failed: 0,
     errors: [],
   };
@@ -52,10 +54,13 @@ export async function processElectronicInvoiceFile(
     // But this format is fixed width 81 bytes usually followed by CR/LF
     // Let's iterate line by line.
     
+    // Calculate total lines first (approximate based on newline splitting for total count)
+    // Note: this might differ slightly from the loop if there are empty lines or byte issues, 
+    // but gives a good baseline.
     const content = iconv.decode(buffer, 'big5');
     const lines = content.split(/\r?\n/).filter(line => line.trim().length > 0);
-    
     result.total = lines.length;
+
     const invoicesToInsert: TablesInsert<'invoices'>[] = [];
     const { data: { user } } = await supabase.auth.getUser();
     
@@ -93,7 +98,6 @@ export async function processElectronicInvoiceFile(
         const invoiceData = parseTxtRow(processingBuffer, clientId, firmId, storagePath, filename, user.id);
         if (invoiceData) {
           invoicesToInsert.push(invoiceData);
-          result.success++;
         }
       } catch (e) {
         result.failed++;
@@ -101,19 +105,10 @@ export async function processElectronicInvoiceFile(
       }
     }
     
-    // Batch insert
-    // We should probably check for duplicates first if this is meant to be idempotent.
-    // However, the spec doesn't specify unique constraints on invoice content beyond ID.
-    // The current implementation will insert duplicates if run multiple times.
-    // For idempotency, we could check for existing invoices with the same serial code + date + seller + buyer.
-    
-    // Check for duplicates before inserting
+    // Batch insert with duplicate check
     const uniqueInvoices = [];
     
     for (const inv of invoicesToInsert) {
-      // Basic check: Is there already an invoice with this serial code in this period?
-      // Since we are inserting confirmed invoices, we might want to skip if it exists.
-      
       const extracted = inv.extracted_data as { invoiceSerialCode?: string }; // Cast for access
       if (!extracted || !extracted.invoiceSerialCode) {
         uniqueInvoices.push(inv);
@@ -121,17 +116,20 @@ export async function processElectronicInvoiceFile(
       }
 
       // Check against DB
+      // Fix: Removed .eq('status', 'confirmed') to ensure idempotency across all statuses
       const { data: existing } = await supabase
         .from('invoices')
         .select('id')
         .eq('firm_id', firmId)
         .eq('client_id', clientId)
-        .eq('status', 'confirmed')
         .contains('extracted_data', { invoiceSerialCode: extracted.invoiceSerialCode })
-        .maybeSingle(); // Use maybeSingle to avoid error if 0 or multiple
+        .limit(1)
+        .maybeSingle();
 
       if (!existing) {
         uniqueInvoices.push(inv);
+      } else {
+        result.skipped++;
       }
     }
 
@@ -144,11 +142,7 @@ export async function processElectronicInvoiceFile(
         throw insertError;
       }
       
-      // Update result count to reflect actual insertions?
-      // Or keep success as "lines processed successfully"?
-      // If we skip duplicates, it's technically a success (idempotent).
-      // Let's count them as success but maybe log warnings?
-      // For now, let's just proceed. Ideally the UI should know how many were new.
+      result.inserted = uniqueInvoices.length;
     }
 
   } catch (error) {
@@ -241,10 +235,8 @@ function parseTxtRow(
     '2': '零稅率',
     '3': '免稅',
     'F': '作廢',
-    'D': '彙加' // Assuming D maps to what the schema expects? Schema has '彙加'. 
-               // Wait, 'D' in spec is "空白未使用"? 
-               // Spec says: F (Void), D (Unused/Blank).
-               // S=A is "Aggregate" (彙加).
+    // 'D' was mapped to '彙加' but spec suggests it means 'Unused/Blank'.
+    // Aggregation is handled by checking the 'S' flag, so this mapping is removed to avoid confusion.
   };
   
   let mappedTaxType = taxTypeMap[taxType] || '應稅';

@@ -114,20 +114,25 @@ export function InvoiceReviewDialog({
 
             if (data) {
               const buffer = await data.arrayBuffer();
+
+              // Validate that the file only contains ASCII characters (0-127)
+              const uint8Array = new Uint8Array(buffer);
+              const isAscii = uint8Array.every(byte => byte <= 127);
+
+              if (!isAscii) {
+                throw new Error("檔案包含非 ASCII 字元");
+              }
+
               // Try Big5 first as it's common for these files
               const text = new TextDecoder("big5").decode(buffer);
-
-              // Simple check if decode looks wrong (e.g. mostly replacement characters or garbage)
-              // But usually Big5 decoder handles ASCII fine.
-              // If the file was actually UTF-8, Big5 might mangle it if it has non-ASCII.
-              // Let's assume Big5 for now as per server-side logic.
 
               setPreviewText(text);
               setPreviewUrl(null);
             }
           } catch (e) {
             console.error("Error downloading text file:", e);
-            toast.error("無法載入檔案預覽");
+            toast.error(e instanceof Error && e.message === "檔案包含非 ASCII 字元" ? "檔案格式錯誤：僅支援 ASCII 編碼" : "無法載入檔案預覽");
+            setPreviewText(null);
           }
         } else {
           setPreviewText(null);

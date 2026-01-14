@@ -20,7 +20,15 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Loader2, CheckCircle, Save } from "lucide-react";
+import {
+  Loader2,
+  CheckCircle,
+  Save,
+  ZoomIn,
+  ZoomOut,
+  RotateCw,
+  Hand,
+} from "lucide-react";
 import {
   extractedInvoiceDataSchema,
   type ExtractedInvoiceData,
@@ -28,7 +36,7 @@ import {
 } from "@/lib/domain/models";
 import { updateInvoice } from "@/lib/services/invoice";
 import { toast } from "sonner";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Image from "next/image";
 import {
@@ -52,6 +60,8 @@ interface InvoiceReviewDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  onNext?: () => void;
+  onPrevious?: () => void;
 }
 
 export function InvoiceReviewDialog({
@@ -59,7 +69,15 @@ export function InvoiceReviewDialog({
   isOpen,
   onOpenChange,
   onSuccess,
+  onNext,
+  onPrevious,
 }: InvoiceReviewDialogProps) {
+  const [rotation, setRotation] = useState(0);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanMode, setIsPanMode] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewText, setPreviewText] = useState<string | null>(null);
   const [excelData, setExcelData] = useState<{
@@ -105,12 +123,18 @@ export function InvoiceReviewDialog({
       currentConfidence[fieldName] &&
       currentConfidence[fieldName] !== "high"
     ) {
-      form.setValue(`confidence.${fieldName}`, "high", { shouldValidate: true });
+      form.setValue(`confidence.${fieldName}`, "high", {
+        shouldValidate: true,
+      });
     }
   };
 
   useEffect(() => {
     if (invoice && isOpen) {
+      setRotation(0);
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+      setIsPanMode(false);
       // Use the extracted_data directly, ensuring all fields are properly mapped
       const extractedData = invoice.extracted_data || {};
       form.reset({
@@ -224,36 +248,133 @@ export function InvoiceReviewDialog({
     }
   }, [invoice, isOpen, form, supabase.storage]);
 
-  const handleSave = async (
-    data: ExtractedInvoiceData,
-    status: Invoice["status"] = "processed"
-  ) => {
-    if (!invoice) return;
+  const handleSave = useCallback(
+    async (
+      data: ExtractedInvoiceData,
+      status: Invoice["status"] = "processed",
+      shouldClose: boolean = true
+    ) => {
+      if (!invoice) return;
 
-    try {
-      // Clear confidence data as the user has reviewed/edited it
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { confidence, ...dataToSave } = data;
+      try {
+        // Clear confidence data as the user has reviewed/edited it
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { confidence, ...dataToSave } = data;
 
-      await updateInvoice(invoice.id, {
-        extracted_data: dataToSave,
-        status: status,
-      });
-      toast.success(status === "confirmed" ? "發票已確認" : "變更已儲存");
-      onOpenChange(false);
-      onSuccess?.();
-    } catch (error) {
-      console.error("Error updating invoice:", error);
-      toast.error("更新失敗");
-    }
-  };
+        await updateInvoice(invoice.id, {
+          extracted_data: dataToSave,
+          status: status,
+        });
+        toast.success(status === "confirmed" ? "發票已確認" : "變更已儲存");
+
+        if (shouldClose) {
+          onOpenChange(false);
+        }
+
+        onSuccess?.();
+      } catch (error) {
+        console.error("Error updating invoice:", error);
+        toast.error("更新失敗");
+      }
+    },
+    [invoice, onOpenChange, onSuccess]
+  );
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if modifier keys (except Shift) are pressed
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+      const target = e.target as HTMLElement;
+      const isInput =
+        target.matches("input, textarea, select") ||
+        target.closest('[role="combobox"]');
+
+      // Shift + Enter to confirm
+      if (e.shiftKey && e.key === "Enter") {
+        e.preventDefault();
+        // Save and keep open (pass false for shouldClose)
+        form.handleSubmit((data) => handleSave(data, "confirmed", false))();
+        return;
+      }
+
+      if (isInput) return;
+
+      switch (e.key) {
+        case "+":
+        case "=": // Also handle = key which is often same key as +
+          if (!previewText && !excelData) {
+            e.preventDefault();
+            setZoom((prev) => Math.min(prev + 0.1, 3));
+          }
+          break;
+        case "-":
+        case "_":
+          if (!previewText && !excelData) {
+            e.preventDefault();
+            setZoom((prev) => Math.max(prev - 0.1, 0.5));
+          }
+          break;
+        case "ArrowLeft":
+          if (!previewText && !excelData) {
+            e.preventDefault();
+            setRotation((prev) => prev - 90);
+          }
+          break;
+        case "ArrowRight":
+          if (!previewText && !excelData) {
+            e.preventDefault();
+            setRotation((prev) => prev + 90);
+          }
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          onPrevious?.();
+          break;
+        case "ArrowDown":
+          e.preventDefault();
+          onNext?.();
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, previewText, excelData, onNext, onPrevious, form, handleSave]);
 
   const isPdf = invoice?.filename.toLowerCase().endsWith(".pdf");
   const invoiceCode = invoice?.extracted_data?.invoiceSerialCode;
 
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if ((isPanMode || !isPdf) && (previewUrl || previewText) && !excelData) {
+      e.preventDefault();
+      setIsDragging(true);
+      setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isDragging) {
+      e.preventDefault();
+      setPan({
+        x: e.clientX - dragStart.x,
+        y: e.clientY - dragStart.y,
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>發票內容確認</DialogTitle>
           <DialogDescription>
@@ -263,7 +384,70 @@ export function InvoiceReviewDialog({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
           {/* Preview Section */}
-          <div className="border rounded-lg bg-muted flex items-center justify-center min-h-[300px] overflow-hidden relative">
+          <div
+            className={`border rounded-lg bg-muted flex items-center justify-center min-h-[300px] overflow-hidden relative group ${
+              (isPanMode || !isPdf) && (previewUrl || previewText) && !excelData
+                ? isDragging
+                  ? "cursor-grabbing"
+                  : "cursor-grab"
+                : ""
+            }`}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+          >
+            {/* Image Controls Overlay */}
+            {!previewText && !excelData && previewUrl && (
+              <div className="absolute top-2 right-2 flex gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 p-1 rounded-lg backdrop-blur-sm">
+                <Button
+                  type="button"
+                  variant={isPanMode ? "secondary" : "ghost"}
+                  size="icon"
+                  className={`h-8 w-8 ${
+                    isPanMode
+                      ? "bg-white text-black hover:bg-white/90"
+                      : "text-white hover:text-white hover:bg-white/20"
+                  }`}
+                  onClick={() => setIsPanMode(!isPanMode)}
+                  title={isPanMode ? "關閉拖曳模式" : "開啟拖曳模式"}
+                >
+                  <Hand className="h-4 w-4" />
+                </Button>
+                <div className="w-px h-4 bg-white/20 my-auto mx-1" />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-white hover:text-white hover:bg-white/20"
+                  onClick={() => setZoom((z) => Math.min(z + 0.1, 3))}
+                  title="放大 (+)"
+                >
+                  <ZoomIn className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-white hover:text-white hover:bg-white/20"
+                  onClick={() => setZoom((z) => Math.max(z - 0.1, 0.5))}
+                  title="縮小 (-)"
+                >
+                  <ZoomOut className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-white hover:text-white hover:bg-white/20"
+                  onClick={() => setRotation((r) => r + 90)}
+                  title="旋轉 (Right Arrow)"
+                >
+                  <RotateCw className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+
             {previewText ? (
               <div className="w-full h-full max-h-[600px] overflow-auto p-4 bg-white text-xs font-mono whitespace-pre text-left">
                 {previewText.split("\n").map((line, i) => {
@@ -326,23 +510,40 @@ export function InvoiceReviewDialog({
                 </Table>
               </div>
             ) : previewUrl ? (
-              isPdf ? (
-                <iframe
-                  src={previewUrl}
-                  className="w-full h-full min-h-[400px]"
-                  title="Invoice Preview"
-                />
-              ) : (
-                <Image
-                  src={previewUrl}
-                  alt="Invoice Preview"
-                  width={0}
-                  height={0}
-                  sizes="100vw"
-                  className="w-auto h-auto max-w-full max-h-full object-contain"
-                  unoptimized
-                />
-              )
+              <div
+                className="w-full h-full flex items-center justify-center transition-transform duration-75 ease-linear"
+                style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}
+              >
+                {isPdf ? (
+                  <div className="relative w-full h-full min-h-[400px]">
+                    <iframe
+                      src={previewUrl}
+                      className="w-full h-full transition-transform duration-200 ease-in-out origin-center bg-white"
+                      style={{
+                        transform: `rotate(${rotation}deg) scale(${zoom})`,
+                      }}
+                      title="Invoice Preview"
+                    />
+                    {/* Overlay for dragging PDF */}
+                    {isPanMode && (
+                      <div className="absolute inset-0 z-0 bg-transparent" />
+                    )}
+                  </div>
+                ) : (
+                  <Image
+                    src={previewUrl}
+                    alt="Invoice Preview"
+                    width={0}
+                    height={0}
+                    sizes="100vw"
+                    className="w-auto h-auto max-w-full max-h-full object-contain transition-transform duration-200 ease-in-out origin-center"
+                    style={{
+                      transform: `rotate(${rotation}deg) scale(${zoom})`,
+                    }}
+                    unoptimized
+                  />
+                )}
+              </div>
             ) : (
               <div className="flex flex-col items-center gap-2 text-muted-foreground">
                 <Loader2 className="h-8 w-8 animate-spin" />

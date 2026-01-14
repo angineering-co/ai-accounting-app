@@ -305,6 +305,26 @@ export default function ClientDetailPage({
     }
   };
 
+  const handleReviewNext = () => {
+    if (!reviewingInvoice) return;
+    const currentIndex = invoices.findIndex(
+      (inv) => inv.id === reviewingInvoice.id
+    );
+    if (currentIndex >= 0 && currentIndex < invoices.length - 1) {
+      setReviewingInvoice(invoices[currentIndex + 1]);
+    }
+  };
+
+  const handleReviewPrevious = () => {
+    if (!reviewingInvoice) return;
+    const currentIndex = invoices.findIndex(
+      (inv) => inv.id === reviewingInvoice.id
+    );
+    if (currentIndex > 0) {
+      setReviewingInvoice(invoices[currentIndex - 1]);
+    }
+  };
+
   if (isClientLoading) return <div className="p-6 flex justify-center"><Loader2 className="animate-spin" /></div>;
   if (!client) return <div className="p-6 text-center">找不到客戶</div>;
 
@@ -490,6 +510,8 @@ export default function ClientDetailPage({
         isOpen={!!reviewingInvoice}
         onOpenChange={(open) => !open && setReviewingInvoice(null)}
         onSuccess={fetchInvoices}
+        onNext={handleReviewNext}
+        onPrevious={handleReviewPrevious}
       />
 
       {/* Edit Modal */}

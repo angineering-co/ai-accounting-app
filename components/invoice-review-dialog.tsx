@@ -2,36 +2,50 @@
 
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogDescription, 
-  DialogFooter, 
-  DialogHeader, 
-  DialogTitle 
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
-import { 
-  Form, 
-  FormControl, 
-  FormField, 
-  FormItem, 
-  FormLabel, 
-  FormMessage 
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle, Save } from "lucide-react";
-import { 
-  extractedInvoiceDataSchema, 
-  type ExtractedInvoiceData, 
-  type Invoice 
+import {
+  extractedInvoiceDataSchema,
+  type ExtractedInvoiceData,
+  type Invoice,
 } from "@/lib/domain/models";
 import { updateInvoice } from "@/lib/services/invoice";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Image from "next/image";
-import { Select, SelectItem, SelectContent, SelectValue, SelectTrigger } from "@/components/ui/select";
+import {
+  Select,
+  SelectItem,
+  SelectContent,
+  SelectValue,
+  SelectTrigger,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface InvoiceReviewDialogProps {
   invoice: Invoice | null;
@@ -44,10 +58,14 @@ export function InvoiceReviewDialog({
   invoice,
   isOpen,
   onOpenChange,
-  onSuccess
+  onSuccess,
 }: InvoiceReviewDialogProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewText, setPreviewText] = useState<string | null>(null);
+  const [excelData, setExcelData] = useState<{
+    headers: string[];
+    rows: unknown[][];
+  } | null>(null);
   const supabase = createClient();
 
   const form = useForm<ExtractedInvoiceData>({
@@ -101,10 +119,15 @@ export function InvoiceReviewDialog({
         const extracted = invoice.extracted_data as ExtractedInvoiceData & {
           source?: string;
         };
-        const isImport = extracted?.source === "import";
-        const bucket = isImport ? "electronic-invoices" : "invoices";
+        const isTxtImport = extracted?.source === "import-txt";
+        const isExcelImport = extracted?.source === "import-excel";
+        const bucket =
+          isTxtImport || isExcelImport ? "electronic-invoices" : "invoices";
 
-        if (isImport) {
+        // Reset states
+        setExcelData(null);
+
+        if (isTxtImport) {
           try {
             const { data, error } = await supabase.storage
               .from(bucket)
@@ -115,14 +138,6 @@ export function InvoiceReviewDialog({
             if (data) {
               const buffer = await data.arrayBuffer();
 
-              // Validate that the file only contains ASCII characters (0-127)
-              const uint8Array = new Uint8Array(buffer);
-              const isAscii = uint8Array.every(byte => byte <= 127);
-
-              if (!isAscii) {
-                throw new Error("檔案包含非 ASCII 字元");
-              }
-
               // Try Big5 first as it's common for these files
               const text = new TextDecoder("big5").decode(buffer);
 
@@ -131,8 +146,46 @@ export function InvoiceReviewDialog({
             }
           } catch (e) {
             console.error("Error downloading text file:", e);
-            toast.error(e instanceof Error && e.message === "檔案包含非 ASCII 字元" ? "檔案格式錯誤：僅支援 ASCII 編碼" : "無法載入檔案預覽");
+            toast.error("無法載入檔案預覽");
             setPreviewText(null);
+          }
+        } else if (isExcelImport) {
+          try {
+            const { data, error } = await supabase.storage
+              .from(bucket)
+              .download(invoice.storage_path);
+
+            if (error) throw error;
+
+            if (data) {
+              const buffer = await data.arrayBuffer();
+
+              // Dynamically import xlsx to keep bundle size small
+              const XLSX = await import("xlsx");
+
+              const workbook = XLSX.read(buffer, { type: "array" });
+              // Default to the first sheet
+              const sheetName = workbook.SheetNames[0];
+              const worksheet = workbook.Sheets[sheetName];
+
+              // Parse as array of arrays (header: 1)
+              const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+                header: 1,
+              }) as unknown[][];
+
+              if (jsonData && jsonData.length > 0) {
+                const headers = jsonData[0] as string[];
+                const rows = jsonData.slice(1);
+                setExcelData({ headers, rows });
+                setPreviewText(null);
+                setPreviewUrl(null);
+              } else {
+                setPreviewText("Excel 檔案為空");
+              }
+            }
+          } catch (e) {
+            console.error("Error previewing excel:", e);
+            setPreviewText("無法預覽 Excel 檔案");
           }
         } else {
           setPreviewText(null);
@@ -147,16 +200,20 @@ export function InvoiceReviewDialog({
     } else {
       setPreviewUrl(null);
       setPreviewText(null);
+      setExcelData(null);
     }
   }, [invoice, isOpen, form, supabase.storage]);
 
-  const handleSave = async (data: ExtractedInvoiceData, status: Invoice["status"] = "processed") => {
+  const handleSave = async (
+    data: ExtractedInvoiceData,
+    status: Invoice["status"] = "processed"
+  ) => {
     if (!invoice) return;
 
     try {
       await updateInvoice(invoice.id, {
         extracted_data: data,
-        status: status
+        status: status,
       });
       toast.success(status === "confirmed" ? "發票已確認" : "變更已儲存");
       onOpenChange(false);
@@ -167,7 +224,7 @@ export function InvoiceReviewDialog({
     }
   };
 
-  const isPdf = invoice?.filename.toLowerCase().endsWith('.pdf');
+  const isPdf = invoice?.filename.toLowerCase().endsWith(".pdf");
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -184,27 +241,87 @@ export function InvoiceReviewDialog({
           <div className="border rounded-lg bg-muted flex items-center justify-center min-h-[300px] overflow-hidden relative">
             {previewText ? (
               <div className="w-full h-full max-h-[600px] overflow-auto p-4 bg-white text-xs font-mono whitespace-pre text-left">
-                {previewText.split('\n').map((line, i) => {
+                {previewText.split("\n").map((line, i) => {
                   // Highlight line if it contains the invoice number
-                  const isMatch = invoice?.extracted_data?.invoiceSerialCode && line.includes(invoice.extracted_data.invoiceSerialCode as string);
+                  const isMatch =
+                    invoice?.extracted_data?.invoiceSerialCode &&
+                    line.includes(
+                      invoice.extracted_data.invoiceSerialCode as string
+                    );
                   return (
-                    <div key={i} className={`${isMatch ? 'bg-yellow-100 font-bold text-black' : 'text-gray-600'}`}>
+                    <div
+                      key={i}
+                      className={`${
+                        isMatch
+                          ? "bg-yellow-100 font-bold text-black"
+                          : "text-gray-600"
+                      }`}
+                    >
                       {line}
                     </div>
                   );
                 })}
               </div>
+            ) : excelData ? (
+              <div className="w-full h-full max-h-[600px] overflow-auto bg-white">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      {excelData.headers.map((header, i) => (
+                        <TableHead
+                          key={i}
+                          className="whitespace-nowrap px-4 py-2 h-auto"
+                        >
+                          {header}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {excelData.rows.map((row, i) => {
+                      const invoiceCode = (
+                        invoice?.extracted_data as ExtractedInvoiceData
+                      )?.invoiceSerialCode;
+                      const isMatch =
+                        invoiceCode &&
+                        row.some((cell) => String(cell).includes(invoiceCode));
+
+                      return (
+                        <TableRow
+                          key={i}
+                          className={
+                            isMatch ? "bg-yellow-100 hover:bg-yellow-200" : ""
+                          }
+                        >
+                          {row.map((cell: unknown, cellIndex: number) => (
+                            <TableCell
+                              key={cellIndex}
+                              className="whitespace-nowrap px-4 py-2"
+                            >
+                              {String(cell ?? "")}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
             ) : previewUrl ? (
               isPdf ? (
-                <iframe src={previewUrl} className="w-full h-full min-h-[400px]" title="Invoice Preview" />
+                <iframe
+                  src={previewUrl}
+                  className="w-full h-full min-h-[400px]"
+                  title="Invoice Preview"
+                />
               ) : (
-                <Image 
-                  src={previewUrl} 
-                  alt="Invoice Preview" 
+                <Image
+                  src={previewUrl}
+                  alt="Invoice Preview"
                   width={0}
                   height={0}
                   sizes="100vw"
-                  className="w-auto h-auto max-w-full max-h-full object-contain" 
+                  className="w-auto h-auto max-w-full max-h-full object-contain"
                   unoptimized
                 />
               )
@@ -255,11 +372,17 @@ export function InvoiceReviewDialog({
                     <FormItem>
                       <FormLabel>銷售額</FormLabel>
                       <FormControl>
-                        <Input 
-                          {...field} 
-                          type="number" 
+                        <Input
+                          {...field}
+                          type="number"
                           value={field.value ?? ""}
-                          onChange={e => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)} 
+                          onChange={(e) =>
+                            field.onChange(
+                              e.target.value
+                                ? parseFloat(e.target.value)
+                                : undefined
+                            )
+                          }
                         />
                       </FormControl>
                       <FormMessage />
@@ -273,11 +396,17 @@ export function InvoiceReviewDialog({
                     <FormItem>
                       <FormLabel>稅額</FormLabel>
                       <FormControl>
-                        <Input 
-                          {...field} 
-                          type="number" 
+                        <Input
+                          {...field}
+                          type="number"
                           value={field.value ?? ""}
-                          onChange={e => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)} 
+                          onChange={(e) =>
+                            field.onChange(
+                              e.target.value
+                                ? parseFloat(e.target.value)
+                                : undefined
+                            )
+                          }
                         />
                       </FormControl>
                       <FormMessage />
@@ -293,11 +422,17 @@ export function InvoiceReviewDialog({
                   <FormItem>
                     <FormLabel>總計</FormLabel>
                     <FormControl>
-                      <Input 
-                        {...field} 
-                        type="number" 
+                      <Input
+                        {...field}
+                        type="number"
                         value={field.value ?? ""}
-                        onChange={e => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)} 
+                        onChange={(e) =>
+                          field.onChange(
+                            e.target.value
+                              ? parseFloat(e.target.value)
+                              : undefined
+                          )
+                        }
                       />
                     </FormControl>
                     <FormMessage />
@@ -398,7 +533,10 @@ export function InvoiceReviewDialog({
                     <FormItem>
                       <FormLabel>課稅別</FormLabel>
                       <FormControl>
-                        <Select value={field.value} onValueChange={field.onChange}>
+                        <Select
+                          value={field.value}
+                          onValueChange={field.onChange}
+                        >
                           <SelectTrigger>
                             <SelectValue placeholder="選擇課稅別" />
                           </SelectTrigger>
@@ -424,16 +562,27 @@ export function InvoiceReviewDialog({
                     <FormItem>
                       <FormLabel>發票類型</FormLabel>
                       <FormControl>
-                        <Select value={field.value} onValueChange={field.onChange}>
+                        <Select
+                          value={field.value}
+                          onValueChange={field.onChange}
+                        >
                           <SelectTrigger>
                             <SelectValue placeholder="選擇發票類型" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="手開二聯式">手開二聯式</SelectItem>
-                            <SelectItem value="手開三聯式">手開三聯式</SelectItem>
+                            <SelectItem value="手開二聯式">
+                              手開二聯式
+                            </SelectItem>
+                            <SelectItem value="手開三聯式">
+                              手開三聯式
+                            </SelectItem>
                             <SelectItem value="電子發票">電子發票</SelectItem>
-                            <SelectItem value="二聯式收銀機">二聯式收銀機</SelectItem>
-                            <SelectItem value="三聯式收銀機">三聯式收銀機</SelectItem>
+                            <SelectItem value="二聯式收銀機">
+                              二聯式收銀機
+                            </SelectItem>
+                            <SelectItem value="三聯式收銀機">
+                              三聯式收銀機
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                       </FormControl>
@@ -448,7 +597,12 @@ export function InvoiceReviewDialog({
                     <FormItem>
                       <FormLabel>可扣抵</FormLabel>
                       <FormControl>
-                        <Select value={field.value ? "true" : "false"} onValueChange={value => field.onChange(value === "true")}>
+                        <Select
+                          value={field.value ? "true" : "false"}
+                          onValueChange={(value) =>
+                            field.onChange(value === "true")
+                          }
+                        >
                           <SelectTrigger>
                             <SelectValue placeholder="選擇可扣抵" />
                           </SelectTrigger>
@@ -470,14 +624,14 @@ export function InvoiceReviewDialog({
         <DialogFooter className="flex flex-col sm:flex-row gap-2">
           <Button
             variant="outline"
-            onClick={form.handleSubmit(data => handleSave(data, "processed"))}
+            onClick={form.handleSubmit((data) => handleSave(data, "processed"))}
             disabled={form.formState.isSubmitting}
             className="flex-1"
           >
             <Save className="mr-2 h-4 w-4" /> 僅儲存
           </Button>
           <Button
-            onClick={form.handleSubmit(data => handleSave(data, "confirmed"))}
+            onClick={form.handleSubmit((data) => handleSave(data, "confirmed"))}
             disabled={form.formState.isSubmitting}
             className="flex-1"
           >
@@ -493,4 +647,3 @@ export function InvoiceReviewDialog({
     </Dialog>
   );
 }
-

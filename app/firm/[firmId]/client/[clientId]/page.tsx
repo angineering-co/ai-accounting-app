@@ -142,7 +142,11 @@ export default function ClientDetailPage({
   const importUploadProps = useSupabaseUpload({
     bucketName: "electronic-invoices",
     path: `${firmId}/${importPeriod.toString()}`,
-    allowedMimeTypes: ["text/plain"],
+    allowedMimeTypes: [
+      "text/plain",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-excel"
+    ],
     maxFiles: 1,
     maxFileSize: 5 * 1024 * 1024,
     getStorageKey: (file) => {
@@ -404,7 +408,7 @@ export default function ClientDetailPage({
             </div>
             
             <div className="space-y-2">
-              <Label>檔案 (TXT)</Label>
+              <Label>檔案 (TXT / Excel)</Label>
               {isProcessingImport ? (
                 <div className="flex flex-col items-center justify-center py-12 space-y-4">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />

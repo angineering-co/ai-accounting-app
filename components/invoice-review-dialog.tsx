@@ -89,6 +89,26 @@ export function InvoiceReviewDialog({
     },
   });
 
+  const getConfidenceStyle = (fieldName: string) => {
+    const confidence = form.getValues("confidence");
+    if (!confidence) return "";
+    const level = confidence[fieldName];
+    if (level === "low") return "border-red-500 bg-red-50";
+    if (level === "medium") return "border-yellow-500 bg-yellow-50";
+    return "";
+  };
+
+  const clearConfidence = (fieldName: string) => {
+    const currentConfidence = form.getValues("confidence");
+    if (
+      currentConfidence &&
+      currentConfidence[fieldName] &&
+      currentConfidence[fieldName] !== "high"
+    ) {
+      form.setValue(`confidence.${fieldName}`, "high", { shouldValidate: true });
+    }
+  };
+
   useEffect(() => {
     if (invoice && isOpen) {
       // Use the extracted_data directly, ensuring all fields are properly mapped
@@ -211,8 +231,12 @@ export function InvoiceReviewDialog({
     if (!invoice) return;
 
     try {
+      // Clear confidence data as the user has reviewed/edited it
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { confidence, ...dataToSave } = data;
+
       await updateInvoice(invoice.id, {
-        extracted_data: data,
+        extracted_data: dataToSave,
         status: status,
       });
       toast.success(status === "confirmed" ? "發票已確認" : "變更已儲存");
@@ -337,7 +361,15 @@ export function InvoiceReviewDialog({
                   <FormItem>
                     <FormLabel>發票字軌號碼</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="例如: AB12345678" />
+                      <Input
+                        {...field}
+                        placeholder="例如: AB12345678"
+                        className={getConfidenceStyle("invoiceSerialCode")}
+                        onChange={(e) => {
+                          field.onChange(e);
+                          clearConfidence("invoiceSerialCode");
+                        }}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -351,7 +383,15 @@ export function InvoiceReviewDialog({
                   <FormItem>
                     <FormLabel>發票日期</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="YYYY/MM/DD" />
+                      <Input
+                        {...field}
+                        placeholder="YYYY/MM/DD"
+                        className={getConfidenceStyle("date")}
+                        onChange={(e) => {
+                          field.onChange(e);
+                          clearConfidence("date");
+                        }}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -370,13 +410,15 @@ export function InvoiceReviewDialog({
                           {...field}
                           type="number"
                           value={field.value ?? ""}
-                          onChange={(e) =>
+                          className={getConfidenceStyle("totalSales")}
+                          onChange={(e) => {
                             field.onChange(
                               e.target.value
                                 ? parseFloat(e.target.value)
                                 : undefined
-                            )
-                          }
+                            );
+                            clearConfidence("totalSales");
+                          }}
                         />
                       </FormControl>
                       <FormMessage />
@@ -394,13 +436,15 @@ export function InvoiceReviewDialog({
                           {...field}
                           type="number"
                           value={field.value ?? ""}
-                          onChange={(e) =>
+                          className={getConfidenceStyle("tax")}
+                          onChange={(e) => {
                             field.onChange(
                               e.target.value
                                 ? parseFloat(e.target.value)
                                 : undefined
-                            )
-                          }
+                            );
+                            clearConfidence("tax");
+                          }}
                         />
                       </FormControl>
                       <FormMessage />
@@ -420,13 +464,15 @@ export function InvoiceReviewDialog({
                         {...field}
                         type="number"
                         value={field.value ?? ""}
-                        onChange={(e) =>
+                        className={getConfidenceStyle("totalAmount")}
+                        onChange={(e) => {
                           field.onChange(
                             e.target.value
                               ? parseFloat(e.target.value)
                               : undefined
-                          )
-                        }
+                          );
+                          clearConfidence("totalAmount");
+                        }}
                       />
                     </FormControl>
                     <FormMessage />
@@ -442,7 +488,14 @@ export function InvoiceReviewDialog({
                     <FormItem>
                       <FormLabel>賣方名稱</FormLabel>
                       <FormControl>
-                        <Input {...field} />
+                        <Input
+                          {...field}
+                          className={getConfidenceStyle("sellerName")}
+                          onChange={(e) => {
+                            field.onChange(e);
+                            clearConfidence("sellerName");
+                          }}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -455,7 +508,14 @@ export function InvoiceReviewDialog({
                     <FormItem>
                       <FormLabel>賣方統編</FormLabel>
                       <FormControl>
-                        <Input {...field} />
+                        <Input
+                          {...field}
+                          className={getConfidenceStyle("sellerTaxId")}
+                          onChange={(e) => {
+                            field.onChange(e);
+                            clearConfidence("sellerTaxId");
+                          }}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -471,7 +531,14 @@ export function InvoiceReviewDialog({
                     <FormItem>
                       <FormLabel>買方名稱</FormLabel>
                       <FormControl>
-                        <Input {...field} />
+                        <Input
+                          {...field}
+                          className={getConfidenceStyle("buyerName")}
+                          onChange={(e) => {
+                            field.onChange(e);
+                            clearConfidence("buyerName");
+                          }}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -484,7 +551,14 @@ export function InvoiceReviewDialog({
                     <FormItem>
                       <FormLabel>買方統編</FormLabel>
                       <FormControl>
-                        <Input {...field} />
+                        <Input
+                          {...field}
+                          className={getConfidenceStyle("buyerTaxId")}
+                          onChange={(e) => {
+                            field.onChange(e);
+                            clearConfidence("buyerTaxId");
+                          }}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -499,7 +573,15 @@ export function InvoiceReviewDialog({
                   <FormItem>
                     <FormLabel>摘要</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="簡要描述" />
+                      <Input
+                        {...field}
+                        placeholder="簡要描述"
+                        className={getConfidenceStyle("summary")}
+                        onChange={(e) => {
+                          field.onChange(e);
+                          clearConfidence("summary");
+                        }}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -514,7 +596,15 @@ export function InvoiceReviewDialog({
                     <FormItem>
                       <FormLabel>會計科目</FormLabel>
                       <FormControl>
-                        <Input {...field} placeholder="例如: 5102 旅費" />
+                        <Input
+                          {...field}
+                          placeholder="例如: 5102 旅費"
+                          className={getConfidenceStyle("account")}
+                          onChange={(e) => {
+                            field.onChange(e);
+                            clearConfidence("account");
+                          }}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -529,9 +619,14 @@ export function InvoiceReviewDialog({
                       <FormControl>
                         <Select
                           value={field.value}
-                          onValueChange={field.onChange}
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            clearConfidence("taxType");
+                          }}
                         >
-                          <SelectTrigger>
+                          <SelectTrigger
+                            className={getConfidenceStyle("taxType")}
+                          >
                             <SelectValue placeholder="選擇課稅別" />
                           </SelectTrigger>
                           <SelectContent>
@@ -558,9 +653,14 @@ export function InvoiceReviewDialog({
                       <FormControl>
                         <Select
                           value={field.value}
-                          onValueChange={field.onChange}
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            clearConfidence("invoiceType");
+                          }}
                         >
-                          <SelectTrigger>
+                          <SelectTrigger
+                            className={getConfidenceStyle("invoiceType")}
+                          >
                             <SelectValue placeholder="選擇發票類型" />
                           </SelectTrigger>
                           <SelectContent>
@@ -593,11 +693,14 @@ export function InvoiceReviewDialog({
                       <FormControl>
                         <Select
                           value={field.value ? "true" : "false"}
-                          onValueChange={(value) =>
-                            field.onChange(value === "true")
-                          }
+                          onValueChange={(value) => {
+                            field.onChange(value === "true");
+                            clearConfidence("deductible");
+                          }}
                         >
-                          <SelectTrigger>
+                          <SelectTrigger
+                            className={getConfidenceStyle("deductible")}
+                          >
                             <SelectValue placeholder="選擇可扣抵" />
                           </SelectTrigger>
                           <SelectContent>

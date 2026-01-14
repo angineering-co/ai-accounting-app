@@ -282,6 +282,26 @@ export default function InvoicePage({
     return statusMatch && typeMatch;
   });
 
+  const handleReviewNext = () => {
+    if (!reviewingInvoice) return;
+    const currentIndex = filteredInvoices.findIndex(
+      (inv) => inv.id === reviewingInvoice.id
+    );
+    if (currentIndex >= 0 && currentIndex < filteredInvoices.length - 1) {
+      setReviewingInvoice(filteredInvoices[currentIndex + 1]);
+    }
+  };
+
+  const handleReviewPrevious = () => {
+    if (!reviewingInvoice) return;
+    const currentIndex = filteredInvoices.findIndex(
+      (inv) => inv.id === reviewingInvoice.id
+    );
+    if (currentIndex > 0) {
+      setReviewingInvoice(filteredInvoices[currentIndex - 1]);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-center">
@@ -592,6 +612,8 @@ export default function InvoicePage({
         isOpen={!!reviewingInvoice}
         onOpenChange={(open) => !open && setReviewingInvoice(null)}
         onSuccess={fetchInvoices}
+        onNext={handleReviewNext}
+        onPrevious={handleReviewPrevious}
       />
     </div>
   );

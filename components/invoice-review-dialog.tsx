@@ -348,7 +348,7 @@ export function InvoiceReviewDialog({
   const invoiceCode = invoice?.extracted_data?.invoiceSerialCode;
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if ((isPanMode || !isPdf) && (previewUrl || previewText) && !excelData) {
+    if ((isPanMode || !isPdf) && previewUrl && !excelData) {
       e.preventDefault();
       setIsDragging(true);
       setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
@@ -386,7 +386,7 @@ export function InvoiceReviewDialog({
           {/* Preview Section */}
           <div
             className={`border rounded-lg bg-muted flex items-center justify-center min-h-[300px] overflow-hidden relative group ${
-              (isPanMode || !isPdf) && (previewUrl || previewText) && !excelData
+              (isPanMode || !isPdf) && previewUrl && !excelData
                 ? isDragging
                   ? "cursor-grabbing"
                   : "cursor-grab"
@@ -526,7 +526,7 @@ export function InvoiceReviewDialog({
                     />
                     {/* Overlay for dragging PDF */}
                     {isPanMode && (
-                      <div className="absolute inset-0 z-0 bg-transparent" />
+                      <div className="absolute inset-0 z-10 bg-transparent" />
                     )}
                   </div>
                 ) : (

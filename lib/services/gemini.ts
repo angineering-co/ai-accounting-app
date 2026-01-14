@@ -125,6 +125,12 @@ export async function extractInvoiceData(
         - "零稅率" or "免稅" if the corresponding checkbox has been checked explicitly.
         - "作廢" if it's handwritten on the invoice.
     12. **invoiceType**: Select one of the following: "手開二聯式", "手開三聯式", "電子發票", "二聯式收銀機", "三聯式收銀機".
+    13. **Confidence Scoring**:
+        - For each extracted field, assign a confidence level: "low", "medium", or "high".
+        - "high": The field is clearly visible and unambiguous.
+        - "medium": The field is somewhat clear but might have minor issues (e.g., slight blur, unusual font).
+        - "low": The field is unclear, handwritten and hard to read, or inferred.
+        - Return a \`confidence\` object mapping field names to their confidence levels.
 
     Fields to extract:
     - inOrOut (string): "進項" or "銷項"
@@ -142,6 +148,7 @@ export async function extractInvoiceData(
     - summary (string)
     - taxType (string): One of "應稅", "零稅率", "免稅", "作廢"
     - invoiceType (string): One of "手開二聯式", "手開三聯式", "電子發票", "二聯式收銀機", "三聯式收銀機"
+    - confidence (object): A map where keys are the field names above and values are "low", "medium", or "high".
 
     Return ONLY the raw JSON string. No markdown.`;
 

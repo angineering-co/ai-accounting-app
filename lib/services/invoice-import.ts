@@ -364,16 +364,12 @@ async function processExcelFile(
             // If string is "2025-11-10 12:00:00", new Date() usually parses it correctly in JS
             dateObj = new Date(String(dateVal));
             if (isNaN(dateObj.getTime())) {
-                console.warn(`Invalid date for invoice ${invoiceNo}: ${dateVal}`);
-                dateObj = new Date(); 
+              throw new Error(`Invalid date for invoice ${invoiceNo}: ${dateVal}`);
             }
         }
         
         const rocPeriod = RocPeriod.fromDate(dateObj);
-        const yyyy = dateObj.getFullYear();
-        const mm = dateObj.getMonth() + 1;
-        const dd = dateObj.getDate();
-        const dateStr = `${yyyy}/${mm}/${dd}`;
+        const dateStr = `${dateObj.getFullYear()}/${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
         
         const formatCode = getString(row, '格式代號');
         const inOrOut = formatCode.startsWith('2') ? 'in' : 'out';

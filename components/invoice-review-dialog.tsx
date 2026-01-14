@@ -225,6 +225,7 @@ export function InvoiceReviewDialog({
   };
 
   const isPdf = invoice?.filename.toLowerCase().endsWith(".pdf");
+  const invoiceCode = invoice?.extracted_data?.invoiceSerialCode;
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -243,11 +244,7 @@ export function InvoiceReviewDialog({
               <div className="w-full h-full max-h-[600px] overflow-auto p-4 bg-white text-xs font-mono whitespace-pre text-left">
                 {previewText.split("\n").map((line, i) => {
                   // Highlight line if it contains the invoice number
-                  const isMatch =
-                    invoice?.extracted_data?.invoiceSerialCode &&
-                    line.includes(
-                      invoice.extracted_data.invoiceSerialCode as string
-                    );
+                  const isMatch = invoiceCode && line.includes(invoiceCode);
                   return (
                     <div
                       key={i}
@@ -279,9 +276,6 @@ export function InvoiceReviewDialog({
                   </TableHeader>
                   <TableBody>
                     {excelData.rows.map((row, i) => {
-                      const invoiceCode = (
-                        invoice?.extracted_data as ExtractedInvoiceData
-                      )?.invoiceSerialCode;
                       const isMatch =
                         invoiceCode &&
                         row.some((cell) => String(cell).includes(invoiceCode));

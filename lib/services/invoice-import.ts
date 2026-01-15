@@ -18,6 +18,7 @@ function substringBytes(buffer: Buffer, start: number, length: number): string {
 interface ImportResult {
   total: number;
   inserted: number;
+  updated: number;
   skipped: number;
   failed: number;
   errors: string[];
@@ -33,6 +34,7 @@ export async function processElectronicInvoiceFile(
   const result: ImportResult = {
     total: 0,
     inserted: 0,
+    updated: 0,
     skipped: 0,
     failed: 0,
     errors: [],
@@ -41,69 +43,93 @@ export async function processElectronicInvoiceFile(
   try {
     // 1. Download file
     const { data: fileData, error: downloadError } = await supabase.storage
-      .from('electronic-invoices')
+      .from("electronic-invoices")
       .download(storagePath);
 
     if (downloadError || !fileData) {
-      throw new Error(`Failed to download file: ${downloadError?.message || 'No data'}`);
+      throw new Error(
+        `Failed to download file: ${downloadError?.message || "No data"}`
+      );
     }
 
     const buffer = Buffer.from(await fileData.arrayBuffer());
-    const { data: { user } } = await supabase.auth.getUser();
-    
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
     if (!user) throw new Error("Unauthorized");
 
-    let invoicesToInsert: TablesInsert<'invoices'>[] = [];
+    let invoicesToInsert: TablesInsert<"invoices">[] = [];
 
     // Check file extension
-    const isExcel = filename.toLowerCase().endsWith('.xlsx') || filename.toLowerCase().endsWith('.xls');
+    const isExcel =
+      filename.toLowerCase().endsWith(".xlsx") ||
+      filename.toLowerCase().endsWith(".xls");
 
     if (isExcel) {
-      invoicesToInsert = await processExcelFile(buffer, clientId, firmId, storagePath, filename, user.id, result);
+      invoicesToInsert = await processExcelFile(
+        buffer,
+        clientId,
+        firmId,
+        storagePath,
+        filename,
+        user.id,
+        result
+      );
     } else {
       // Assume TXT
-      invoicesToInsert = await processTxtFile(buffer, clientId, firmId, storagePath, filename, user.id, result);
-    }
-    
-    // Batch insert with duplicate check
-    const uniqueInvoices = [];
-    
-    for (const inv of invoicesToInsert) {
-      const extracted = inv.extracted_data as { invoiceSerialCode?: string }; // Cast for access
-      if (!extracted || !extracted.invoiceSerialCode) {
-        uniqueInvoices.push(inv);
-        continue;
-      }
-
-      // Check against DB
-      const { data: existing } = await supabase
-        .from('invoices')
-        .select('id')
-        .eq('firm_id', firmId)
-        .eq('client_id', clientId)
-        .contains('extracted_data', { invoiceSerialCode: extracted.invoiceSerialCode })
-        .limit(1)
-        .maybeSingle();
-
-      if (!existing) {
-        uniqueInvoices.push(inv);
-      } else {
-        result.skipped++;
-      }
+      invoicesToInsert = await processTxtFile(
+        buffer,
+        clientId,
+        firmId,
+        storagePath,
+        filename,
+        user.id,
+        result
+      );
     }
 
-    if (uniqueInvoices.length > 0) {
-      const { error: insertError } = await supabase
-        .from('invoices')
-        .insert(uniqueInvoices);
-        
+    // Batch upsert with ON CONFLICT (override duplicates)
+    if (invoicesToInsert.length > 0) {
+      const serialCodes = Array.from(
+        new Set(
+          invoicesToInsert
+            .map((invoice) => invoice.invoice_serial_code)
+            .filter((code): code is string => Boolean(code && code.trim()))
+        )
+      );
+
+      let existingCount = 0;
+      if (serialCodes.length > 0) {
+        const { data: existingInvoices, error: existingError } = await supabase
+          .from("invoices")
+          .select("invoice_serial_code")
+          .eq("client_id", clientId)
+          .in("invoice_serial_code", serialCodes);
+
+        if (existingError) {
+          throw existingError;
+        }
+
+        existingCount = existingInvoices?.length || 0;
+      }
+
+      const { data: insertedData, error: insertError } = await supabase
+        .from("invoices")
+        .upsert(invoicesToInsert, {
+          onConflict: "client_id, invoice_serial_code",
+        })
+        .select("id"); // We need to select to know how many were inserted
+
       if (insertError) {
         throw insertError;
       }
-      
-      result.inserted = uniqueInvoices.length;
-    }
 
+      const upsertedCount = insertedData?.length || 0;
+      result.updated = Math.min(existingCount, upsertedCount);
+      result.inserted = Math.max(upsertedCount - existingCount, 0);
+      result.skipped = 0;
+    }
   } catch (error) {
     console.error("Import error:", error);
     throw error;
@@ -259,6 +285,7 @@ function parseTxtRow(
     extracted_data: extractedData as unknown as Json,
     year_month: period.toString(),
     uploaded_by: userId,
+    invoice_serial_code: fullInvoiceNumber,
   };
 }
 
@@ -430,6 +457,7 @@ async function processExcelFile(
             extracted_data: extractedData as unknown as Json,
             year_month: rocPeriod.toString(),
             uploaded_by: userId,
+            invoice_serial_code: invoiceNo,
         });
     } catch (e) {
         result.failed++;

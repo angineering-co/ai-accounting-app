@@ -64,6 +64,7 @@ export const invoiceSchema = z.object({
   in_or_out: z.enum(['in', 'out']),
   status: z.enum(['uploaded', 'processing', 'processed', 'confirmed', 'failed']),
   extracted_data: extractedInvoiceDataSchema.nullable().optional(),
+  invoice_serial_code: z.string().nullable().optional(),
   year_month: z.string().length(5, "所屬年月格式錯誤 (YYYMM)").nullable().optional(),
   uploaded_by: z.string().uuid(),
   created_at: z.coerce.date(),
@@ -84,6 +85,7 @@ export const updateInvoiceSchema = z.object({
   year_month: z.string().length(5, "所屬年月格式錯誤 (YYYMM)").optional(),
   status: z.enum(['uploaded', 'processing', 'processed', 'confirmed', 'failed']).optional(),
   extracted_data: extractedInvoiceDataSchema.nullable().optional(),
+  invoice_serial_code: z.string().nullable().optional(),
 });
 
 export type Invoice = z.infer<typeof invoiceSchema>;

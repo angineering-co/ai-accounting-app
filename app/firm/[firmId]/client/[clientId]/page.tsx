@@ -211,8 +211,10 @@ export default function ClientDetailPage({
         file.name
       );
       
-      if (result.inserted > 0 || result.skipped > 0) {
-        toast.success(`成功匯入 ${result.inserted} 筆發票 (略過 ${result.skipped} 筆重複)`);
+      if (result.inserted > 0 || result.updated > 0) {
+        toast.success(
+          `成功匯入 ${result.inserted + result.updated} 筆發票 (新增 ${result.inserted} 筆，更新 ${result.updated} 筆)`
+        );
         setIsImportModalOpen(false);
         setImportFiles([]);
         setImportUploadedFiles([]);

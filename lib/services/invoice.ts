@@ -10,6 +10,7 @@ import {
 } from "@/lib/domain/models";
 import { extractInvoiceData, type ClientInfo } from "@/lib/services/gemini";
 import { getAccountListString } from "@/lib/services/account";
+import { type Json, type TablesUpdate } from "@/supabase/database.types";
 
 export async function createInvoice(data: CreateInvoiceInput) {
   const supabase = await createClient();
@@ -41,15 +42,27 @@ export async function updateInvoice(invoiceId: string, data: UpdateInvoiceInput)
   
   const validated = updateInvoiceSchema.parse(data);
 
+  const { extracted_data: extractedData, ...rest } = validated;
+
+  // Prepare update payload
+  const updatePayload: TablesUpdate<"invoices"> = {
+    ...rest,
+  };
+
+  if (extractedData !== undefined && extractedData !== null) {
+    updatePayload.extracted_data = JSON.parse(
+      JSON.stringify(extractedData)
+    ) as Json;
+  }
+
+  // If extracted_data is provided, sync invoice_serial_code
+  if (extractedData?.invoiceSerialCode) {
+    updatePayload.invoice_serial_code = extractedData.invoiceSerialCode;
+  }
+
   const { data: invoice, error } = await supabase
     .from('invoices')
-    .update({
-      ...validated,
-      // Ensure extracted_data is JSON serializable if present
-      ...(validated.extracted_data !== undefined && validated.extracted_data !== null
-        ? { extracted_data: JSON.parse(JSON.stringify(validated.extracted_data)) }
-        : {}),
-    })
+    .update(updatePayload)
     .eq('id', invoiceId)
     .select()
     .single();
@@ -168,66 +181,68 @@ export async function extractInvoiceDataAction(invoiceId: string) {
   try {
     // Download invoice file from Supabase Storage
     const { data: fileData, error: downloadError } = await supabase.storage
-      .from('invoices')
+      .from("invoices")
       .download(invoice.storage_path);
 
     if (downloadError) {
-      throw new Error(`Failed to download invoice file: ${downloadError.message}`);
+      throw new Error(
+        `Failed to download invoice file: ${downloadError.message}`
+      );
     }
 
     if (!fileData) {
-      throw new Error('Invoice file not found in storage');
+      throw new Error("Invoice file not found in storage");
     }
 
     // Convert Blob to ArrayBuffer
     const arrayBuffer = await fileData.arrayBuffer();
-    
+
     // Get MIME type - prefer Blob's type, fallback to extension-based detection
     const getMimeType = (blob: Blob, filename: string): string => {
       // First, try to use the Blob's content-type if available and valid
-      if (blob.type && blob.type !== 'application/octet-stream') {
+      if (blob.type && blob.type !== "application/octet-stream") {
         // Validate it's a supported type
         const supportedTypes = [
-          'application/pdf',
-          'image/png',
-          'image/jpeg',
-          'image/gif',
-          'image/webp',
+          "application/pdf",
+          "image/png",
+          "image/jpeg",
+          "image/gif",
+          "image/webp",
         ];
         if (supportedTypes.includes(blob.type)) {
           return blob.type;
         }
       }
-      
+
       // Fallback to extension-based detection
-      const ext = filename.split('.').pop()?.toLowerCase();
+      const ext = filename.split(".").pop()?.toLowerCase();
       const mimeTypes: Record<string, string> = {
-        'pdf': 'application/pdf',
-        'png': 'image/png',
-        'jpg': 'image/jpeg',
-        'jpeg': 'image/jpeg',
-        'gif': 'image/gif',
-        'webp': 'image/webp',
+        pdf: "application/pdf",
+        png: "image/png",
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        gif: "image/gif",
+        webp: "image/webp",
       };
-      
+
       // Special handling for HEIC/HEIF - not supported by Gemini
-      if (ext === 'heic' || ext === 'heif') {
+      if (ext === "heic" || ext === "heif") {
         throw new Error(
           `HEIC/HEIF format is not supported by Gemini API. ` +
-          `Please convert your image to JPEG or PNG format before uploading. ` +
-          `You can use online converters or image editing software to convert the file.`
+            `Please convert your image to JPEG or PNG format before uploading. ` +
+            `You can use online converters or image editing software to convert the file.`
         );
       }
-      
-      const detectedType = mimeTypes[ext || ''];
+
+      const detectedType = mimeTypes[ext || ""];
       if (!detectedType) {
         throw new Error(
-          `Unsupported file format: ${ext || 'unknown'}. ` +
-          `Supported formats: PDF, PNG, JPEG, GIF, WEBP. ` +
-          `For HEIC files, please convert to JPEG or PNG first.`
+          `Unsupported file format: ${ext || "unknown"}. ` +
+            `Supported formats: PDF, PNG, JPEG, GIF, WEBP. ` +
+            `For HEIC files, please convert to JPEG or PNG first.`
         );
       }
-      
+
       return detectedType;
     };
 
@@ -237,22 +252,21 @@ export async function extractInvoiceDataAction(invoiceId: string) {
     const clientInfo: ClientInfo = client
       ? {
           name: client.name,
-          taxId: client.tax_id || '',
-          industry: client.industry || '',
+          taxId: client.tax_id || "",
+          industry: client.industry || "",
         }
       : {
-          name: '',
-          taxId: '',
-          industry: '',
+          name: "",
+          taxId: "",
+          industry: "",
         };
 
     // Convert in_or_out to Chinese format
-    const inOrOut = invoice.in_or_out === 'in' ? '進項' : '銷項';
+    const inOrOut = invoice.in_or_out === "in" ? "進項" : "銷項";
 
     // Get account list if it's an "進項" invoice
-    const accountListString = invoice.in_or_out === 'in' 
-      ? getAccountListString() 
-      : '';
+    const accountListString =
+      invoice.in_or_out === "in" ? getAccountListString() : "";
 
     // Call Gemini service to extract data
     const extractedData = await extractInvoiceData(
@@ -269,16 +283,46 @@ export async function extractInvoiceDataAction(invoiceId: string) {
     // Update invoice with extracted data and set status to processed
     // Convert to plain object for Supabase JSONB column
     const extractedDataJson = JSON.parse(JSON.stringify(validatedData));
-    
-    const { error: finalUpdateError } = await supabase
-      .from('invoices')
-      .update({
-        extracted_data: extractedDataJson,
-        status: 'processed',
-      })
-      .eq('id', invoiceId);
 
-    if (finalUpdateError) throw finalUpdateError;
+    // Attempt update with invoice_serial_code (if present)
+    const updatePayload: TablesUpdate<"invoices"> = {
+      extracted_data: extractedDataJson as Json,
+      status: "processed",
+      invoice_serial_code: validatedData.invoiceSerialCode || null,
+    };
+
+    const { error: finalUpdateError } = await supabase
+      .from("invoices")
+      .update(updatePayload)
+      .eq("id", invoiceId);
+
+    if (finalUpdateError) {
+      // Check for unique constraint violation (code 23505 in Postgres)
+      if (finalUpdateError.code === "23505") {
+        console.warn(
+          "Duplicate invoice serial code detected during extraction:",
+          validatedData.invoiceSerialCode
+        );
+
+        // Retry update WITHOUT invoice_serial_code
+        // User will see the extracted number in the UI form but the DB column will remain null (or previous value)
+        // When they try to save/confirm, they will get the error again and have to fix it.
+        const retryPayload: TablesUpdate<"invoices"> = {
+          extracted_data: extractedDataJson as Json,
+          status: "processed", // Still mark as processed so user can see it
+          // invoice_serial_code is deliberately OMITTED here
+        };
+
+        const { error: retryError } = await supabase
+          .from("invoices")
+          .update(retryPayload)
+          .eq("id", invoiceId);
+
+        if (retryError) throw retryError;
+      } else {
+        throw finalUpdateError;
+      }
+    }
 
     return validatedData;
   } catch (error) {
@@ -296,4 +340,3 @@ export async function extractInvoiceDataAction(invoiceId: string) {
     throw new Error(`Failed to extract invoice data: ${errorMessage}`);
   }
 }
-

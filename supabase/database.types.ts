@@ -143,6 +143,7 @@ export type Database = {
           firm_id: string
           id: string
           in_or_out: string
+          invoice_serial_code: string | null
           status: string | null
           storage_path: string
           uploaded_by: string
@@ -156,6 +157,7 @@ export type Database = {
           firm_id: string
           id?: string
           in_or_out: string
+          invoice_serial_code?: string | null
           status?: string | null
           storage_path: string
           uploaded_by: string
@@ -169,6 +171,7 @@ export type Database = {
           firm_id?: string
           id?: string
           in_or_out?: string
+          invoice_serial_code?: string | null
           status?: string | null
           storage_path?: string
           uploaded_by?: string

@@ -2,7 +2,8 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { type ExtractedInvoiceData } from "@/lib/domain/models";
-import { type TablesInsert, type Json } from "@/supabase/database.types";
+import { type Database, type TablesInsert, type Json } from "@/supabase/database.types";
+import { type SupabaseClient } from "@supabase/supabase-js";
 import iconv from "iconv-lite";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { toGregorianDate } from "@/lib/utils";
@@ -24,13 +25,19 @@ interface ImportResult {
   errors: string[];
 }
 
+interface ProcessElectronicInvoiceOptions {
+  supabaseClient?: SupabaseClient<Database>;
+  userId?: string;
+}
+
 export async function processElectronicInvoiceFile(
   clientId: string,
   firmId: string,
   storagePath: string,
-  filename: string
+  filename: string,
+  options?: ProcessElectronicInvoiceOptions
 ): Promise<ImportResult> {
-  const supabase = await createClient();
+  const supabase = options?.supabaseClient ?? await createClient();
   const result: ImportResult = {
     total: 0,
     inserted: 0,
@@ -53,11 +60,15 @@ export async function processElectronicInvoiceFile(
     }
 
     const buffer = Buffer.from(await fileData.arrayBuffer());
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    let userId = options?.userId;
+    if (!userId) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    if (!user) throw new Error("Unauthorized");
+      if (!user) throw new Error("Unauthorized");
+      userId = user.id;
+    }
 
     let invoicesToInsert: TablesInsert<"invoices">[] = [];
 
@@ -73,7 +84,7 @@ export async function processElectronicInvoiceFile(
         firmId,
         storagePath,
         filename,
-        user.id,
+        userId,
         result
       );
     } else {
@@ -84,7 +95,7 @@ export async function processElectronicInvoiceFile(
         firmId,
         storagePath,
         filename,
-        user.id,
+        userId,
         result
       );
     }

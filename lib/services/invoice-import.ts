@@ -390,8 +390,6 @@ async function processExcelFile(
         const invoiceNo = getString(row, '發票號碼');
         if (!invoiceNo) continue;
         
-        const status = getString(row, '發票狀態');
-        
         let dateObj: Date;
         const dateVal = getRowValue(row, '發票日期');
         
@@ -423,10 +421,18 @@ async function processExcelFile(
         
         const taxTypeRaw = getString(row, '課稅別');
         let taxType = '應稅';
-        if (taxTypeRaw === '應稅' || taxTypeRaw === '1') taxType = '應稅';
-        else if (taxTypeRaw === '零稅率' || taxTypeRaw === '2') taxType = '零稅率';
-        else if (taxTypeRaw === '免稅' || taxTypeRaw === '3') taxType = '免稅';
-        else if (status.includes('作廢') || taxTypeRaw === '作廢' || taxTypeRaw === 'F') taxType = '作廢';
+        if (taxTypeRaw.includes("應稅")) {
+          taxType = "應稅";
+        } else if (taxTypeRaw.includes("零稅率")) {
+          taxType = "零稅率";
+        } else if (taxTypeRaw.includes("免稅")) {
+          taxType = "免稅";
+        }
+
+        const status = getString(row, "發票狀態");
+        if (status.includes("作廢")) {
+          taxType = "作廢";
+        }
 
         const invoiceType = getInvoiceTypeFromCode(formatCode);
         
@@ -444,8 +450,8 @@ async function processExcelFile(
             date: dateStr,
             sellerTaxId,
             sellerName,
-            buyerTaxId,
-            buyerName,
+            buyerTaxId: buyerTaxId === "0000000000" ? undefined : buyerTaxId,
+            buyerName: buyerName === "0000000000" ? undefined : buyerName,
             totalSales: salesAmount,
             tax: taxAmount,
             totalAmount: totalAmount,
@@ -454,7 +460,7 @@ async function processExcelFile(
             inOrOut: inOrOut === 'in' ? '進項' : '銷項',
             deductible: true,
             source: 'import-excel',
-            summary: items.map(item => `品名：${item.description} 數量：${item.quantity} 單位：${item.unit} 單價：${item.unitPrice} 金額：${item.amount}`).join('\n'),
+            summary: items.map(item => `品名：${item.description}, 數量：${item.quantity}, 金額：${item.amount}`).join('\n'),
             account: inOrOut === 'out' ? '4101 營業收入' : undefined,
         };
         

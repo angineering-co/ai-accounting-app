@@ -115,11 +115,13 @@ function padString(str: string, length: number): string {
 }
 
 function sortBySerialCodeNum(a: ExtractedInvoiceData, b: ExtractedInvoiceData) {
-  // remove prefix and compare numbers
-  const aNum = parseInt(a.invoiceSerialCode?.substring(2) || '0', 10);
-  const bNum = parseInt(b.invoiceSerialCode?.substring(2) || '0', 10);
-  return aNum - bNum;
-} 
+  // Compare the whole serial number alphanumerically including the prefix
+  const aCode = a.invoiceSerialCode || '';
+  const bCode = b.invoiceSerialCode || '';
+  if (aCode < bCode) return -1;
+  if (aCode > bCode) return 1;
+  return 0;
+}
 
 /**
  * .TXT Report Generation (81-byte format)
@@ -176,9 +178,10 @@ export async function generateTxtReport(clientId: string, serializedReportPeriod
   // Split into input and output
   const inputInvoices = invoices
     .filter((i) => i.inOrOut === "進項")
+    .filter((i) => i.deductible === true) // Only deductible input invoices are included
     .sort(sortBySerialCodeNum);
   const outputInvoices = invoices
-    .filter((i) => i.inOrOut === "銷項")
+    .filter((i) => i.inOrOut === "銷項") // All output invoices are included regardless of deductible
     .sort(sortBySerialCodeNum);
 
   // Sort input invoices

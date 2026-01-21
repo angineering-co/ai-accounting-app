@@ -35,6 +35,7 @@ import {
   type ExtractedInvoiceData,
   type Invoice,
 } from "@/lib/domain/models";
+import { ACCOUNTS } from "@/lib/data/accounts";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { updateInvoice } from "@/lib/services/invoice";
 import { toast } from "sonner";
@@ -886,15 +887,26 @@ export function InvoiceReviewDialog({
                     <FormItem>
                       <FormLabel>會計科目</FormLabel>
                       <FormControl>
-                        <Input
-                          {...field}
-                          placeholder="例如: 5102 旅費"
-                          className={getConfidenceStyle("account")}
-                          onChange={(e) => {
-                            field.onChange(e);
+                        <Select
+                          value={field.value}
+                          onValueChange={(value) => {
+                            field.onChange(value);
                             clearConfidence("account");
                           }}
-                        />
+                        >
+                          <SelectTrigger
+                            className={getConfidenceStyle("account")}
+                          >
+                            <SelectValue placeholder="選擇會計科目" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-[200px]">
+                            {ACCOUNTS.map((account) => (
+                              <SelectItem key={account} value={account}>
+                                {account}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </FormControl>
                       <FormMessage />
                     </FormItem>

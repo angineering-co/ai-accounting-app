@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ACCOUNTS } from "@/lib/data/accounts";
 
 // ===== Client Schemas =====
 export const clientSchema = z.object({
@@ -48,7 +49,7 @@ export const extractedInvoiceDataSchema = z.object({
   totalAmount: z.number().optional(), // 總計
   summary: z.string().optional(), // 摘要
   deductible: z.boolean().optional(), // 是否可扣抵
-  account: z.string().optional(), // 會計科目 (e.g., "5102 旅費")
+  account: z.enum(ACCOUNTS as unknown as [string, ...string[]]).optional(), // 會計科目 (e.g., "5102 旅費")
   taxType: z.enum(['應稅', '零稅率', '免稅', '作廢', '彙加']).optional(), // 課稅別
   invoiceType: z.enum(['手開二聯式', '手開三聯式', '電子發票', '二聯式收銀機', '三聯式收銀機']).optional(), // 發票類型
   inOrOut: z.enum(['進項', '銷項']).optional(), // 進銷項

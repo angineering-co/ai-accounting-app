@@ -204,6 +204,13 @@ export async function extractInvoiceData(
     // Parse the JSON response
     const extractedData = JSON.parse(contentText) as ExtractedInvoiceData;
 
+    // Normalize account string (handle full-width dash/colon)
+    if (extractedData.account) {
+      extractedData.account = extractedData.account
+        .replace(/－/g, "-")
+        .replace(/：/g, ":");
+    }
+
     return extractedData;
   } catch (error) {
     if (error instanceof SyntaxError) {

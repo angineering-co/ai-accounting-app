@@ -53,6 +53,7 @@ export const extractedInvoiceDataSchema = z.object({
   invoiceType: z.enum(['手開二聯式', '手開三聯式', '電子發票', '二聯式收銀機', '三聯式收銀機']).optional(), // 發票類型
   inOrOut: z.enum(['進項', '銷項']).optional(), // 進銷項
   confidence: z.record(z.string(), z.enum(['low', 'medium', 'high'])).optional(), // Confidence levels for extracted fields
+  source: z.enum(['import-excel', 'import-txt']).optional(), // Source of the invoice data
 }).passthrough(); // Allow additional fields from AI extraction
 
 export const invoiceSchema = z.object({

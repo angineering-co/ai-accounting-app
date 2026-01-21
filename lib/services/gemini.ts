@@ -48,6 +48,88 @@ const SUPPORTED_MIME_TYPES = [
 ];
 
 /**
+ * Determine account (會計科目) for an electronic invoice based on summary and client industry
+ * @param summary - Invoice summary
+ * @param clientInfo - Client information (name, taxId, industry)
+ * @param accountListString - Account list string for "進項" invoices
+ * @returns Determined account name
+ */
+export async function determineAccountForInputElectronicInvoice(
+  summary: string,
+  clientInfo: ClientInfo,
+  accountListString: string
+): Promise<string> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY environment variable is not set");
+  }
+
+  const prompt = `You are an expert accounting assistant in Taiwan. Your task is to determine the most appropriate accounting account (會計科目) for an electronic invoice.
+
+    Context:
+    - **Client Industry**: "${clientInfo.industry}" (This is the industry of the buyer)
+    - **Invoice Summary**: "${summary}" (This is what was purchased)
+
+    Account List:
+    ${accountListString}
+
+    Rules:
+    1. Select the most appropriate code from the **Account List** based on the summary and the client's industry.
+    2. Return ONLY the "Code Name" (e.g., "5102 旅費").
+    3. If you are unsure, pick the most generic but relevant one.
+    4. Return ONLY the string of the account. No other text or explanation.`;
+
+  const payload: GeminiRequest = {
+    contents: [
+      {
+        parts: [
+          {
+            text: prompt,
+          },
+        ],
+      },
+    ],
+    generationConfig: {
+      response_mime_type: "text/plain",
+    },
+  };
+
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Gemini API Error (${response.status}): ${errorText}`);
+    }
+
+    const jsonResponse: GeminiResponse = await response.json();
+
+    if (!jsonResponse.candidates || jsonResponse.candidates.length === 0) {
+      throw new Error("No candidates in Gemini response");
+    }
+
+    const contentText = jsonResponse.candidates[0].content.parts[0].text;
+
+    if (!contentText) {
+      throw new Error("No text content in Gemini response");
+    }
+
+    return contentText.trim();
+  } catch (error) {
+    console.error("Error determining account for electronic invoice:", error);
+    throw new Error("Failed to determine account from Gemini API");
+  }
+}
+
+/**
  * Extract invoice data using Gemini API
  * @param fileData - Invoice file as ArrayBuffer
  * @param mimeType - MIME type of the file (e.g., 'image/png', 'application/pdf')

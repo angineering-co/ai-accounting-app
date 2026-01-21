@@ -103,6 +103,7 @@ export function InvoiceTable({
           <TableRow>
             <TableHead>檔案名稱</TableHead>
             {showClientColumn && <TableHead>客戶</TableHead>}
+            <TableHead>發票字軌</TableHead>
             <TableHead>所屬期別</TableHead>
             <TableHead>類型</TableHead>
             <TableHead>狀態</TableHead>
@@ -155,6 +156,9 @@ export function InvoiceTable({
                     )}
                   </TableCell>
                 )}
+                <TableCell className="font-mono tabular-nums">
+                  {invoice.invoice_serial_code}
+                </TableCell>
                 <TableCell>
                   {invoice.year_month ? (
                     <span className="text-sm">

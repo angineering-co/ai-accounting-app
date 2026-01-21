@@ -602,11 +602,13 @@ function aggregateInvoiceData(invoices: ExtractedInvoiceData[]) {
   
   // Count invoices (only output invoices, excluding voided)
   result.invoiceCount = invoices.filter(inv => inv.inOrOut === '銷項' && inv.taxType !== '作廢').length;
-  
+ 
+  let totalSalesWithoutBuyerTaxId = 0;
+
   // Process output (銷項) invoices
   const outputInvoices = invoices.filter(inv => inv.inOrOut === '銷項');
   outputInvoices.forEach(inv => {
-    const isReturn = inv.summary && (inv.summary.includes('退回') || inv.summary.includes('折讓'));
+    const isReturn = false; // TODO: 退回及折讓要再彙總計算
     const sales = Math.round(inv.totalSales || 0);
     const tax = Math.round(inv.tax || 0);
     
@@ -618,6 +620,11 @@ function aggregateInvoiceData(invoices: ExtractedInvoiceData[]) {
         result.output.returnsAndAllowances.sales += sales;
         result.output.returnsAndAllowances.tax += tax;
       } else {
+        // B2C 二聯發票 (無買受人統一編號) 稅額要再彙總計算
+        if (!inv.buyerTaxId) {
+          totalSalesWithoutBuyerTaxId += sales;
+        }
+
         // Categorize by invoice type
         if (invoiceType.includes('手開三聯式') || (invoiceType.includes('三聯式') && !invoiceType.includes('收銀機'))) {
           result.output.triplicate.sales += sales;
@@ -658,7 +665,13 @@ function aggregateInvoiceData(invoices: ExtractedInvoiceData[]) {
       result.output.fixedAssetSales += sales;
     }
   });
-  
+ 
+  // 銷項統一發票之買受人為非營業人者，其發票所載金額應含營業稅額，於填寫申報書時，再彙總依下列公 式計算應申報之銷售額與稅額。 
+  // 銷項稅額 = 當期開立統一發票總額 ÷（１+ 徵收率）× 徵收率（四捨五入）
+  const totalTaxWithoutBuyerId = Math.round(totalSalesWithoutBuyerTaxId / 1.05 * 0.05);
+  result.output.cashRegisterAndElectronic.sales -= totalTaxWithoutBuyerId;
+  result.output.cashRegisterAndElectronic.tax += totalTaxWithoutBuyerId;
+
   // Calculate totals for output
   result.output.totalSales = result.output.triplicate.sales + 
                              result.output.cashRegisterAndElectronic.sales + 
@@ -675,9 +688,10 @@ function aggregateInvoiceData(invoices: ExtractedInvoiceData[]) {
                                 result.output.zeroTax.returnsAndAllowances;
   
   // Process input (進項) invoices
-  const inputInvoices = invoices.filter(inv => inv.inOrOut === '進項');
+  // Only deductible input invoices are included
+  const inputInvoices = invoices.filter(inv => inv.inOrOut === '進項').filter(inv => inv.deductible);
   inputInvoices.forEach(inv => {
-    const isReturn = inv.summary && (inv.summary.includes('退出') || inv.summary.includes('折讓'));
+    const isReturn = false; // TODO: 退回及折讓要再彙總計算
     const isFixedAsset = inv.summary && (inv.summary.includes('固定資產') || inv.summary.includes('設備'))
     const sales = Math.round(inv.totalSales || 0);
     const tax = Math.round(inv.tax || 0);

@@ -450,8 +450,8 @@ async function processExcelFile(
             date: dateStr,
             sellerTaxId,
             sellerName,
-            buyerTaxId: buyerTaxId === "0000000000" ? undefined : buyerTaxId,
-            buyerName: buyerName === "0000000000" ? undefined : buyerName,
+            buyerTaxId: buyerTaxId === "0000000000" ? undefined : buyerTaxId, // B2C：賣方填入統一編號，買方填入 10 個"0"
+            buyerName: buyerName,
             totalSales: salesAmount,
             tax: taxAmount,
             totalAmount: totalAmount,

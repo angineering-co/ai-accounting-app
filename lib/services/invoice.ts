@@ -8,9 +8,64 @@ import {
   type UpdateInvoiceInput,
   extractedInvoiceDataSchema,
 } from "@/lib/domain/models";
-import { extractInvoiceData, type ClientInfo } from "@/lib/services/gemini";
+import {
+  extractInvoiceData,
+  determineAccountForInputElectronicInvoice,
+  type ClientInfo,
+} from "@/lib/services/gemini";
 import { getAccountListString } from "@/lib/services/account";
 import { type Json, type TablesUpdate } from "@/supabase/database.types";
+import { type ExtractedInvoiceData } from "@/lib/domain/models";
+
+async function saveExtractedInvoiceData(
+  invoiceId: string,
+  validatedData: ExtractedInvoiceData
+) {
+  const supabase = await createClient();
+
+  // Update invoice with extracted data and set status to processed
+  // Convert to plain object for Supabase JSONB column
+  const extractedDataJson = JSON.parse(JSON.stringify(validatedData));
+
+  // Attempt update with invoice_serial_code (if present)
+  const updatePayload: TablesUpdate<"invoices"> = {
+    extracted_data: extractedDataJson as Json,
+    status: "processed",
+    invoice_serial_code: validatedData.invoiceSerialCode || null,
+  };
+
+  const { error: finalUpdateError } = await supabase
+    .from("invoices")
+    .update(updatePayload)
+    .eq("id", invoiceId);
+
+  if (finalUpdateError) {
+    // Check for unique constraint violation (code 23505 in Postgres)
+    if (finalUpdateError.code === "23505") {
+      console.warn(
+        "Duplicate invoice serial code detected during extraction:",
+        validatedData.invoiceSerialCode
+      );
+
+      // Retry update WITHOUT invoice_serial_code
+      const retryPayload: TablesUpdate<"invoices"> = {
+        extracted_data: extractedDataJson as Json,
+        status: "processed",
+      };
+
+      const { error: retryError } = await supabase
+        .from("invoices")
+        .update(retryPayload)
+        .eq("id", invoiceId);
+
+      if (retryError) throw retryError;
+    } else {
+      throw finalUpdateError;
+    }
+  }
+
+  return validatedData;
+}
 
 export async function createInvoice(data: CreateInvoiceInput) {
   const supabase = await createClient();
@@ -141,30 +196,32 @@ export async function getInvoicesByClient(clientId: string) {
  */
 export async function extractInvoiceDataAction(invoiceId: string) {
   const supabase = await createClient();
-  
+
   // Get current user
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Unauthorized');
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
 
   // Fetch invoice record
   const { data: invoice, error: fetchError } = await supabase
-    .from('invoices')
-    .select('*')
-    .eq('id', invoiceId)
+    .from("invoices")
+    .select("*")
+    .eq("id", invoiceId)
     .single();
 
   if (fetchError) throw fetchError;
-  if (!invoice) throw new Error('Invoice not found');
+  if (!invoice) throw new Error("Invoice not found");
 
   // Fetch client data if client_id exists
   let client = null;
   if (invoice.client_id) {
     const { data: clientData, error: clientError } = await supabase
-      .from('clients')
-      .select('id, name, tax_id, industry')
-      .eq('id', invoice.client_id)
+      .from("clients")
+      .select("id, name, tax_id, industry")
+      .eq("id", invoice.client_id)
       .single();
-    
+
     if (!clientError && clientData) {
       client = clientData;
     }
@@ -172,13 +229,65 @@ export async function extractInvoiceDataAction(invoiceId: string) {
 
   // Update status to processing
   const { error: updateError } = await supabase
-    .from('invoices')
-    .update({ status: 'processing' })
-    .eq('id', invoiceId);
+    .from("invoices")
+    .update({ status: "processing" })
+    .eq("id", invoiceId);
 
   if (updateError) throw updateError;
 
+  // Prepare client info
+  const clientInfo: ClientInfo = client
+    ? {
+      name: client.name,
+      taxId: client.tax_id || "",
+      industry: client.industry || "",
+    }
+    : {
+      name: "",
+      taxId: "",
+      industry: "",
+    };
+
+  // Get account list if it's an "進項" invoice
+  const accountListString =
+    invoice.in_or_out === "in" ? getAccountListString() : "";
+
   try {
+    // Check if it's an electronic invoice from import
+    if (invoice.extracted_data) {
+      const extractedData = extractedInvoiceDataSchema.parse(
+        invoice.extracted_data
+      );
+      if (
+        extractedData.invoiceType === "電子發票" &&
+        (extractedData.source === "import-txt" ||
+          extractedData.source === "import-excel")
+      ) {
+        // For output electronic invoices, set account to "4101 營業收入"
+        if (extractedData.inOrOut === "銷項") {
+          const updatedData = {
+            ...extractedData,
+            account: "4101 營業收入",
+          };
+          return await saveExtractedInvoiceData(invoiceId, updatedData);
+        }
+
+        // Run AI to determine account for input electronic invoices based on summary and client industry
+        const determinedAccount = await determineAccountForInputElectronicInvoice(
+          extractedData.summary || "",
+          clientInfo,
+          accountListString
+        );
+
+        const updatedData = {
+          ...extractedData,
+          account: determinedAccount,
+        };
+
+        return await saveExtractedInvoiceData(invoiceId, updatedData);
+      }
+    }
+
     // Download invoice file from Supabase Storage
     const { data: fileData, error: downloadError } = await supabase.storage
       .from("invoices")
@@ -248,25 +357,8 @@ export async function extractInvoiceDataAction(invoiceId: string) {
 
     const mimeType = getMimeType(fileData, invoice.filename);
 
-    // Prepare client info
-    const clientInfo: ClientInfo = client
-      ? {
-          name: client.name,
-          taxId: client.tax_id || "",
-          industry: client.industry || "",
-        }
-      : {
-          name: "",
-          taxId: "",
-          industry: "",
-        };
-
     // Convert in_or_out to Chinese format
     const inOrOut = invoice.in_or_out === "in" ? "進項" : "銷項";
-
-    // Get account list if it's an "進項" invoice
-    const accountListString =
-      invoice.in_or_out === "in" ? getAccountListString() : "";
 
     // Call Gemini service to extract data
     const extractedData = await extractInvoiceData(
@@ -280,63 +372,20 @@ export async function extractInvoiceDataAction(invoiceId: string) {
     // Validate extracted data against schema
     const validatedData = extractedInvoiceDataSchema.parse(extractedData);
 
-    // Update invoice with extracted data and set status to processed
-    // Convert to plain object for Supabase JSONB column
-    const extractedDataJson = JSON.parse(JSON.stringify(validatedData));
-
-    // Attempt update with invoice_serial_code (if present)
-    const updatePayload: TablesUpdate<"invoices"> = {
-      extracted_data: extractedDataJson as Json,
-      status: "processed",
-      invoice_serial_code: validatedData.invoiceSerialCode || null,
-    };
-
-    const { error: finalUpdateError } = await supabase
-      .from("invoices")
-      .update(updatePayload)
-      .eq("id", invoiceId);
-
-    if (finalUpdateError) {
-      // Check for unique constraint violation (code 23505 in Postgres)
-      if (finalUpdateError.code === "23505") {
-        console.warn(
-          "Duplicate invoice serial code detected during extraction:",
-          validatedData.invoiceSerialCode
-        );
-
-        // Retry update WITHOUT invoice_serial_code
-        // User will see the extracted number in the UI form but the DB column will remain null (or previous value)
-        // When they try to save/confirm, they will get the error again and have to fix it.
-        const retryPayload: TablesUpdate<"invoices"> = {
-          extracted_data: extractedDataJson as Json,
-          status: "processed", // Still mark as processed so user can see it
-          // invoice_serial_code is deliberately OMITTED here
-        };
-
-        const { error: retryError } = await supabase
-          .from("invoices")
-          .update(retryPayload)
-          .eq("id", invoiceId);
-
-        if (retryError) throw retryError;
-      } else {
-        throw finalUpdateError;
-      }
-    }
-
-    return validatedData;
+    return await saveExtractedInvoiceData(invoiceId, validatedData);
   } catch (error) {
     // Update status to failed on error
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    
-    await supabase
-      .from('invoices')
-      .update({ 
-        status: 'failed',
-      })
-      .eq('id', invoiceId);
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error occurred";
 
-    console.error('Error extracting invoice data:', error);
+    await supabase
+      .from("invoices")
+      .update({
+        status: "failed",
+      })
+      .eq("id", invoiceId);
+
+    console.error("Error extracting invoice data:", error);
     throw new Error(`Failed to extract invoice data: ${errorMessage}`);
   }
 }

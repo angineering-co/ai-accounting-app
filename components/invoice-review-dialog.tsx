@@ -113,6 +113,10 @@ export function InvoiceReviewDialog({
   const totalSales = form.watch("totalSales");
   const tax = form.watch("tax");
   const totalAmount = form.watch("totalAmount");
+  const invoiceSerialCode = form.watch("invoiceSerialCode");
+  const sellerTaxId = form.watch("sellerTaxId");
+  const buyerTaxId = form.watch("buyerTaxId");
+  const account = form.watch("account");
 
   const isMathError = useMemo(() => {
     const s = Number(totalSales) || 0;
@@ -139,6 +143,28 @@ export function InvoiceReviewDialog({
       return false;
     }
   }, [invoice?.year_month, dateValue]);
+
+  const isConfirmDisabled = useMemo(() => {
+    return (
+      !invoiceSerialCode ||
+      !dateValue ||
+      !totalSales ||
+      !sellerTaxId ||
+      !buyerTaxId ||
+      !account ||
+      isMathError ||
+      isPeriodMismatch
+    );
+  }, [
+    invoiceSerialCode,
+    dateValue,
+    totalSales,
+    sellerTaxId,
+    buyerTaxId,
+    account,
+    isMathError,
+    isPeriodMismatch,
+  ]);
 
   const getConfidenceStyle = (fieldName: string) => {
     const confidence = form.getValues("confidence");
@@ -993,7 +1019,7 @@ export function InvoiceReviewDialog({
           </Button>
           <Button
             onClick={form.handleSubmit((data) => handleSave(data, "confirmed"))}
-            disabled={form.formState.isSubmitting}
+            disabled={form.formState.isSubmitting || isConfirmDisabled}
             className="flex-1"
           >
             {form.formState.isSubmitting ? (

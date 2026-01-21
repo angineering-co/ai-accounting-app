@@ -28,17 +28,20 @@ import {
   ZoomOut,
   RotateCw,
   Hand,
+  AlertCircle,
 } from "lucide-react";
 import {
   extractedInvoiceDataSchema,
   type ExtractedInvoiceData,
   type Invoice,
 } from "@/lib/domain/models";
+import { RocPeriod } from "@/lib/domain/roc-period";
 import { updateInvoice } from "@/lib/services/invoice";
 import { toast } from "sonner";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Image from "next/image";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectItem,
@@ -106,6 +109,36 @@ export function InvoiceReviewDialog({
       inOrOut: "進項",
     },
   });
+
+  const totalSales = form.watch("totalSales");
+  const tax = form.watch("tax");
+  const totalAmount = form.watch("totalAmount");
+
+  const isMathError = useMemo(() => {
+    const s = Number(totalSales) || 0;
+    const t = Number(tax) || 0;
+    const a = Number(totalAmount) || 0;
+    // Don't show error if all are zero
+    if (s === 0 && t === 0 && a === 0) return false;
+    return Math.abs(s + t - a) > 0.01;
+  }, [totalSales, tax, totalAmount]);
+
+  const dateValue = form.watch("date");
+
+  const isPeriodMismatch = useMemo(() => {
+    if (!invoice?.year_month || !dateValue) return false;
+    try {
+      const invoicePeriod = RocPeriod.fromYYYMM(invoice.year_month);
+      // Support YYYY/MM/DD or YYYY-MM-DD
+      const dateObj = new Date(dateValue.replace(/\//g, "-"));
+      if (isNaN(dateObj.getTime())) return false;
+
+      const datePeriod = RocPeriod.fromDate(dateObj);
+      return !invoicePeriod.equals(datePeriod);
+    } catch {
+      return false;
+    }
+  }, [invoice?.year_month, dateValue]);
 
   const getConfidenceStyle = (fieldName: string) => {
     const confidence = form.getValues("confidence");
@@ -587,13 +620,25 @@ export function InvoiceReviewDialog({
                       <Input
                         {...field}
                         placeholder="YYYY/MM/DD"
-                        className={getConfidenceStyle("date")}
+                        className={cn(
+                          getConfidenceStyle("date"),
+                          isPeriodMismatch && "ring-2 ring-orange-400 ring-offset-1"
+                        )}
                         onChange={(e) => {
                           field.onChange(e);
                           clearConfidence("date");
                         }}
                       />
                     </FormControl>
+                    {isPeriodMismatch && invoice?.year_month && (
+                      <div className="flex items-center gap-1.5 mt-2 text-xs font-medium text-orange-600 bg-orange-50 p-2 rounded border border-orange-200">
+                        <AlertCircle className="h-3.5 w-3.5" />
+                        <span>
+                          日期與期別不符 (期別:{" "}
+                          {RocPeriod.fromYYYMM(invoice.year_month).format()})
+                        </span>
+                      </div>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}
@@ -611,7 +656,10 @@ export function InvoiceReviewDialog({
                           {...field}
                           type="number"
                           value={field.value ?? ""}
-                          className={getConfidenceStyle("totalSales")}
+                          className={cn(
+                            getConfidenceStyle("totalSales"),
+                            isMathError && "ring-2 ring-orange-400 ring-offset-1"
+                          )}
                           onChange={(e) => {
                             field.onChange(
                               e.target.value
@@ -637,7 +685,10 @@ export function InvoiceReviewDialog({
                           {...field}
                           type="number"
                           value={field.value ?? ""}
-                          className={getConfidenceStyle("tax")}
+                          className={cn(
+                            getConfidenceStyle("tax"),
+                            isMathError && "ring-2 ring-orange-400 ring-offset-1"
+                          )}
                           onChange={(e) => {
                             field.onChange(
                               e.target.value
@@ -665,7 +716,10 @@ export function InvoiceReviewDialog({
                         {...field}
                         type="number"
                         value={field.value ?? ""}
-                        className={getConfidenceStyle("totalAmount")}
+                        className={cn(
+                          getConfidenceStyle("totalAmount"),
+                          isMathError && "ring-2 ring-orange-400 ring-offset-1"
+                        )}
                         onChange={(e) => {
                           field.onChange(
                             e.target.value
@@ -676,6 +730,15 @@ export function InvoiceReviewDialog({
                         }}
                       />
                     </FormControl>
+                    {isMathError && (
+                      <div className="flex items-center gap-1.5 mt-2 text-xs font-medium text-orange-600 bg-orange-50 p-2 rounded border border-orange-200">
+                        <AlertCircle className="h-3.5 w-3.5" />
+                        <span>
+                          銷售額 ({totalSales || 0}) + 稅額 ({tax || 0}) ≠ 總計 (
+                          {totalAmount || 0})
+                        </span>
+                      </div>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}

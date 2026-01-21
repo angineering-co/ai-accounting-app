@@ -1,42 +1,24 @@
-import { readFileSync } from "fs";
-import { join } from "path";
+import { ACCOUNTS } from "@/lib/data/accounts";
 
 export interface Account {
   code: string;
   name: string;
 }
 
-let cachedAccounts: Account[] | null = null;
-
 /**
- * Get account list from account-lookup.csv file
- * Caches the parsed data in memory to avoid re-reading the file on every request
+ * Get account list from static constant
  */
 export function getAccountList(): Account[] {
-  if (cachedAccounts) {
-    return cachedAccounts;
-  }
-
-  try {
-    const csvPath = join(process.cwd(), "data", "account-lookup.csv");
-    const csvContent = readFileSync(csvPath, "utf-8");
-    const lines = csvContent.split("\n").filter((line) => line.trim());
-
-    // Skip header row (科目編號,科目名稱)
-    const dataLines = lines.slice(1);
-
-    cachedAccounts = dataLines
-      .map((line) => {
-        const [code, name] = line.split(",").map((s) => s.trim());
-        return { code, name };
-      })
-      .filter((account) => account.code && account.name);
-
-    return cachedAccounts;
-  } catch (error) {
-    console.error("Error reading account-lookup.csv:", error);
-    throw new Error("Failed to load account list from data/account-lookup.csv");
-  }
+  return ACCOUNTS.map((accountStr) => {
+    // accountStr format is "CODE NAME", e.g. "1111 現金"
+    const spaceIndex = accountStr.indexOf(" ");
+    if (spaceIndex === -1) {
+      return { code: accountStr, name: "" };
+    }
+    const code = accountStr.substring(0, spaceIndex);
+    const name = accountStr.substring(spaceIndex + 1);
+    return { code, name };
+  });
 }
 
 /**
@@ -44,8 +26,5 @@ export function getAccountList(): Account[] {
  * Format: "5101 旅費", "5102 交際費", etc.
  */
 export function getAccountListString(): string {
-  const accounts = getAccountList();
-  return accounts
-    .map((account) => `${account.code} ${account.name}`)
-    .join("\n");
+  return ACCOUNTS.join("\n");
 }

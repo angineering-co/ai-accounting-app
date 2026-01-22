@@ -1,4 +1,4 @@
-import { ACCOUNTS } from "@/lib/data/accounts";
+import { ACCOUNTS, ACCOUNT_LIST } from "@/lib/data/accounts";
 
 export interface Account {
   code: string;
@@ -9,16 +9,12 @@ export interface Account {
  * Get account list from static constant
  */
 export function getAccountList(): Account[] {
-  return ACCOUNTS.map((accountStr) => {
-    // accountStr format is "CODE NAME", e.g. "1111 現金"
-    const spaceIndex = accountStr.indexOf(" ");
-    if (spaceIndex === -1) {
-      return { code: accountStr, name: "" };
-    }
-    const code = accountStr.substring(0, spaceIndex);
-    const name = accountStr.substring(spaceIndex + 1);
-    return { code, name };
-  });
+  return Object.entries(ACCOUNTS)
+    .sort(([codeA], [codeB]) => codeA.localeCompare(codeB))
+    .map(([code, { name }]) => ({
+      code,
+      name,
+    }));
 }
 
 /**
@@ -26,5 +22,5 @@ export function getAccountList(): Account[] {
  * Format: "5101 旅費", "5102 交際費", etc.
  */
 export function getAccountListString(): string {
-  return ACCOUNTS.join("\n");
+  return ACCOUNT_LIST.join("\n");
 }

@@ -267,7 +267,7 @@ export async function extractInvoiceDataAction(invoiceId: string) {
         if (extractedData.inOrOut === "銷項") {
           const updatedData = {
             ...extractedData,
-            account: "4101 營業收入",
+            account: "4101 營業收入" as ExtractedInvoiceData['account'],
           };
           return await saveExtractedInvoiceData(invoiceId, updatedData);
         }
@@ -281,7 +281,7 @@ export async function extractInvoiceDataAction(invoiceId: string) {
 
         const updatedData = {
           ...extractedData,
-          account: determinedAccount,
+          account: determinedAccount as ExtractedInvoiceData['account'],
         };
 
         return await saveExtractedInvoiceData(invoiceId, updatedData);

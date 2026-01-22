@@ -290,7 +290,7 @@ export async function extractInvoiceData(
     if (extractedData.account) {
       extractedData.account = extractedData.account
         .replace(/－/g, "-")
-        .replace(/：/g, ":");
+        .replace(/：/g, ":") as ExtractedInvoiceData['account'];
     }
 
     return extractedData;

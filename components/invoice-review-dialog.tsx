@@ -35,7 +35,7 @@ import {
   type ExtractedInvoiceData,
   type Invoice,
 } from "@/lib/domain/models";
-import { ACCOUNTS } from "@/lib/data/accounts";
+import { ACCOUNT_LIST } from "@/lib/data/accounts";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { updateInvoice } from "@/lib/services/invoice";
 import { toast } from "sonner";
@@ -900,7 +900,7 @@ export function InvoiceReviewDialog({
                             <SelectValue placeholder="選擇會計科目" />
                           </SelectTrigger>
                           <SelectContent className="max-h-[200px]">
-                            {ACCOUNTS.map((account) => (
+                            {ACCOUNT_LIST.map((account) => (
                               <SelectItem key={account} value={account}>
                                 {account}
                               </SelectItem>

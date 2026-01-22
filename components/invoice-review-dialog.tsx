@@ -35,7 +35,7 @@ import {
   type ExtractedInvoiceData,
   type Invoice,
 } from "@/lib/domain/models";
-import { ACCOUNT_LIST } from "@/lib/data/accounts";
+import { ACCOUNTS, ACCOUNT_LIST } from "@/lib/data/accounts";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { updateInvoice } from "@/lib/services/invoice";
 import { toast } from "sonner";
@@ -104,7 +104,7 @@ export function InvoiceReviewDialog({
       buyerTaxId: "",
       summary: "",
       deductible: false,
-      account: "",
+      account: undefined,
       taxType: "應稅",
       invoiceType: "手開三聯式",
       inOrOut: "進項",
@@ -197,6 +197,17 @@ export function InvoiceReviewDialog({
       setIsPanMode(false);
       // Use the extracted_data directly, ensuring all fields are properly mapped
       const extractedData = invoice.extracted_data || {};
+
+      // Determine initial deductible based on account if available
+      let initialDeductible = extractedData.deductible || false;
+      if (extractedData.account) {
+        const accountCode = extractedData.account.split(" ")[0];
+        if (ACCOUNTS[accountCode as keyof typeof ACCOUNTS]) {
+          initialDeductible =
+            ACCOUNTS[accountCode as keyof typeof ACCOUNTS].deductible;
+        }
+      }
+
       form.reset({
         invoiceSerialCode: extractedData.invoiceSerialCode || "",
         date: extractedData.date || "",
@@ -208,8 +219,8 @@ export function InvoiceReviewDialog({
         buyerName: extractedData.buyerName || "",
         buyerTaxId: extractedData.buyerTaxId || "",
         summary: extractedData.summary || "",
-        deductible: extractedData.deductible || false,
-        account: extractedData.account || "",
+        deductible: initialDeductible,
+        account: extractedData.account || undefined,
         taxType: extractedData.taxType || "應稅",
         invoiceType: extractedData.invoiceType || "手開三聯式",
         inOrOut:
@@ -892,6 +903,17 @@ export function InvoiceReviewDialog({
                           onValueChange={(value) => {
                             field.onChange(value);
                             clearConfidence("account");
+
+                            // Update deductible based on selected account
+                            const accountCode = value.split(" ")[0];
+                            if (ACCOUNTS[accountCode as keyof typeof ACCOUNTS]) {
+                              form.setValue(
+                                "deductible",
+                                ACCOUNTS[accountCode as keyof typeof ACCOUNTS]
+                                  .deductible
+                              );
+                              clearConfidence("deductible");
+                            }
                           }}
                         >
                           <SelectTrigger

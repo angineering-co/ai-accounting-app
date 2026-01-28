@@ -10,6 +10,7 @@ import { RocPeriod } from "@/lib/domain/roc-period";
 interface PeriodSelectorProps {
   value: RocPeriod;
   onChange: (value: RocPeriod) => void;
+  disabled?: boolean;
 }
 
 const PERIODS = [
@@ -21,7 +22,7 @@ const PERIODS = [
   { label: "11-12月", value: "11" },
 ];
 
-export function PeriodSelector({ value, onChange }: PeriodSelectorProps) {
+export function PeriodSelector({ value, onChange, disabled }: PeriodSelectorProps) {
   const handleYearChange = (newYear: string) => {
     onChange(new RocPeriod(parseInt(newYear, 10), value.startMonth));
   };
@@ -39,7 +40,7 @@ export function PeriodSelector({ value, onChange }: PeriodSelectorProps) {
   return (
     <div className="flex items-center gap-2">
       <div className="flex items-center gap-1">
-        <Select value={value.rocYear.toString()} onValueChange={handleYearChange}>
+        <Select value={value.rocYear.toString()} onValueChange={handleYearChange} disabled={disabled}>
           <SelectTrigger className="w-[120px]">
             <SelectValue placeholder="年份" />
           </SelectTrigger>
@@ -53,7 +54,7 @@ export function PeriodSelector({ value, onChange }: PeriodSelectorProps) {
         </Select>
       </div>
 
-      <Select value={value.startMonth.toString().padStart(2, "0")} onValueChange={handlePeriodChange}>
+      <Select value={value.startMonth.toString().padStart(2, "0")} onValueChange={handlePeriodChange} disabled={disabled}>
         <SelectTrigger className="w-[120px]">
           <SelectValue placeholder="期別" />
         </SelectTrigger>

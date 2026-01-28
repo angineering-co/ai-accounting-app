@@ -480,6 +480,7 @@ export default function PeriodDetailPage({
               <PeriodSelector
                 value={importPeriod}
                 onChange={setImportPeriod}
+                disabled={true}
               />
             </div>
             
@@ -519,6 +520,7 @@ export default function PeriodDetailPage({
                       <PeriodSelector
                         value={field.value}
                         onChange={field.onChange}
+                        disabled={true}
                       />
                     </FormControl>
                     <FormMessage />

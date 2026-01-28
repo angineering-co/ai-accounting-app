@@ -3,6 +3,7 @@ alwaysApply: true
 ---
 General
 - Always `npm run lint` to fix all the issues after you make changes
+- DO NOT auto git-add or git-commit the changes for me unless specifically asked
 
 Frontend
 - UI Components: Use shadcn library. Only build custom components if necessary

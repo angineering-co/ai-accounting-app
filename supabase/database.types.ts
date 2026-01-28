@@ -146,6 +146,7 @@ export type Database = {
           invoice_serial_code: string | null
           status: string | null
           storage_path: string
+          tax_filing_period_id: string | null
           uploaded_by: string
           year_month: string | null
         }
@@ -160,6 +161,7 @@ export type Database = {
           invoice_serial_code?: string | null
           status?: string | null
           storage_path: string
+          tax_filing_period_id?: string | null
           uploaded_by: string
           year_month?: string | null
         }
@@ -174,6 +176,7 @@ export type Database = {
           invoice_serial_code?: string | null
           status?: string | null
           storage_path?: string
+          tax_filing_period_id?: string | null
           uploaded_by?: string
           year_month?: string | null
         }
@@ -190,6 +193,13 @@ export type Database = {
             columns: ["firm_id"]
             isOneToOne: false
             referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_tax_filing_period_id_fkey"
+            columns: ["tax_filing_period_id"]
+            isOneToOne: false
+            referencedRelation: "tax_filing_periods"
             referencedColumns: ["id"]
           },
           {
@@ -226,6 +236,51 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "profiles_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tax_filing_periods: {
+        Row: {
+          client_id: string
+          created_at: string
+          firm_id: string
+          id: string
+          status: string
+          updated_at: string
+          year_month: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          firm_id: string
+          id?: string
+          status?: string
+          updated_at?: string
+          year_month: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          firm_id?: string
+          id?: string
+          status?: string
+          updated_at?: string
+          year_month?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tax_filing_periods_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tax_filing_periods_firm_id_fkey"
             columns: ["firm_id"]
             isOneToOne: false
             referencedRelation: "firms"

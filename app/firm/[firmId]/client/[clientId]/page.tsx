@@ -21,7 +21,7 @@ export default function ClientDetailPage({
   const { firmId, clientId } = use(params);
   const router = useRouter();
   const supabase = createSupabaseClient();
-  
+
   // Fetch client details
   const { data: client, isLoading: isClientLoading } = useSWR(
     ["client", clientId],
@@ -33,16 +33,22 @@ export default function ClientDetailPage({
         .single();
       if (error) throw error;
       return clientSchema.parse(data);
-    }
+    },
   );
 
   // Fetch tax periods
-  const { data: periods = [], isLoading: isPeriodsLoading, mutate: fetchPeriods } = useSWR(
-    ["client-periods", clientId],
-    () => getTaxPeriods(clientId)
-  );
+  const {
+    data: periods = [],
+    isLoading: isPeriodsLoading,
+    mutate: fetchPeriods,
+  } = useSWR(["client-periods", clientId], () => getTaxPeriods(clientId));
 
-  if (isClientLoading) return <div className="p-6 flex justify-center"><Loader2 className="animate-spin" /></div>;
+  if (isClientLoading)
+    return (
+      <div className="p-6 flex justify-center">
+        <Loader2 className="animate-spin" />
+      </div>
+    );
   if (!client) return <div className="p-6 text-center">找不到客戶</div>;
 
   return (
@@ -62,8 +68,11 @@ export default function ClientDetailPage({
 
         <TabsContent value="filings" className="mt-6 space-y-6">
           <div className="flex justify-between items-center">
-             <h2 className="text-xl font-semibold">申報期別</h2>
-             <NewPeriodDialog clientId={clientId} onPeriodCreated={fetchPeriods} />
+            <h2 className="text-xl font-semibold">申報期別</h2>
+            <NewPeriodDialog
+              clientId={clientId}
+              onPeriodCreated={fetchPeriods}
+            />
           </div>
 
           {isPeriodsLoading ? (
@@ -75,22 +84,25 @@ export default function ClientDetailPage({
           ) : periods.length === 0 ? (
             <div className="text-center py-12 border rounded-lg bg-muted/10">
               <p className="text-muted-foreground mb-4">尚未建立任何申報期別</p>
-              <NewPeriodDialog clientId={clientId} onPeriodCreated={fetchPeriods} />
+              <NewPeriodDialog
+                clientId={clientId}
+                onPeriodCreated={fetchPeriods}
+              />
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {periods.map((period) => (
-                <PeriodCard 
-                  key={period.id} 
-                  period={period} 
-                  firmId={firmId} 
-                  clientId={clientId} 
+                <PeriodCard
+                  key={period.id}
+                  period={period}
+                  firmId={firmId}
+                  clientId={clientId}
                 />
               ))}
             </div>
           )}
         </TabsContent>
-        
+
         <TabsContent value="basic" className="mt-6">
           <Card>
             <CardHeader>
@@ -98,19 +110,27 @@ export default function ClientDetailPage({
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">統一編號</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  統一編號
+                </p>
                 <p>{client.tax_id}</p>
               </div>
               <div>
-                <p className="text-sm font-medium text-muted-foreground">稅籍編號</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  稅籍編號
+                </p>
                 <p>{client.tax_payer_id}</p>
               </div>
               <div>
-                <p className="text-sm font-medium text-muted-foreground">負責人</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  負責人
+                </p>
                 <p>{client.contact_person || "-"}</p>
               </div>
               <div>
-                <p className="text-sm font-medium text-muted-foreground">產業</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  產業
+                </p>
                 <p>{client.industry || "-"}</p>
               </div>
             </CardContent>

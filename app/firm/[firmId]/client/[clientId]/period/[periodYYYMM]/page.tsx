@@ -192,7 +192,7 @@ export default function PeriodDetailPage({
   };
 
   const handleUploadComplete = useCallback(async () => {
-    if (isProcessingUpload) return;
+    if (isProcessingUpload || !period) return;
     setIsProcessingUpload(true);
     const formData = uploadForm.getValues();
     
@@ -205,6 +205,7 @@ export default function PeriodDetailPage({
           filename: uploadedFile.name,
           in_or_out: formData.in_or_out,
           year_month: formData.period.toString(),
+          tax_filing_period_id: period.id,
         });
       });
 
@@ -225,7 +226,7 @@ export default function PeriodDetailPage({
     } finally {
       setIsProcessingUpload(false);
     }
-  }, [clientId, fetchInvoices, firmId, isProcessingUpload, uploadForm, uploadProps, rocPeriod]);
+  }, [clientId, fetchInvoices, firmId, isProcessingUpload, uploadForm, uploadProps, rocPeriod, period]);
 
   const handleImportComplete = useCallback(async () => {
     if (isProcessingImport || !importUploadedFiles.length) return;
@@ -277,10 +278,28 @@ export default function PeriodDetailPage({
     if (!editingInvoice) return;
 
     try {
-      const { period, ...rest } = values;
+      const { period: newPeriod, ...rest } = values;
+      const newPeriodStr = newPeriod.toString();
+      let targetPeriodId: string | undefined;
+
+      // Determine tax_filing_period_id
+      if (period && newPeriodStr === period.year_month) {
+        targetPeriodId = period.id;
+      } else {
+        // Find existing period
+        const targetPeriod = await getTaxPeriodByYYYMM(clientId, newPeriodStr);
+        if (targetPeriod) {
+          targetPeriodId = targetPeriod.id;
+        } else {
+          toast.error(`期別 ${newPeriod.format()} 尚未建立，請先建立期別`);
+          return;
+        }
+      }
+
       await updateInvoice(editingInvoice.id, {
         ...rest,
-        year_month: period.toString(),
+        year_month: newPeriodStr,
+        tax_filing_period_id: targetPeriodId,
       });
 
       toast.success("更新發票成功");

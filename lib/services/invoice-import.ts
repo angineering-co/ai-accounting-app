@@ -1,13 +1,14 @@
 'use server';
 
 import { createClient } from "@/lib/supabase/server";
-import { type ExtractedInvoiceData } from "@/lib/domain/models";
+import { type ExtractedInvoiceData, type TaxFilingPeriod } from "@/lib/domain/models";
 import { type Database, type TablesInsert, type Json } from "@/supabase/database.types";
 import { type SupabaseClient } from "@supabase/supabase-js";
 import iconv from "iconv-lite";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { toGregorianDate } from "@/lib/utils";
 import * as XLSX from 'xlsx';
+import { getTaxPeriodByYYYMM } from "@/lib/services/tax-period";
 
 // Helper to parse byte string
 function substringBytes(buffer: Buffer, start: number, length: number): string {
@@ -25,7 +26,8 @@ interface ImportResult {
   errors: string[];
 }
 
-interface ProcessElectronicInvoiceOptions {
+// This is for testing purposes only
+interface ProcessElectronicInvoiceTestOptions {
   supabaseClient?: SupabaseClient<Database>;
   userId?: string;
 }
@@ -35,7 +37,8 @@ export async function processElectronicInvoiceFile(
   firmId: string,
   storagePath: string,
   filename: string,
-  options?: ProcessElectronicInvoiceOptions
+  filingYearMonth: string,
+  options?: ProcessElectronicInvoiceTestOptions
 ): Promise<ImportResult> {
   const supabase = options?.supabaseClient ?? await createClient();
   const result: ImportResult = {
@@ -70,6 +73,12 @@ export async function processElectronicInvoiceFile(
       userId = user.id;
     }
 
+    const period = await getTaxPeriodByYYYMM(clientId, filingYearMonth, { supabaseClient: supabase });
+
+    if (!period) {
+      throw new Error(`申報期別 ${filingYearMonth} 尚未建立，請先建立期別。`);
+    }
+
     let invoicesToInsert: TablesInsert<"invoices">[] = [];
 
     // Check file extension
@@ -85,7 +94,8 @@ export async function processElectronicInvoiceFile(
         storagePath,
         filename,
         userId,
-        result
+        result,
+        period
       );
     } else {
       // Assume TXT
@@ -96,7 +106,8 @@ export async function processElectronicInvoiceFile(
         storagePath,
         filename,
         userId,
-        result
+        result,
+        period
       );
     }
 
@@ -156,9 +167,11 @@ async function processTxtFile(
     storagePath: string,
     filename: string,
     userId: string,
-    result: ImportResult
+    result: ImportResult,
+    filingPeriod: TaxFilingPeriod
 ): Promise<TablesInsert<'invoices'>[]> {
     const invoicesToInsert: TablesInsert<'invoices'>[] = [];
+    const filingPeriodRoc = RocPeriod.fromYYYMM(filingPeriod.year_month);
 
     // Calculate total lines first
     const content = iconv.decode(buffer, 'big5');
@@ -191,7 +204,7 @@ async function processTxtFile(
       }
 
       try {
-        const invoiceData = parseTxtRow(processingBuffer, clientId, firmId, storagePath, filename, userId);
+        const invoiceData = parseTxtRow(processingBuffer, clientId, firmId, storagePath, filename, userId, filingPeriod.id, filingPeriodRoc);
         if (invoiceData) {
           invoicesToInsert.push(invoiceData as TablesInsert<'invoices'>);
         }
@@ -209,7 +222,9 @@ function parseTxtRow(
   firmId: string, 
   storagePath: string, 
   filename: string,
-  userId: string
+  userId: string,
+  filingPeriodId: string,
+  filingPeriodRoc: RocPeriod
 ): TablesInsert<'invoices'> {
 
   // A: Format Code (1-2)
@@ -270,6 +285,22 @@ function parseTxtRow(
   const date = toGregorianDate(yearMonthStr);
   const dateStr = `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
 
+  // Validate Date against Filing Period (if provided)
+  if (filingPeriodRoc) {
+      if (inOrOut === 'out') {
+          // Output: Must match exactly (simplified rule: year_month string must match)
+          if (period.toString() !== filingPeriodRoc.toString()) {
+             throw new Error(`銷項發票日期 (${period.format()}) 必須與申報期別 (${filingPeriodRoc.format()}) 一致`);
+          }
+      } else {
+          // Input: Must not be in future relative to filing period
+          // Compare YYYMM numbers: 11303 > 11301
+          if (parseInt(period.toString()) > parseInt(filingPeriodRoc.toString())) {
+             throw new Error(`進項發票日期 (${period.format()}) 不可晚於申報期別 (${filingPeriodRoc.format()})`);
+          }
+      }
+  }
+
   // Extracted Data
   const extractedData: ExtractedInvoiceData & { source: string } = {
     invoiceSerialCode: fullInvoiceNumber,
@@ -295,6 +326,7 @@ function parseTxtRow(
     status: 'processed',
     extracted_data: extractedData as unknown as Json,
     year_month: period.toString(),
+    tax_filing_period_id: filingPeriodId,
     uploaded_by: userId,
     invoice_serial_code: fullInvoiceNumber,
   };
@@ -331,8 +363,11 @@ async function processExcelFile(
     storagePath: string,
     filename: string,
     userId: string,
-    result: ImportResult
+    result: ImportResult,
+    filingPeriod: TaxFilingPeriod
 ): Promise<TablesInsert<'invoices'>[]> {
+  const filingPeriodRoc = RocPeriod.fromYYYMM(filingPeriod.year_month);
+  const filingPeriodId = filingPeriod.id;
   const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
   
   let headerSheetName: string | undefined;
@@ -409,6 +444,21 @@ async function processExcelFile(
         
         const formatCode = getString(row, '格式代號');
         const inOrOut = formatCode.startsWith('2') ? 'in' : 'out';
+
+        // Validate Date against Filing Period (if provided)
+        if (filingPeriodRoc) {
+            if (inOrOut === 'out') {
+                // Output: Must match exactly
+                if (rocPeriod.toString() !== filingPeriodRoc.toString()) {
+                    throw new Error(`銷項發票日期 (${rocPeriod.format()}) 必須與申報期別 (${filingPeriodRoc.format()}) 一致`);
+                }
+            } else {
+                // Input: Must not be in future
+                if (parseInt(rocPeriod.toString()) > parseInt(filingPeriodRoc.toString())) {
+                    throw new Error(`進項發票日期 (${rocPeriod.format()}) 不可晚於申報期別 (${filingPeriodRoc.format()})`);
+                }
+            }
+        }
         
         const sellerTaxId = getString(row, '賣方統一編號');
         const sellerName = getString(row, '賣方名稱');
@@ -473,6 +523,7 @@ async function processExcelFile(
             status: 'processed',
             extracted_data: extractedData as unknown as Json,
             year_month: rocPeriod.toString(),
+            tax_filing_period_id: filingPeriodId,
             uploaded_by: userId,
             invoice_serial_code: invoiceNo,
         });

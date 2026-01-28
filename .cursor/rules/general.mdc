@@ -1,6 +1,9 @@
 ---
 alwaysApply: true
 ---
+General
+- Always `npm run lint` to fix all the issues after you make changes
+
 Frontend
 - UI Components: Use shadcn library. Only build custom components if necessary
 - Use modal component (e.g. dialog) + react-hook-form (i.e. https://ui.shadcn.com/docs/components/form) to get user input

@@ -67,7 +67,8 @@ export const invoiceSchema = z.object({
   status: z.enum(['uploaded', 'processing', 'processed', 'confirmed', 'failed']),
   extracted_data: extractedInvoiceDataSchema.nullable().optional(),
   invoice_serial_code: z.string().nullable().optional(),
-  year_month: z.string().length(5, "所屬年月格式錯誤 (YYYMM)").nullable().optional(),
+  year_month: z.string().length(5, "所屬年月格式錯誤 (YYYMM)").nullable().optional(), // deprecated in favor of tax_filing_period_id
+  tax_filing_period_id: z.string().uuid().nullable().optional(),
   uploaded_by: z.string().uuid(),
   created_at: z.coerce.date(),
 });
@@ -79,12 +80,14 @@ export const createInvoiceSchema = z.object({
   filename: z.string().min(1),
   in_or_out: z.enum(['in', 'out']),
   year_month: z.string().length(5, "所屬年月格式錯誤 (YYYMM)").optional(),
+  tax_filing_period_id: z.string().uuid().optional(),
 });
 
 export const updateInvoiceSchema = z.object({
   client_id: z.string().uuid().nullable().optional(),
   in_or_out: z.enum(['in', 'out']).optional(),
   year_month: z.string().length(5, "所屬年月格式錯誤 (YYYMM)").optional(),
+  tax_filing_period_id: z.string().uuid().nullable().optional(),
   status: z.enum(['uploaded', 'processing', 'processed', 'confirmed', 'failed']).optional(),
   extracted_data: extractedInvoiceDataSchema.nullable().optional(),
   invoice_serial_code: z.string().nullable().optional(),
@@ -140,3 +143,32 @@ export const tetUConfigSchema = z.object({
 });
 
 export type TetUConfig = z.infer<typeof tetUConfigSchema>;
+
+// Enums (App Level)
+export const TAX_PERIOD_STATUS = ['open', 'locked', 'filed'] as const;
+export type TaxPeriodStatus = typeof TAX_PERIOD_STATUS[number];
+
+// ===== Tax Filing Period Schemas =====
+export const taxFilingPeriodSchema = z.object({
+  id: z.string().uuid(),
+  firm_id: z.string().uuid(),
+  client_id: z.string().uuid(),
+  year_month: z.string().length(5, "期別格式錯誤 (YYYMM)"),
+  status: z.enum(TAX_PERIOD_STATUS).default('open'),
+
+  created_at: z.coerce.date(),
+  updated_at: z.coerce.date(),
+});
+
+export const createTaxFilingPeriodSchema = taxFilingPeriodSchema.pick({
+  firm_id: true,
+  client_id: true,
+  year_month: true,
+  status: true,
+});
+
+export const updateTaxFilingPeriodSchema = taxFilingPeriodSchema.partial();
+
+export type TaxFilingPeriod = z.infer<typeof taxFilingPeriodSchema>;
+export type CreateTaxFilingPeriodInput = z.infer<typeof createTaxFilingPeriodSchema>;
+export type UpdateTaxFilingPeriodInput = z.infer<typeof updateTaxFilingPeriodSchema>;

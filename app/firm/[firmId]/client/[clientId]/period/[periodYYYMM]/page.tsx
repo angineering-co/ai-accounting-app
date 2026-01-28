@@ -1,19 +1,26 @@
 "use client";
 
-import { use, useEffect, useState, useCallback } from "react";
+import { use, useState, useCallback, useEffect } from "react";
 import useSWR from "swr";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, ArrowLeft, Plus, FileText } from "lucide-react";
+import { Loader2, ArrowLeft, Lock, Unlock, Plus, FileText } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { InvoiceTable } from "@/components/invoice-table";
+import { RangeManagement } from "@/components/range-management";
+import { ReportGeneration } from "@/components/report-generation";
+import { toast } from "sonner";
+import { type Invoice, invoiceSchema, clientSchema, updateInvoiceSchema } from "@/lib/domain/models";
+import { RocPeriod } from "@/lib/domain/roc-period";
+import {
+  getTaxPeriodByYYYMM,
+  updateTaxPeriodStatus,
+} from "@/lib/services/tax-period";
+import { Badge } from "@/components/ui/badge";
 import { InvoiceReviewDialog } from "@/components/invoice-review-dialog";
 import { createInvoice, updateInvoice, deleteInvoice, extractInvoiceDataAction } from "@/lib/services/invoice";
 import { processElectronicInvoiceFile } from "@/lib/services/invoice-import";
-import { toast } from "sonner";
-import { type Invoice, invoiceSchema, clientSchema, updateInvoiceSchema } from "@/lib/domain/models";
 import { 
   Dialog, 
   DialogContent, 
@@ -38,10 +45,6 @@ import { Dropzone, DropzoneContent, DropzoneEmptyState } from "@/components/drop
 import { useSupabaseUpload } from "@/hooks/use-supabase-upload";
 import { Label } from "@/components/ui/label";
 import { PeriodSelector } from "@/components/period-selector";
-import { RocPeriod } from "@/lib/domain/roc-period";
-import { PeriodCard } from "@/components/period-card";
-import { NewPeriodDialog } from "@/components/new-period-dialog";
-import { getTaxPeriods } from "@/lib/services/tax-period";
 
 const uploadFormSchema = z.object({
   in_or_out: z.enum(["in", "out"]),
@@ -56,14 +59,17 @@ const updateFormSchema = updateInvoiceSchema.extend({
 
 type UpdateFormInput = z.infer<typeof updateFormSchema>;
 
-export default function ClientDetailPage({
+export default function PeriodDetailPage({
   params,
 }: {
-  params: Promise<{ firmId: string; clientId: string }>;
+  params: Promise<{ firmId: string; clientId: string; periodYYYMM: string }>;
 }) {
-  const { firmId, clientId } = use(params);
+  const { firmId, clientId, periodYYYMM } = use(params);
   const router = useRouter();
   const supabase = createSupabaseClient();
+  const rocPeriod = RocPeriod.fromYYYMM(periodYYYMM);
+
+  // State
   const [reviewingInvoice, setReviewingInvoice] = useState<Invoice | null>(null);
   const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -71,13 +77,22 @@ export default function ClientDetailPage({
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [uploadFolderId, setUploadFolderId] = useState<string>(() => crypto.randomUUID());
   const [isProcessingUpload, setIsProcessingUpload] = useState(false);
-  
+
   // Import Electronic Invoice State
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [importPeriod, setImportPeriod] = useState<RocPeriod>(() => RocPeriod.now());
+  const [importPeriod, setImportPeriod] = useState<RocPeriod>(rocPeriod);
   const [isProcessingImport, setIsProcessingImport] = useState(false);
-  
-  // Fetch client details
+
+  // Fetch Period Entity
+  const {
+    data: period,
+    mutate: mutatePeriod,
+    isLoading: isPeriodLoading,
+  } = useSWR(["tax-period", clientId, periodYYYMM], () =>
+    getTaxPeriodByYYYMM(clientId, periodYYYMM),
+  );
+
+  // Fetch Client
   const { data: client, isLoading: isClientLoading } = useSWR(
     ["client", clientId],
     async () => {
@@ -88,34 +103,33 @@ export default function ClientDetailPage({
         .single();
       if (error) throw error;
       return clientSchema.parse(data);
-    }
+    },
   );
 
-  // Fetch client invoices
-  const { data: invoices = [], isLoading: isInvoicesLoading, mutate: fetchInvoices } = useSWR(
-    ["client-invoices", clientId],
+  // Fetch Invoices (Filtered by Period ID)
+  const { 
+    data: invoices = [], 
+    isLoading: isInvoicesLoading,
+    mutate: fetchInvoices
+  } = useSWR(
+    period ? ["period-invoices", period.id] : null,
     async () => {
+      if (!period) return [];
       const { data, error } = await supabase
         .from("invoices")
         .select("*")
-        .eq("client_id", clientId)
+        .eq("tax_filing_period_id", period.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return invoiceSchema.array().parse(data || []);
-    }
-  );
-
-  // Fetch tax periods
-  const { data: periods = [], isLoading: isPeriodsLoading, mutate: fetchPeriods } = useSWR(
-    ["client-periods", clientId],
-    () => getTaxPeriods(clientId)
+    },
   );
 
   const uploadForm = useForm<UploadFormInput>({
     resolver: zodResolver(uploadFormSchema),
     defaultValues: {
       in_or_out: "in",
-      period: RocPeriod.now(),
+      period: rocPeriod,
     },
   });
 
@@ -125,7 +139,7 @@ export default function ClientDetailPage({
       client_id: clientId,
       in_or_out: "in",
       status: "uploaded",
-      period: RocPeriod.now(),
+      period: rocPeriod,
     },
   });
 
@@ -163,6 +177,20 @@ export default function ClientDetailPage({
 
   const { uploadedFiles: importUploadedFiles, setFiles: setImportFiles, setUploadedFiles: setImportUploadedFiles } = importUploadProps;
 
+  const handleToggleLock = async () => {
+    if (!period) return;
+    const newStatus = period.status === "locked" ? "open" : "locked";
+    try {
+      await updateTaxPeriodStatus(period.id, newStatus);
+      toast.success(newStatus === "locked" ? "期別已鎖定" : "期別已解鎖");
+      mutatePeriod();
+    } catch (error) {
+      toast.error(
+        `更新狀態失敗: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+    }
+  };
+
   const handleUploadComplete = useCallback(async () => {
     if (isProcessingUpload) return;
     setIsProcessingUpload(true);
@@ -185,7 +213,7 @@ export default function ClientDetailPage({
       setIsUploadModalOpen(false);
       uploadForm.reset({
         in_or_out: "in",
-        period: RocPeriod.now(),
+        period: rocPeriod,
       });
       uploadProps.setFiles([]);
       uploadProps.setUploadedFiles([]);
@@ -197,7 +225,7 @@ export default function ClientDetailPage({
     } finally {
       setIsProcessingUpload(false);
     }
-  }, [clientId, fetchInvoices, firmId, isProcessingUpload, uploadForm, uploadProps]);
+  }, [clientId, fetchInvoices, firmId, isProcessingUpload, uploadForm, uploadProps, rocPeriod]);
 
   const handleImportComplete = useCallback(async () => {
     if (isProcessingImport || !importUploadedFiles.length) return;
@@ -271,7 +299,7 @@ export default function ClientDetailPage({
       client_id: invoice.client_id || clientId,
       in_or_out: invoice.in_or_out,
       status: invoice.status,
-      period: invoice.year_month ? RocPeriod.fromYYYMM(invoice.year_month) : RocPeriod.now(),
+      period: invoice.year_month ? RocPeriod.fromYYYMM(invoice.year_month) : rocPeriod,
     });
   };
 
@@ -331,85 +359,82 @@ export default function ClientDetailPage({
     }
   };
 
-  if (isClientLoading) return <div className="p-6 flex justify-center"><Loader2 className="animate-spin" /></div>;
-  if (!client) return <div className="p-6 text-center">找不到客戶</div>;
+  if (isPeriodLoading || isClientLoading) {
+    return (
+      <div className="p-6 flex justify-center">
+        <Loader2 className="animate-spin" />
+      </div>
+    );
+  }
+
+  if (!period) {
+    return (
+      <div className="p-6 flex flex-col items-center justify-center space-y-4">
+        <h1 className="text-2xl font-bold">找不到此期別</h1>
+        <p className="text-muted-foreground">
+          期別 {rocPeriod.format()} 尚未建立。請先建立期別。
+        </p>
+        <Button onClick={() => router.back()}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> 返回
+        </Button>
+      </div>
+    );
+  }
+
+  if (!client) {
+    return <div>Client not found</div>;
+  }
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <h1 className="text-3xl font-bold tracking-tight">{client.name}</h1>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => router.back()}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+              {rocPeriod.format()}
+              <Badge
+                variant={period.status === "locked" ? "secondary" : "default"}
+              >
+                {period.status === "locked" ? "已鎖定" : "進行中"}
+              </Badge>
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              {client.name} (統編: {client.tax_id})
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant={period.status === "locked" ? "outline" : "secondary"}
+            onClick={handleToggleLock}
+          >
+            {period.status === "locked" ? (
+              <>
+                <Unlock className="mr-2 h-4 w-4" /> 解鎖期別
+              </>
+            ) : (
+              <>
+                <Lock className="mr-2 h-4 w-4" /> 鎖定期別
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
-      <Tabs defaultValue="filings" className="w-full">
+      <Tabs defaultValue="invoices" className="w-full">
         <TabsList>
-          <TabsTrigger value="filings">申報管理</TabsTrigger>
-          <TabsTrigger value="basic">基本資料</TabsTrigger>
-          <TabsTrigger value="invoices">所有發票(舊)</TabsTrigger>
+          <TabsTrigger value="invoices">發票列表</TabsTrigger>
+          <TabsTrigger value="ranges">字軌管理</TabsTrigger>
+          <TabsTrigger value="reports">報表產生</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="filings" className="mt-6 space-y-6">
-          <div className="flex justify-between items-center">
-             <h2 className="text-xl font-semibold">申報期別</h2>
-             <NewPeriodDialog clientId={clientId} onPeriodCreated={fetchPeriods} />
-          </div>
-
-          {isPeriodsLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[1, 2, 3].map((i) => (
-                <Card key={i} className="h-40 animate-pulse bg-muted" />
-              ))}
-            </div>
-          ) : periods.length === 0 ? (
-            <div className="text-center py-12 border rounded-lg bg-muted/10">
-              <p className="text-muted-foreground mb-4">尚未建立任何申報期別</p>
-              <NewPeriodDialog clientId={clientId} onPeriodCreated={fetchPeriods} />
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {periods.map((period) => (
-                <PeriodCard 
-                  key={period.id} 
-                  period={period} 
-                  firmId={firmId} 
-                  clientId={clientId} 
-                />
-              ))}
-            </div>
-          )}
-        </TabsContent>
-        
-        <TabsContent value="basic" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>基本資訊</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">統一編號</p>
-                <p>{client.tax_id}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">稅籍編號</p>
-                <p>{client.tax_payer_id}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">負責人</p>
-                <p>{client.contact_person || "-"}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">產業</p>
-                <p>{client.industry || "-"}</p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
 
         <TabsContent value="invoices" className="mt-6 space-y-6">
           <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">發票列表 (Legacy View)</h2>
+            <h2 className="text-xl font-semibold">本期發票</h2>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
                 <FileText className="mr-2 h-4 w-4" /> 匯入電子發票
@@ -429,6 +454,14 @@ export default function ClientDetailPage({
             onDelete={setInvoiceToDelete}
             showClientColumn={false}
           />
+        </TabsContent>
+
+        <TabsContent value="ranges" className="mt-6">
+          <RangeManagement clientId={clientId} period={rocPeriod} />
+        </TabsContent>
+
+        <TabsContent value="reports" className="mt-6">
+          <ReportGeneration client={client} period={rocPeriod} />
         </TabsContent>
       </Tabs>
 
@@ -631,4 +664,3 @@ export default function ClientDetailPage({
     </div>
   );
 }
-

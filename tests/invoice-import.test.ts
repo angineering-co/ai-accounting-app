@@ -41,11 +41,22 @@ describe("processElectronicInvoiceFile", () => {
 
     fixture.storagePaths.push(storagePath);
 
+    // Create a tax period for testing
+    const testPeriod = "11411"; // 2025-11/12 match the excel file data
+
+    await supabase.from("tax_filing_periods").insert({
+      firm_id: fixture.firmId,
+      client_id: fixture.clientId,
+      year_month: testPeriod,
+      status: "open"
+    });
+
     const result1 = await processElectronicInvoiceFile(
       fixture.clientId,
       fixture.firmId,
       storagePath,
       "60707504.xlsx",
+      testPeriod,
       {
         supabaseClient: supabase,
         userId: fixture.userId,
@@ -76,6 +87,7 @@ describe("processElectronicInvoiceFile", () => {
       fixture.firmId,
       storagePath,
       "60707504.xlsx",
+      testPeriod,
       {
         supabaseClient: supabase,
         userId: fixture.userId,

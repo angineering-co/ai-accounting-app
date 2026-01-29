@@ -55,9 +55,10 @@ import { RocPeriod } from "@/lib/domain/roc-period";
 interface RangeManagementProps {
   clientId: string;
   period: RocPeriod;
+  isLocked?: boolean;
 }
 
-export function RangeManagement({ clientId, period }: RangeManagementProps) {
+export function RangeManagement({ clientId, period, isLocked = false }: RangeManagementProps) {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
@@ -113,7 +114,7 @@ export function RangeManagement({ clientId, period }: RangeManagementProps) {
         <CardTitle>發票字軌管理 ({period.format()})</CardTitle>
         <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
           <DialogTrigger asChild>
-            <Button size="sm">
+            <Button size="sm" disabled={isLocked}>
               <Plus className="mr-2 h-4 w-4" /> 新增字軌
             </Button>
           </DialogTrigger>
@@ -250,7 +251,7 @@ export function RangeManagement({ clientId, period }: RangeManagementProps) {
                       variant="ghost"
                       size="icon"
                       onClick={() => handleDelete(range.id)}
-                      disabled={isDeleting === range.id}
+                      disabled={isDeleting === range.id || isLocked}
                     >
                       {isDeleting === range.id ? (
                         <Loader2 className="h-4 w-4 animate-spin" />

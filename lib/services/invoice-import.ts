@@ -79,6 +79,11 @@ export async function processElectronicInvoiceFile(
       throw new Error(`申報期別 ${filingYearMonth} 尚未建立，請先建立期別。`);
     }
 
+    // Check if period is locked
+    if (period.status === "locked" || period.status === "filed") {
+      throw new Error("此期別已鎖定，無法匯入發票。");
+    }
+
     let invoicesToInsert: TablesInsert<"invoices">[] = [];
 
     // Check file extension

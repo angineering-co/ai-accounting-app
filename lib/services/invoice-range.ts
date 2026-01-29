@@ -8,6 +8,7 @@ import {
 } from "@/lib/domain/models";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { revalidatePath } from "next/cache";
+import { ensurePeriodEditable } from "@/lib/services/tax-period";
 
 export async function getInvoiceRanges(clientId: string, serializedReportPeriod?: string) {
   const supabase = await createSupabaseClient();
@@ -46,6 +47,9 @@ export async function createInvoiceRange(data: CreateInvoiceRangeInput) {
     year_month: RocPeriod.fromYYYMM(validation.data.year_month).toString()
   };
 
+  // Check if period is locked
+  await ensurePeriodEditable(normalizedData.client_id, normalizedData.year_month);
+
   // Fetch firm_id for the client to revalidate the correct path
   const { data: client, error: clientError } = await supabase
     .from("clients")
@@ -73,6 +77,20 @@ export async function createInvoiceRange(data: CreateInvoiceRangeInput) {
 
 export async function deleteInvoiceRange(id: string, clientId: string) {
   const supabase = await createSupabaseClient();
+
+  // Fetch the invoice range to check its period
+  const { data: range, error: rangeError } = await supabase
+    .from("invoice_ranges")
+    .select("year_month")
+    .eq("id", id)
+    .single();
+
+  if (rangeError || !range) {
+    throw new Error("Invoice range not found");
+  }
+
+  // Check if period is locked
+  await ensurePeriodEditable(clientId, range.year_month);
 
   // Fetch firm_id for the client to revalidate the correct path
   const { data: client, error: clientError } = await supabase

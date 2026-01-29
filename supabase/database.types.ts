@@ -101,6 +101,7 @@ export type Database = {
           client_id: string
           created_at: string | null
           end_number: string
+          firm_id: string
           id: string
           invoice_type: string
           start_number: string
@@ -110,6 +111,7 @@ export type Database = {
           client_id: string
           created_at?: string | null
           end_number: string
+          firm_id: string
           id?: string
           invoice_type: string
           start_number: string
@@ -119,6 +121,7 @@ export type Database = {
           client_id?: string
           created_at?: string | null
           end_number?: string
+          firm_id?: string
           id?: string
           invoice_type?: string
           start_number?: string
@@ -130,6 +133,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_ranges_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
             referencedColumns: ["id"]
           },
         ]

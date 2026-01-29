@@ -57,13 +57,16 @@ export async function createInvoiceRange(data: CreateInvoiceRangeInput) {
     .eq("id", normalizedData.client_id)
     .single();
 
-  if (clientError || !client) {
+  if (clientError || !client?.firm_id) {
     throw new Error("Client not found or access denied");
   }
 
   const { data: created, error } = await supabase
     .from("invoice_ranges")
-    .insert(normalizedData)
+    .insert({
+      ...normalizedData,
+      firm_id: client.firm_id,
+    })
     .select()
     .single();
 

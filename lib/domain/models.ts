@@ -101,6 +101,7 @@ export type UpdateInvoiceInput = z.infer<typeof updateInvoiceSchema>;
 // ===== Invoice Range Schemas =====
 export const invoiceRangeSchema = z.object({
   id: z.string().uuid(),
+  firm_id: z.string().uuid(),
   client_id: z.string().uuid(),
   year_month: z.string().length(5, "所屬年月格式錯誤 (YYYMM)"),
   invoice_type: z.enum(['手開二聯式', '手開三聯式', '電子發票', '二聯式收銀機', '三聯式收銀機']),
@@ -111,7 +112,8 @@ export const invoiceRangeSchema = z.object({
 
 export const createInvoiceRangeSchema = invoiceRangeSchema.omit({ 
   id: true, 
-  created_at: true 
+  created_at: true,
+  firm_id: true,
 });
 
 export type InvoiceRange = z.infer<typeof invoiceRangeSchema>;

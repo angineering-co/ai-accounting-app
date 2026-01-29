@@ -33,6 +33,7 @@ const TEST_CLIENT = {
 const TEST_INVOICE_RANGES = [
   {
     id: '21ebb42d-bb7d-4dae-8d22-5fa3385b9d05',
+    firm_id: '52fbe251-4fea-40cb-a0cb-640e4e25e810',
     client_id: '2c3c7f79-1193-406c-90d6-ae7c98de4084',
     year_month: '11409',
     invoice_type: '手開二聯式',
@@ -42,6 +43,7 @@ const TEST_INVOICE_RANGES = [
   },
   {
     id: 'ce04935f-7f12-4cc8-bf61-e4e7cb23f411',
+    firm_id: '52fbe251-4fea-40cb-a0cb-640e4e25e810',
     client_id: '2c3c7f79-1193-406c-90d6-ae7c98de4084',
     year_month: '11409',
     invoice_type: '手開三聯式',

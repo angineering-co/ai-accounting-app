@@ -160,6 +160,8 @@ export default function PeriodDetailPage({
     return <div>Client not found</div>;
   }
 
+  const isLocked = period.status === "locked" || period.status === "filed";
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -211,10 +213,17 @@ export default function PeriodDetailPage({
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-semibold">本期發票</h2>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
+              <Button
+                variant="outline"
+                onClick={() => setIsImportModalOpen(true)}
+                disabled={isLocked}
+              >
                 <FileText className="mr-2 h-4 w-4" /> 匯入電子發票
               </Button>
-              <Button onClick={() => setIsUploadModalOpen(true)}>
+              <Button
+                onClick={() => setIsUploadModalOpen(true)}
+                disabled={isLocked}
+              >
                 <Plus className="mr-2 h-4 w-4" /> 上傳發票
               </Button>
             </div>
@@ -224,15 +233,15 @@ export default function PeriodDetailPage({
             invoices={invoices}
             isLoading={isInvoicesLoading}
             onReview={setReviewingInvoice}
-            onExtractAI={handleExtractInvoice}
-            onEdit={setEditingInvoice}
-            onDelete={setInvoiceToDelete}
+            onExtractAI={isLocked ? undefined : handleExtractInvoice}
+            onEdit={isLocked ? undefined : setEditingInvoice}
+            onDelete={isLocked ? undefined : setInvoiceToDelete}
             showClientColumn={false}
           />
         </TabsContent>
 
         <TabsContent value="ranges" className="mt-6">
-          <RangeManagement clientId={clientId} period={rocPeriod} />
+          <RangeManagement clientId={clientId} period={rocPeriod} isLocked={isLocked} />
         </TabsContent>
 
         <TabsContent value="reports" className="mt-6">
@@ -267,6 +276,7 @@ export default function PeriodDetailPage({
         onSuccess={fetchInvoices}
         onNext={handleReviewNext}
         onPrevious={handleReviewPrevious}
+        isLocked={isLocked}
       />
 
       <InvoiceEditDialog

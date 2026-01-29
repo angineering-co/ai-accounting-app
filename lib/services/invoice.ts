@@ -16,6 +16,7 @@ import {
 import { getAccountListString } from "@/lib/services/account";
 import { type Json, type TablesUpdate } from "@/supabase/database.types";
 import { type ExtractedInvoiceData } from "@/lib/domain/models";
+import { ensurePeriodEditable } from "@/lib/services/tax-period";
 
 async function saveExtractedInvoiceData(
   invoiceId: string,
@@ -77,6 +78,11 @@ export async function createInvoice(data: CreateInvoiceInput) {
   // Validate input
   const validated = createInvoiceSchema.parse(data);
 
+  // Check if period is locked (if year_month and client_id are provided)
+  if (validated.year_month && validated.client_id) {
+    await ensurePeriodEditable(validated.client_id, validated.year_month);
+  }
+
   // Insert invoice record
   const { data: invoice, error } = await supabase
     .from('invoices')
@@ -96,6 +102,29 @@ export async function updateInvoice(invoiceId: string, data: UpdateInvoiceInput)
   const supabase = await createClient();
   
   const validated = updateInvoiceSchema.parse(data);
+
+  // Fetch the existing invoice to check period lock status
+  const { data: existingInvoice, error: fetchError } = await supabase
+    .from('invoices')
+    .select('client_id, year_month')
+    .eq('id', invoiceId)
+    .single();
+
+  if (fetchError) throw fetchError;
+  if (!existingInvoice) throw new Error('Invoice not found');
+
+  // Check if current period is locked
+  if (existingInvoice.year_month && existingInvoice.client_id) {
+    await ensurePeriodEditable(existingInvoice.client_id, existingInvoice.year_month);
+  }
+
+  // If moving to a new period, check if the new period is also editable
+  if (validated.year_month && validated.year_month !== existingInvoice.year_month) {
+    const clientId = validated.client_id || existingInvoice.client_id;
+    if (clientId) {
+      await ensurePeriodEditable(clientId, validated.year_month);
+    }
+  }
 
   const { extracted_data: extractedData, ...rest } = validated;
 
@@ -129,15 +158,20 @@ export async function updateInvoice(invoiceId: string, data: UpdateInvoiceInput)
 export async function deleteInvoice(invoiceId: string) {
   const supabase = await createClient();
   
-  // First, get the invoice to retrieve storage_path
+  // First, get the invoice to retrieve storage_path and check period lock
   const { data: invoice, error: fetchError } = await supabase
     .from('invoices')
-    .select('storage_path')
+    .select('storage_path, client_id, year_month')
     .eq('id', invoiceId)
     .single();
 
   if (fetchError) throw fetchError;
   if (!invoice) throw new Error('Invoice not found');
+
+  // Check if period is locked
+  if (invoice.year_month && invoice.client_id) {
+    await ensurePeriodEditable(invoice.client_id, invoice.year_month);
+  }
 
   // Delete the database record first
   const { error } = await supabase
@@ -212,6 +246,11 @@ export async function extractInvoiceDataAction(invoiceId: string) {
 
   if (fetchError) throw fetchError;
   if (!invoice) throw new Error("Invoice not found");
+
+  // Check if period is locked (AI extraction modifies invoice data)
+  if (invoice.year_month && invoice.client_id) {
+    await ensurePeriodEditable(invoice.client_id, invoice.year_month);
+  }
 
   // Fetch client data if client_id exists
   let client = null;

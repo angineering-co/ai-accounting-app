@@ -112,3 +112,14 @@ export async function updateTaxPeriodStatus(
   if (error) throw error;
   return taxFilingPeriodSchema.parse(data);
 }
+
+export async function ensurePeriodEditable(
+  clientId: string,
+  yearMonth: string,
+  errorMessage?: string
+) {
+  const period = await getTaxPeriodByYYYMM(clientId, yearMonth);
+  if (period && (period.status === "locked" || period.status === "filed")) {
+    throw new Error(errorMessage || "此期別已鎖定，無法進行變更。");
+  }
+}

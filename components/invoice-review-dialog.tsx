@@ -66,6 +66,7 @@ interface InvoiceReviewDialogProps {
   onSuccess?: () => void;
   onNext?: () => void;
   onPrevious?: () => void;
+  isLocked?: boolean;
 }
 
 export function InvoiceReviewDialog({
@@ -75,6 +76,7 @@ export function InvoiceReviewDialog({
   onSuccess,
   onNext,
   onPrevious,
+  isLocked = false,
 }: InvoiceReviewDialogProps) {
   const [rotation, setRotation] = useState(0);
   const [zoom, setZoom] = useState(1);
@@ -1046,14 +1048,14 @@ export function InvoiceReviewDialog({
           <Button
             variant="outline"
             onClick={form.handleSubmit((data) => handleSave(data, "processed"))}
-            disabled={form.formState.isSubmitting}
+            disabled={form.formState.isSubmitting || isLocked}
             className="flex-1"
           >
             <Save className="mr-2 h-4 w-4" /> 僅儲存
           </Button>
           <Button
             onClick={form.handleSubmit((data) => handleSave(data, "confirmed"))}
-            disabled={form.formState.isSubmitting || isConfirmDisabled}
+            disabled={form.formState.isSubmitting || isConfirmDisabled || isLocked}
             className="flex-1"
           >
             {form.formState.isSubmitting ? (

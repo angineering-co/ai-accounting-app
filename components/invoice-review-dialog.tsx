@@ -3,6 +3,12 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -149,6 +155,7 @@ export function InvoiceReviewDialog({
 
   const isConfirmDisabled = useMemo(() => {
     return (
+      invoice?.status === "confirmed" || // Already confirmed
       !invoiceSerialCode ||
       !dateValue ||
       !totalSales ||
@@ -159,6 +166,32 @@ export function InvoiceReviewDialog({
       isPeriodMismatch
     );
   }, [
+    invoiceSerialCode,
+    dateValue,
+    totalSales,
+    sellerTaxId,
+    buyerTaxId,
+    account,
+    isMathError,
+    isPeriodMismatch,
+    invoice?.status,
+  ]);
+
+  const confirmDisabledReason = useMemo(() => {
+    if (isLocked) return "此發票目前已被鎖定，無法修改";
+    if (invoice?.status === "confirmed") return "此發票已確認";
+    if (!invoiceSerialCode) return "請輸入發票字軌號碼";
+    if (!dateValue) return "請輸入發票日期";
+    if (!totalSales) return "請輸入銷售額";
+    if (!sellerTaxId) return "請輸入賣方統編";
+    if (!buyerTaxId) return "請輸入買方統編";
+    if (!account) return "請選擇會計科目";
+    if (isMathError) return "銷售額 + 稅額 不等於 總計";
+    if (isPeriodMismatch) return "日期與期別不符";
+    return null;
+  }, [
+    isLocked,
+    invoice?.status,
     invoiceSerialCode,
     dateValue,
     totalSales,
@@ -1045,26 +1078,58 @@ export function InvoiceReviewDialog({
         </div>
 
         <DialogFooter className="flex flex-col sm:flex-row gap-2">
-          <Button
-            variant="outline"
-            onClick={form.handleSubmit((data) => handleSave(data, "processed"))}
-            disabled={form.formState.isSubmitting || isLocked}
-            className="flex-1"
-          >
-            <Save className="mr-2 h-4 w-4" /> 僅儲存
-          </Button>
-          <Button
-            onClick={form.handleSubmit((data) => handleSave(data, "confirmed"))}
-            disabled={form.formState.isSubmitting || isConfirmDisabled || isLocked}
-            className="flex-1"
-          >
-            {form.formState.isSubmitting ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <CheckCircle className="mr-2 h-4 w-4" />
-            )}
-            確認並儲存
-          </Button>
+          <TooltipProvider>
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <div className="flex-1">
+                  <Button
+                    variant="outline"
+                    onClick={form.handleSubmit((data) =>
+                      handleSave(data, "processed")
+                    )}
+                    disabled={form.formState.isSubmitting || isLocked}
+                    className="w-full"
+                  >
+                    <Save className="mr-2 h-4 w-4" /> 僅儲存
+                  </Button>
+                </div>
+              </TooltipTrigger>
+              {isLocked && (
+                <TooltipContent>
+                  <p>此發票目前已被鎖定，無法修改</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <div className="flex-1">
+                  <Button
+                    onClick={form.handleSubmit((data) =>
+                      handleSave(data, "confirmed")
+                    )}
+                    disabled={
+                      form.formState.isSubmitting ||
+                      isConfirmDisabled ||
+                      isLocked
+                    }
+                    className="w-full"
+                  >
+                    {form.formState.isSubmitting ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <CheckCircle className="mr-2 h-4 w-4" />
+                    )}
+                    確認並儲存
+                  </Button>
+                </div>
+              </TooltipTrigger>
+              {(isConfirmDisabled || isLocked) && confirmDisabledReason && (
+                <TooltipContent>
+                  <p>{confirmDisabledReason}</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
         </DialogFooter>
       </DialogContent>
     </Dialog>

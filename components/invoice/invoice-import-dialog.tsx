@@ -50,7 +50,6 @@ export function InvoiceImportDialog({
     bucketName: "electronic-invoices",
     path: `${firmId}/${importPeriod.toString()}`,
     allowedMimeTypes: [
-      "text/plain",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "application/vnd.ms-excel",
     ],
@@ -141,7 +140,7 @@ export function InvoiceImportDialog({
         <DialogHeader>
           <DialogTitle>匯入電子發票</DialogTitle>
           <DialogDescription>
-            請選擇所屬期別並上傳電子發票 TXT 檔。
+            請選擇所屬期別並上傳電子發票 Excel 檔。
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
@@ -155,7 +154,7 @@ export function InvoiceImportDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>檔案 (TXT / Excel)</Label>
+            <Label>檔案 (Excel)</Label>
             {isProcessingImport ? (
               <div className="flex flex-col items-center justify-center py-12 space-y-4">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />

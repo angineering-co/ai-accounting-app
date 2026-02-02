@@ -49,12 +49,12 @@ export const extractedInvoiceDataSchema = z.object({
   totalAmount: z.number().optional(), // 總計
   summary: z.string().optional(), // 摘要
   deductible: z.boolean().optional(), // 是否可扣抵
-  account: z.enum(ACCOUNT_LIST).optional(), // 會計科目 (e.g., "5102 旅費")
+  account: z.enum(ACCOUNT_LIST).or(z.literal("")).optional(), // 會計科目 (e.g., "5102 旅費")
   taxType: z.enum(['應稅', '零稅率', '免稅', '作廢', '彙加']).optional(), // 課稅別
   invoiceType: z.enum(['手開二聯式', '手開三聯式', '電子發票', '二聯式收銀機', '三聯式收銀機']).optional(), // 發票類型
   inOrOut: z.enum(['進項', '銷項']).optional(), // 進銷項
   confidence: z.record(z.string(), z.enum(['low', 'medium', 'high'])).optional(), // Confidence levels for extracted fields
-  source: z.enum(['import-excel', 'import-txt']).optional(), // Source of the invoice data
+  source: z.enum(['import-excel']).optional(), // Source of the invoice data
 }).passthrough(); // Allow additional fields from AI extraction
 
 export const invoiceSchema = z.object({

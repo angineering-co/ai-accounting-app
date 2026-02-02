@@ -4,18 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { type ExtractedInvoiceData, type TaxFilingPeriod } from "@/lib/domain/models";
 import { type Database, type TablesInsert, type Json } from "@/supabase/database.types";
 import { type SupabaseClient } from "@supabase/supabase-js";
-import iconv from "iconv-lite";
 import { RocPeriod } from "@/lib/domain/roc-period";
-import { toGregorianDate } from "@/lib/utils";
 import * as XLSX from 'xlsx';
 import { getTaxPeriodByYYYMM } from "@/lib/services/tax-period";
-
-// Helper to parse byte string
-function substringBytes(buffer: Buffer, start: number, length: number): string {
-  // start is 1-based index from spec, convert to 0-based
-  const chunk = buffer.subarray(start - 1, start - 1 + length);
-  return iconv.decode(chunk, 'big5').trim();
-}
 
 interface ImportResult {
   total: number;
@@ -84,37 +75,25 @@ export async function processElectronicInvoiceFile(
       throw new Error("此期別已鎖定，無法匯入發票。");
     }
 
-    let invoicesToInsert: TablesInsert<"invoices">[] = [];
-
-    // Check file extension
+    // Only Excel files are supported
     const isExcel =
       filename.toLowerCase().endsWith(".xlsx") ||
       filename.toLowerCase().endsWith(".xls");
 
-    if (isExcel) {
-      invoicesToInsert = await processExcelFile(
-        buffer,
-        clientId,
-        firmId,
-        storagePath,
-        filename,
-        userId,
-        result,
-        period
-      );
-    } else {
-      // Assume TXT
-      invoicesToInsert = await processTxtFile(
-        buffer,
-        clientId,
-        firmId,
-        storagePath,
-        filename,
-        userId,
-        result,
-        period
-      );
+    if (!isExcel) {
+      throw new Error("僅支援 Excel 檔案格式 (.xlsx, .xls)");
     }
+
+    const invoicesToInsert = await processExcelFile(
+      buffer,
+      clientId,
+      firmId,
+      storagePath,
+      filename,
+      userId,
+      result,
+      period
+    );
 
     // Batch upsert with ON CONFLICT (override duplicates)
     if (invoicesToInsert.length > 0) {
@@ -163,178 +142,6 @@ export async function processElectronicInvoiceFile(
   }
 
   return result;
-}
-
-async function processTxtFile(
-    buffer: Buffer,
-    clientId: string,
-    firmId: string,
-    storagePath: string,
-    filename: string,
-    userId: string,
-    result: ImportResult,
-    filingPeriod: TaxFilingPeriod
-): Promise<TablesInsert<'invoices'>[]> {
-    const invoicesToInsert: TablesInsert<'invoices'>[] = [];
-    const filingPeriodRoc = RocPeriod.fromYYYMM(filingPeriod.year_month);
-
-    // Calculate total lines first
-    const content = iconv.decode(buffer, 'big5');
-    const lines = content.split(/\r?\n/).filter(line => line.trim().length > 0);
-    result.total = lines.length;
-
-    let currentLine = 0;
-    let offset = 0;
-    while (offset < buffer.length) {
-      currentLine++;
-      let lineEnd = buffer.indexOf('\n', offset);
-      if (lineEnd === -1) lineEnd = buffer.length;
-      
-      // Handle CR if present
-      let lineContentEnd = lineEnd;
-      if (lineContentEnd > offset && buffer[lineContentEnd - 1] === 0x0D) { // \r
-        lineContentEnd--;
-      }
-      
-      const lineBuffer = buffer.subarray(offset, lineContentEnd);
-      offset = lineEnd + 1;
-
-      if (lineBuffer.length === 0) continue;
-      
-      // Strict 81 bytes check? Some systems might not pad correctly or might strip trailing spaces.
-      let processingBuffer = lineBuffer;
-      if (lineBuffer.length < 81) {
-          const padding = Buffer.alloc(81 - lineBuffer.length, ' '); // Space char
-          processingBuffer = Buffer.concat([lineBuffer, padding]);
-      }
-
-      try {
-        const invoiceData = parseTxtRow(processingBuffer, clientId, firmId, storagePath, filename, userId, filingPeriod.id, filingPeriodRoc);
-        if (invoiceData) {
-          invoicesToInsert.push(invoiceData as TablesInsert<'invoices'>);
-        }
-      } catch (e) {
-        result.failed++;
-        result.errors.push(`Line ${currentLine}: ${e instanceof Error ? e.message : 'Unknown error'}`);
-      }
-    }
-    return invoicesToInsert;
-}
-
-function parseTxtRow(
-  buffer: Buffer, 
-  clientId: string, 
-  firmId: string, 
-  storagePath: string, 
-  filename: string,
-  userId: string,
-  filingPeriodId: string,
-  filingPeriodRoc: RocPeriod
-): TablesInsert<'invoices'> {
-
-  // A: Format Code (1-2)
-  const formatCode = substringBytes(buffer, 1, 2);
-  
-  // D: YearMonth (19-23)
-  const yearMonthStr = substringBytes(buffer, 19, 5);
-  
-  const taxType = substringBytes(buffer, 62, 1); // P
-  const taxAmountStr = substringBytes(buffer, 63, 10); // Q
-  const salesAmountStr = substringBytes(buffer, 50, 12); // O/N
-  
-  const inOrOut = formatCode.startsWith('2') ? 'in' : 'out';
-  const invoiceTypeStr = getInvoiceTypeFromCode(formatCode);
-  
-  const S = substringBytes(buffer, 80, 1);
-  let buyerTaxId = substringBytes(buffer, 24, 8);
-  let sellerTaxId = substringBytes(buffer, 32, 8);
-  
-  if (S === 'A' && inOrOut === 'out') {
-    buyerTaxId = ""; 
-  }
-  
-  if (S === 'A' && inOrOut === 'in') {
-    sellerTaxId = ""; // Aggregate input
-  }
-  
-  let invoiceSerial = "";
-  let invoiceNo = "";
-  
-  if (formatCode === '28' || formatCode === '29') {
-     invoiceNo = substringBytes(buffer, 36, 14);
-  } else {
-     invoiceSerial = substringBytes(buffer, 40, 2);
-     invoiceNo = substringBytes(buffer, 42, 8);
-  }
-  
-  const fullInvoiceNumber = invoiceSerial + invoiceNo;
-  
-  // Tax Type mapping
-  const taxTypeMap: Record<string, string> = {
-    '1': '應稅',
-    '2': '零稅率',
-    '3': '免稅',
-    'F': '作廢',
-  };
-  
-  let mappedTaxType = taxTypeMap[taxType] || '應稅';
-  if (S === 'A') mappedTaxType = '彙加';
-  if (taxType === 'F') mappedTaxType = '作廢';
-  
-  // Amounts
-  const sales = parseInt(salesAmountStr) || 0;
-  const tax = parseInt(taxAmountStr) || 0;
-  
-  // Date conversion
-  const period = RocPeriod.fromYYYMM(yearMonthStr);
-  const date = toGregorianDate(yearMonthStr);
-  const dateStr = `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
-
-  // Validate Date against Filing Period (if provided)
-  if (filingPeriodRoc) {
-      if (inOrOut === 'out') {
-          // Output: Must match exactly (simplified rule: year_month string must match)
-          if (period.toString() !== filingPeriodRoc.toString()) {
-             throw new Error(`銷項發票日期 (${period.format()}) 必須與申報期別 (${filingPeriodRoc.format()}) 一致`);
-          }
-      } else {
-          // Input: Must not be in future relative to filing period
-          // Compare YYYMM numbers: 11303 > 11301
-          if (parseInt(period.toString()) > parseInt(filingPeriodRoc.toString())) {
-             throw new Error(`進項發票日期 (${period.format()}) 不可晚於申報期別 (${filingPeriodRoc.format()})`);
-          }
-      }
-  }
-
-  // Extracted Data
-  const extractedData: ExtractedInvoiceData & { source: string } = {
-    invoiceSerialCode: fullInvoiceNumber,
-    date: dateStr,
-    sellerTaxId: sellerTaxId,
-    buyerTaxId: buyerTaxId,
-    totalSales: sales,
-    tax: tax,
-    totalAmount: sales + tax,
-    taxType: mappedTaxType as ExtractedInvoiceData['taxType'],
-    invoiceType: invoiceTypeStr as ExtractedInvoiceData['invoiceType'],
-    inOrOut: inOrOut === 'in' ? '進項' : '銷項',
-    deductible: true, // Note we don't have deductible information in the TXT file, so we assume it's true.
-    source: 'import-txt'
-  };
-
-  return {
-    firm_id: firmId,
-    client_id: clientId,
-    storage_path: storagePath,
-    filename: filename,
-    in_or_out: inOrOut,
-    status: 'uploaded',
-    extracted_data: extractedData as unknown as Json,
-    year_month: period.toString(),
-    tax_filing_period_id: filingPeriodId,
-    uploaded_by: userId,
-    invoice_serial_code: fullInvoiceNumber,
-  };
 }
 
 interface ExcelRow {

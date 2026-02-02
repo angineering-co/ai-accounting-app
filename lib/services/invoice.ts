@@ -299,8 +299,7 @@ export async function extractInvoiceDataAction(invoiceId: string) {
       );
       if (
         extractedData.invoiceType === "電子發票" &&
-        (extractedData.source === "import-txt" ||
-          extractedData.source === "import-excel")
+        extractedData.source === "import-excel"
       ) {
         // For output electronic invoices, set account to "4101 營業收入"
         if (extractedData.inOrOut === "銷項") {

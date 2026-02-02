@@ -269,37 +269,13 @@ export function InvoiceReviewDialog({
         const extracted = invoice.extracted_data as ExtractedInvoiceData & {
           source?: string;
         };
-        const isTxtImport = extracted?.source === "import-txt";
         const isExcelImport = extracted?.source === "import-excel";
-        const bucket =
-          isTxtImport || isExcelImport ? "electronic-invoices" : "invoices";
+        const bucket = isExcelImport ? "electronic-invoices" : "invoices";
 
         // Reset states
         setExcelData(null);
 
-        if (isTxtImport) {
-          try {
-            const { data, error } = await supabase.storage
-              .from(bucket)
-              .download(invoice.storage_path);
-
-            if (error) throw error;
-
-            if (data) {
-              const buffer = await data.arrayBuffer();
-
-              // Try Big5 first as it's common for these files
-              const text = new TextDecoder("big5").decode(buffer);
-
-              setPreviewText(text);
-              setPreviewUrl(null);
-            }
-          } catch (e) {
-            console.error("Error downloading text file:", e);
-            toast.error("無法載入檔案預覽");
-            setPreviewText(null);
-          }
-        } else if (isExcelImport) {
+        if (isExcelImport) {
           try {
             const { data, error } = await supabase.storage
               .from(bucket)

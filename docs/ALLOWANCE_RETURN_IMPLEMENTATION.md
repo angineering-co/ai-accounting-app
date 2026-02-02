@@ -122,7 +122,7 @@ export const extractedAllowanceDataSchema = z.object({
   // Original invoice reference (also stored in column for indexing)
   originalInvoiceSerialCode: z.string().optional(),
   
-  // Amounts
+  // Amounts (totals for the entire allowance)
   amount: z.number().optional(),      // 折讓金額 (銷售額)
   taxAmount: z.number().optional(),   // 折讓稅額
   totalAmount: z.number().optional(), // 合計
@@ -136,11 +136,15 @@ export const extractedAllowanceDataSchema = z.object({
   buyerName: z.string().optional(),
   buyerTaxId: z.string().optional(),
   
+  // Combined line items as text (for display, similar to invoice summary)
+  // Groups multiple rows with same 折讓單號碼 into a single text field
+  summary: z.string().optional(),
+  
   // For 進項 allowances: deduction type
   deductionCode: z.enum(['1', '2']).optional(),  // 1=進貨費用, 2=固定資產
   
   // Metadata
-  source: z.enum(['scan', 'import-txt', 'import-excel']).optional(),
+  source: z.enum(['scan', 'import-excel']).optional(),
   confidence: z.record(z.string(), z.enum(['low', 'medium', 'high'])).optional(),
 }).passthrough();
 
@@ -170,7 +174,7 @@ function deriveInOrOut(clientTaxId: string, extractedData: ExtractedAllowanceDat
 
 | Source | Has Own Serial Code? | `allowance_serial_code` | `original_invoice_serial_code` |
 |--------|---------------------|-------------------------|-------------------------------|
-| TXT/Excel import | Yes | Allowance's own code | From import data |
+| Excel import | Yes | Allowance's own code | From import data |
 | Paper scan (electronic allowance) | Yes | Extracted by AI | Extracted by AI |
 | Paper scan (paper allowance) | No | NULL | Extracted by AI |
 
@@ -220,7 +224,7 @@ export function isAllowanceFormatCode(formatCode: string): boolean {
   return ['23', '24', '33', '34'].includes(formatCode);
 }
 
-// Reverse mapping for TXT/Excel imports
+// Reverse mapping for Excel imports
 export const ALLOWANCE_FORMAT_CODE_MAP: Record<string, {
   inOrOut: 'in' | 'out';
   allowanceType: string;
@@ -295,56 +299,211 @@ Create `lib/domain/format-codes.ts` with the functions above.
 
 ---
 
-### Phase 3: Import Flow Updates
+### Phase 3: Excel Import Flow Updates
 
-**Step 3.1: Update TXT import (`lib/services/invoice-import.ts`)**
+#### Design Decision: Auto-Detection by File Header
 
-Route allowance format codes (23, 24, 33, 34) to the `allowances` table:
+Invoice Excel files and allowance Excel files have **different headers**. Rather than requiring users to select file type, we detect automatically:
+
+| File Type | Detection Header | Sheet Structure |
+|-----------|-----------------|-----------------|
+| Invoice | `發票號碼` + `格式代號` (no `折讓單號碼`) | Two sheets: header + detail |
+| Allowance | `折讓單號碼` + `折讓單日期` | Single sheet (flat structure) |
+
+**Allowance Excel Headers:**
+```
+折讓單號碼, 格式代號, 折讓單狀態, 折讓單類別, 發票號碼, 發票日期, 
+買方統一編號, 買方名稱, 賣方統一編號, 賣方名稱, 寄送日期, 品項名稱, 
+品項折讓金額(不含稅), 品項折讓稅額, 折讓金額(不含稅), 折讓稅額, 
+註記欄(不轉入進銷項媒體申報檔), 折讓單日期, 最後異動時間, 
+MIG訊息類別, 傳送方統編, 傳送方名稱
+```
+
+**Important:** The same `折讓單號碼` can appear in multiple rows for different `品項名稱` (line items). We group by `折讓單號碼` and combine line items into a summary field, similar to how invoice details are stored.
+
+**Step 3.1: File type detection**
 
 ```typescript
-function parseTxtRow(buffer: Buffer, clientId: string, periodId: string) {
-  const formatCode = substringBytes(buffer, 1, 2);
+type ElectronicFileType = 'invoice' | 'allowance';
+
+function detectFileType(workbook: XLSX.WorkBook): ElectronicFileType {
+  for (const name of workbook.SheetNames) {
+    const sheet = workbook.Sheets[name];
+    const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
+    const firstRowValues: string[] = [];
+    
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      const cell = sheet[XLSX.utils.encode_cell({ r: range.s.r, c: C })];
+      if (cell && cell.v) firstRowValues.push(String(cell.v));
+    }
+    
+    // Allowance files have 折讓單號碼 header
+    if (firstRowValues.some(v => v.includes('折讓單號碼'))) {
+      return 'allowance';
+    }
+  }
   
-  if (isAllowanceFormatCode(formatCode)) {
-    return parseAllowanceTxtRow(buffer, clientId, periodId, formatCode);
+  // Default to invoice (existing behavior)
+  return 'invoice';
+}
+```
+
+**Step 3.2: Update `processElectronicInvoiceFile`**
+
+Dispatch to correct parser based on detected file type:
+
+```typescript
+export async function processElectronicInvoiceFile(
+  clientId: string,
+  firmId: string,
+  storagePath: string,
+  filename: string,
+  filingYearMonth: string,
+  options?: ProcessElectronicInvoiceTestOptions
+): Promise<ImportResult> {
+  // ... existing setup code ...
+  
+  const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+  const fileType = detectFileType(workbook);
+  
+  if (fileType === 'allowance') {
+    return processAllowanceExcelFile(
+      workbook, clientId, firmId, storagePath, filename, userId, filingPeriod
+    );
   } else {
-    return parseInvoiceTxtRow(buffer, clientId, periodId, formatCode);
+    // Existing invoice parsing logic
+    return processInvoiceExcelFile(
+      workbook, clientId, firmId, storagePath, filename, userId, result, filingPeriod
+    );
   }
 }
+```
 
-function parseAllowanceTxtRow(
-  buffer: Buffer, 
-  clientId: string, 
+**Step 3.3: Allowance Excel parsing (group by 折讓單號碼)**
+
+```typescript
+async function processAllowanceExcelFile(
+  workbook: XLSX.WorkBook,
+  clientId: string,
+  firmId: string,
+  storagePath: string,
+  filename: string,
+  userId: string,
+  filingPeriod: TaxFilingPeriod
+): Promise<ImportResult> {
+  const result: ImportResult = {
+    total: 0,
+    inserted: 0,
+    updated: 0,
+    skipped: 0,
+    failed: 0,
+    errors: [],
+  };
+  
+  // Allowance files have a single sheet
+  const sheetName = workbook.SheetNames[0];
+  const rows = XLSX.utils.sheet_to_json<ExcelRow>(workbook.Sheets[sheetName]);
+  
+  // Group rows by 折讓單號碼
+  const groupedRows = new Map<string, ExcelRow[]>();
+  for (const row of rows) {
+    const serialCode = getString(row, '折讓單號碼');
+    if (!serialCode) continue;
+    
+    if (!groupedRows.has(serialCode)) {
+      groupedRows.set(serialCode, []);
+    }
+    groupedRows.get(serialCode)!.push(row);
+  }
+  
+  result.total = groupedRows.size;
+  const allowancesToInsert: TablesInsert<'allowances'>[] = [];
+  
+  for (const [serialCode, itemRows] of groupedRows) {
+    try {
+      const allowance = parseAllowanceFromRows(
+        serialCode, itemRows, clientId, firmId, filingPeriod.id, userId
+      );
+      allowancesToInsert.push(allowance);
+    } catch (e) {
+      result.failed++;
+      result.errors.push(`折讓單 ${serialCode}: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    }
+  }
+  
+  // Batch insert
+  if (allowancesToInsert.length > 0) {
+    const { data, error } = await supabase.from('allowances').upsert(allowancesToInsert, {
+      onConflict: 'client_id, allowance_serial_code',
+    }).select('id');
+    
+    if (error) {
+      result.failed += allowancesToInsert.length;
+      result.errors.push(error.message);
+    } else {
+      result.inserted = data?.length || 0;
+      
+      // Attempt to link to original invoices
+      const allowanceIds = data?.map(a => a.id) || [];
+      await linkAllowancesToInvoices(clientId, allowanceIds);
+    }
+  }
+  
+  return result;
+}
+
+function parseAllowanceFromRows(
+  serialCode: string,
+  itemRows: ExcelRow[],
+  clientId: string,
+  firmId: string,
   periodId: string,
-  formatCode: string
-) {
+  userId: string
+): TablesInsert<'allowances'> {
+  // Take common fields from first row
+  const firstRow = itemRows[0];
+  const formatCode = getString(firstRow, '格式代號');
   const { inOrOut, allowanceType } = ALLOWANCE_FORMAT_CODE_MAP[formatCode];
-  const serialCode = substringBytes(buffer, 11, 10).trim();
-  const originalSerialCode = substringBytes(buffer, /* position for original */);
+  
+  const originalSerialCode = getString(firstRow, '發票號碼');
+  const dateVal = getRowValue(firstRow, '折讓單日期');
+  const dateStr = formatDate(dateVal);
+  
+  // Combine line items into summary text (similar to invoice details)
+  const summary = itemRows
+    .map(row => {
+      const desc = getString(row, '品項名稱');
+      const amt = getNumber(row, '品項折讓金額(不含稅)');
+      return `品名：${desc}, 金額：${amt}`;
+    })
+    .join('\n');
   
   return {
-    table: 'allowances',
-    data: {
-      client_id: clientId,
-      tax_filing_period_id: periodId,
-      allowance_serial_code: serialCode,
-      original_invoice_serial_code: originalSerialCode,
-      in_or_out: inOrOut,
-      extracted_data: {
-        allowanceType,
-        amount: parseAmount(buffer),
-        taxAmount: parseTaxAmount(buffer),
-        date: parseDate(buffer),
-        source: 'import-txt',
-        // ... other fields
-      },
-      status: 'processed',
-    }
+    firm_id: firmId,
+    client_id: clientId,
+    tax_filing_period_id: periodId,
+    allowance_serial_code: serialCode,
+    original_invoice_serial_code: originalSerialCode,
+    in_or_out: inOrOut,
+    status: 'uploaded',
+    uploaded_by: userId,
+    extracted_data: {
+      allowanceType,
+      amount: getNumber(firstRow, '折讓金額(不含稅)'),    // Total (same across rows)
+      taxAmount: getNumber(firstRow, '折讓稅額'),         // Total (same across rows)
+      date: dateStr,
+      sellerTaxId: getString(firstRow, '賣方統一編號'),
+      sellerName: getString(firstRow, '賣方名稱'),
+      buyerTaxId: getString(firstRow, '買方統一編號'),
+      buyerName: getString(firstRow, '買方名稱'),
+      summary,                                            // Combined line items as text
+      source: 'import-excel',
+    },
   };
 }
 ```
 
-**Step 3.2: Link original invoice**
+**Step 3.5: Link original invoice**
 
 Attempt to link allowances to existing invoices. This should happen:
 1. After inserting new allowances
@@ -406,7 +565,7 @@ async function linkAllowancesToInvoices(clientId: string, allowanceIds: string[]
 }
 ```
 
-**Step 3.3: Show alert for unlinked allowances**
+**Step 3.6: Show alert for unlinked allowances**
 
 In the UI, when displaying an allowance that has `original_invoice_serial_code` but no `original_invoice_id`:
 
@@ -419,14 +578,17 @@ if (allowance.original_invoice_serial_code && !allowance.original_invoice_id) {
 ```
 
 **Verification:**
-- [ ] Import TXT file with format code 33 records
-- [ ] Verify records inserted into `allowances` table (not `invoices`)
-- [ ] Verify `extracted_data.allowanceType = '電子發票折讓'`
-- [ ] Verify linking works when original invoice exists
-- [ ] Verify warning shown when original invoice not found
-- [ ] Verify manual update of serial code triggers re-link attempt
-
-**Step 3.4: Update Excel import similarly**
+- [ ] Auto-detection correctly identifies invoice vs allowance Excel files
+- [ ] Invoice Excel (with header+detail sheets) routes to existing invoice parser
+- [ ] Allowance Excel (with single sheet, `折讓單號碼` header) routes to allowance parser
+- [ ] Rows with same `折讓單號碼` are grouped into single allowance record
+- [ ] Line items are combined into `summary` field
+- [ ] Allowance records inserted into `allowances` table (not `invoices`)
+- [ ] Invoice records still go to `invoices` table
+- [ ] Verify `extracted_data.allowanceType` correctly derived from format code
+- [ ] Linking works when original invoice exists
+- [ ] Warning shown when original invoice not found
+- [ ] Manual update of serial code triggers re-link attempt
 
 ---
 
@@ -633,23 +795,187 @@ function aggregateReportData(
 
 ### Phase 6: UI Updates
 
-**Step 6.1: Allowance list view**
+#### Design Decision: Same Page, Separate Sections
 
-Create a separate allowances list page or add a tab to the invoices page.
+Display invoices and allowances on the **same page in separate sections**, each with independent pagination. This provides:
+- Clean visual separation
+- Simple pagination (each section queries its own table)
+- Single import button handles both types with auto-detection
 
-**Step 6.2: Upload flow**
+```
+┌─────────────────────────────────────────────────────┐
+│ 發票 (25)                                           │
+├─────────────────────────────────────────────────────┤
+│ AB-12345 | 進項 | $10,000 | 已確認                  │
+│ CD-67890 | 銷項 | $25,000 | 待確認                  │
+│ ... (pagination for invoices)                       │
+├─────────────────────────────────────────────────────┤
+│ 折讓 (3)                                            │
+├─────────────────────────────────────────────────────┤
+│ ZA-00001 | 進項 | -$500   | 已確認                  │
+│ ... (pagination for allowances)                     │
+├─────────────────────────────────────────────────────┤
+│                              [上傳發票/折讓] [匯入]  │
+└─────────────────────────────────────────────────────┘
+```
 
-After AI extraction, route to correct confirmation form based on document type.
+**Step 6.1: Separate sections for invoices and allowances**
 
-**Step 6.3: Allowance edit form**
+Update the period page (`/firm/[firmId]/client/[clientId]/period/[periodYYYMM]/page.tsx`) to display two sections:
+
+```typescript
+// Fetch invoices (existing, with pagination)
+const { data: invoices, count: invoiceCount } = await supabase
+  .from('invoices')
+  .select('*, client:clients(id, name)', { count: 'exact' })
+  .eq('client_id', clientId)
+  .eq('tax_filing_period_id', periodId)
+  .range(invoicePage * pageSize, (invoicePage + 1) * pageSize - 1);
+
+// Fetch allowances (new, with separate pagination)
+const { data: allowances, count: allowanceCount } = await supabase
+  .from('allowances')
+  .select('*, client:clients(id, name)', { count: 'exact' })
+  .eq('client_id', clientId)
+  .eq('tax_filing_period_id', periodId)
+  .range(allowancePage * pageSize, (allowancePage + 1) * pageSize - 1);
+```
+
+```tsx
+// Invoices section
+<Card>
+  <CardHeader>
+    <CardTitle>發票 ({invoiceCount})</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <InvoiceTable invoices={invoices} />
+    <Pagination page={invoicePage} total={invoiceCount} pageSize={pageSize} />
+  </CardContent>
+</Card>
+
+// Allowances section
+<Card>
+  <CardHeader>
+    <CardTitle>折讓 ({allowanceCount})</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <AllowanceTable allowances={allowances} />
+    <Pagination page={allowancePage} total={allowanceCount} pageSize={pageSize} />
+  </CardContent>
+</Card>
+```
+
+**Step 6.2: Single import button with auto-detection**
+
+One "匯入" button opens the import dialog, which accepts both invoice and allowance Excel files. Auto-detection routes to correct table.
+
+**Step 6.3: Multi-file import dialog**
+
+Update `InvoiceImportDialog` to support batch upload of up to 4 files with auto-detection:
+
+```typescript
+// components/invoice/invoice-import-dialog.tsx
+
+const importUploadProps = useSupabaseUpload({
+  bucketName: "electronic-invoices",  // Reuse existing bucket for both types
+  path: `${firmId}/${importPeriod.toString()}`,
+  allowedMimeTypes: [
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel",
+  ],
+  maxFiles: 4,  // Allow up to 4 files (in/out invoices + in/out allowances)
+  maxFileSize: 5 * 1024 * 1024,
+  // ... rest of config
+});
+
+// Process each file in parallel
+const handleImportComplete = useCallback(async () => {
+  if (isProcessingImport || !importUploadedFiles.length) return;
+  setIsProcessingImport(true);
+
+  try {
+    // Process all files in parallel
+    const results = await Promise.allSettled(
+      importUploadedFiles.map(file =>
+        processElectronicInvoiceFile(
+          clientId,
+          firmId,
+          file.path,
+          file.name,
+          importPeriod.toString()
+        )
+      )
+    );
+
+    // Aggregate results
+    const aggregated = {
+      invoices: { inserted: 0, updated: 0 },
+      allowances: { inserted: 0, updated: 0 },
+      errors: [] as string[],
+    };
+
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        const r = result.value;
+        // Note: Need to update ImportResult to distinguish invoice vs allowance counts
+        aggregated.invoices.inserted += r.inserted;
+        aggregated.invoices.updated += r.updated;
+        aggregated.errors.push(...r.errors);
+      } else {
+        aggregated.errors.push(`${importUploadedFiles[index].name}: ${result.reason}`);
+      }
+    });
+
+    // Show aggregated result
+    const successCount = aggregated.invoices.inserted + aggregated.invoices.updated +
+                        aggregated.allowances.inserted + aggregated.allowances.updated;
+    if (successCount > 0) {
+      toast.success(`成功匯入 ${successCount} 筆資料`);
+      onSuccess();
+    }
+    if (aggregated.errors.length > 0) {
+      toast.error(`${aggregated.errors.length} 筆匯入失敗`);
+      console.error("Import errors:", aggregated.errors);
+    }
+  } finally {
+    setIsProcessingImport(false);
+    onOpenChange(false);
+  }
+}, [/* deps */]);
+```
+
+**Step 6.4: Storage bucket reuse**
+
+Reuse existing storage buckets for both invoices and allowances:
+- Paper allowances: `invoices` bucket (same as paper invoices)
+- Electronic allowances: `electronic-invoices` bucket (same as electronic invoices)
+
+No new buckets needed.
+
+**Step 6.5: Upload flow for paper allowances**
+
+After AI extraction, route to correct confirmation form based on document type:
+
+```typescript
+// After Gemini extraction
+if (extractedData.isAllowance) {
+  // Route to allowance confirmation form
+  setReviewingAllowance({ ...allowance, extractedData });
+} else {
+  // Route to existing invoice confirmation form
+  setReviewingInvoice({ ...invoice, extractedData });
+}
+```
+
+**Step 6.6: Allowance edit form**
 
 Similar to invoice edit form, with:
 - Original invoice serial code field (editable)
-- Link to original invoice (if exists)
+- Link to original invoice (if exists, show as clickable link)
 - Allowance type dropdown
 - **On save**: If `original_invoice_serial_code` changed, attempt to re-link
 
-**Step 6.4: Unlinked allowance warning**
+**Step 6.7: Unlinked allowance warning**
 
 Display alert when allowance has `original_invoice_serial_code` but no `original_invoice_id`:
 
@@ -661,16 +987,44 @@ Display alert when allowance has `original_invoice_serial_code` but no `original
 )}
 ```
 
-**Step 6.5: Invoice detail view**
+**Step 6.8: Invoice detail view**
 
-Show linked allowances:
+Show linked allowances on invoice detail:
+
 ```typescript
 // On invoice detail page
 const { data: allowances } = await supabase
   .from('allowances')
   .select('*')
   .eq('original_invoice_id', invoiceId);
+
+// Display as list
+{allowances && allowances.length > 0 && (
+  <Card>
+    <CardHeader>
+      <CardTitle>相關折讓單</CardTitle>
+    </CardHeader>
+    <CardContent>
+      {allowances.map(a => (
+        <div key={a.id}>
+          {a.allowance_serial_code} - {a.extracted_data?.amount}
+        </div>
+      ))}
+    </CardContent>
+  </Card>
+)}
 ```
+
+**Verification:**
+- [ ] Page displays separate sections for invoices and allowances
+- [ ] Each section has independent pagination
+- [ ] Single import button opens dialog accepting both file types
+- [ ] Multi-file import processes all files in parallel
+- [ ] Auto-detection correctly identifies invoice vs allowance files by header
+- [ ] Aggregated result shows correct counts (X 筆發票, Y 筆折讓)
+- [ ] Paper allowance upload routes to correct confirmation form
+- [ ] Unlinked allowance shows warning
+- [ ] Invoice detail shows linked allowances
 
 ---
 
@@ -682,21 +1036,33 @@ const { data: allowances } = await supabase
 - [ ] `ALLOWANCE_FORMAT_CODE_MAP` lookups
 - [ ] `deriveInOrOut()` function
 - [ ] `aggregateReportData()` with allowances
+- [ ] `detectFileType()` correctly identifies invoice vs allowance Excel files
+- [ ] `parseAllowanceFromRows()` groups rows by `折讓單號碼`
 
 ### Integration Tests
-- [ ] TXT import routes allowance format codes to `allowances` table
-- [ ] Excel import routes allowances correctly
+- [ ] Excel import auto-detects file type by header (`折讓單號碼` = allowance)
+- [ ] Allowance Excel rows with same `折讓單號碼` grouped into single record
+- [ ] Line items combined into `summary` field in `extracted_data`
+- [ ] Excel import routes allowance files to `allowances` table
+- [ ] Excel import routes invoice files to `invoices` table
 - [ ] Original invoice linking works on insert
 - [ ] Original invoice linking works on serial code update
 - [ ] AI extraction detects 折讓證明單
 - [ ] `in_or_out` correctly derived from seller/buyer tax ID
 
 ### End-to-End Tests
+- [ ] Multi-file import: Upload 4 files at once (in/out invoices + in/out allowances)
+- [ ] Multi-file import: Each file processed in parallel
+- [ ] Multi-file import: Aggregated result shows correct counts
+- [ ] Multi-file import: Partial failure (3 succeed, 1 fails) handled gracefully
+- [ ] Page displays separate sections for invoices and allowances
+- [ ] Each section has independent pagination that works correctly
 - [ ] Full flow: Upload paper allowance → AI extract → Confirm → Generate reports
-- [ ] Full flow: Import TXT with allowances → Generate reports
+- [ ] Full flow: Import Excel with allowances → Generate reports
 - [ ] Verify TXT output format codes are correct
 - [ ] Verify TET_U aggregation is correct
 - [ ] Verify warning shown for unlinked allowances
+- [ ] Invoice detail shows linked allowances
 
 ---
 
@@ -715,4 +1081,4 @@ If issues are discovered after deployment:
 1. ~~**Original Invoice Validation**: Should we warn if original invoice doesn't exist in system?~~ **Yes**, show alert in UI.
 2. **Amount Validation**: Should we warn if allowance amount > original invoice amount?
 3. **Date Validation**: Should we warn if allowance date is before original invoice date?
-4. **UI Priority**: Combined list or separate tabs for invoices vs allowances?
+4. ~~**UI Priority**: Combined list or separate tabs for invoices vs allowances?~~ **Combined list** with type column and filter. See Phase 6.

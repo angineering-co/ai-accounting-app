@@ -34,6 +34,93 @@ export type Database = {
   }
   public: {
     Tables: {
+      allowances: {
+        Row: {
+          allowance_serial_code: string | null
+          client_id: string | null
+          created_at: string | null
+          extracted_data: Json | null
+          filename: string | null
+          firm_id: string
+          id: string
+          in_or_out: string
+          original_invoice_id: string | null
+          original_invoice_serial_code: string | null
+          status: string | null
+          storage_path: string | null
+          tax_filing_period_id: string | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          allowance_serial_code?: string | null
+          client_id?: string | null
+          created_at?: string | null
+          extracted_data?: Json | null
+          filename?: string | null
+          firm_id: string
+          id?: string
+          in_or_out: string
+          original_invoice_id?: string | null
+          original_invoice_serial_code?: string | null
+          status?: string | null
+          storage_path?: string | null
+          tax_filing_period_id?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          allowance_serial_code?: string | null
+          client_id?: string | null
+          created_at?: string | null
+          extracted_data?: Json | null
+          filename?: string | null
+          firm_id?: string
+          id?: string
+          in_or_out?: string
+          original_invoice_id?: string | null
+          original_invoice_serial_code?: string | null
+          status?: string | null
+          storage_path?: string | null
+          tax_filing_period_id?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "allowances_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "allowances_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "allowances_original_invoice_id_fkey"
+            columns: ["original_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "allowances_tax_filing_period_id_fkey"
+            columns: ["tax_filing_period_id"]
+            isOneToOne: false
+            referencedRelation: "tax_filing_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "allowances_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           contact_person: string | null

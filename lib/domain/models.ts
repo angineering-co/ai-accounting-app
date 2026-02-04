@@ -98,6 +98,85 @@ export type ExtractedInvoiceData = z.infer<typeof extractedInvoiceDataSchema>;
 export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
 export type UpdateInvoiceInput = z.infer<typeof updateInvoiceSchema>;
 
+// ===== Allowance Schemas =====
+
+// Schema for extracted allowance data (stored in JSONB column)
+export const extractedAllowanceDataSchema = z.object({
+  // Allowance classification
+  allowanceType: z.enum(['三聯式折讓', '電子發票折讓', '二聯式折讓']).optional(),
+
+  // Original invoice reference (also stored in column for indexing)
+  originalInvoiceSerialCode: z.string().optional(),
+
+  // Amounts (totals for the entire allowance)
+  amount: z.number().optional(),      // 折讓金額 (銷售額)
+  taxAmount: z.number().optional(),   // 折讓稅額
+  totalAmount: z.number().optional(), // 合計
+
+  // Date
+  date: z.string().optional(),  // YYYY/MM/DD format
+
+  // Party information (used to derive in_or_out)
+  sellerName: z.string().optional(),
+  sellerTaxId: z.string().optional(),
+  buyerName: z.string().optional(),
+  buyerTaxId: z.string().optional(),
+
+  // Combined line items as text (for display, similar to invoice summary)
+  // Groups multiple rows with same 折讓單號碼 into a single text field
+  summary: z.string().optional(),
+
+  // For 進項 allowances: deduction type
+  deductionCode: z.enum(['1', '2']).optional(),  // 1=進貨費用, 2=固定資產
+
+  // Metadata
+  source: z.enum(['scan', 'import-excel']).optional(),
+  confidence: z.record(z.string(), z.enum(['low', 'medium', 'high'])).optional(),
+}).passthrough();
+
+export const allowanceSchema = z.object({
+  id: z.string().uuid(),
+  firm_id: z.string().uuid(),
+  client_id: z.string().uuid().nullable().optional(),
+  tax_filing_period_id: z.string().uuid().nullable().optional(),
+  allowance_serial_code: z.string().nullable().optional(),
+  original_invoice_serial_code: z.string().nullable().optional(),
+  original_invoice_id: z.string().uuid().nullable().optional(),
+  in_or_out: z.enum(['in', 'out']),
+  storage_path: z.string().nullable().optional(),
+  filename: z.string().nullable().optional(),
+  status: z.enum(['uploaded', 'processing', 'processed', 'confirmed', 'failed']),
+  extracted_data: extractedAllowanceDataSchema.nullable().optional(),
+  uploaded_by: z.string().uuid().nullable().optional(),
+  created_at: z.coerce.date(),
+});
+
+export const createAllowanceSchema = z.object({
+  firm_id: z.string().uuid(),
+  client_id: z.string().uuid().nullable().optional(),
+  tax_filing_period_id: z.string().uuid().optional(),
+  allowance_serial_code: z.string().nullable().optional(),
+  original_invoice_serial_code: z.string().nullable().optional(),
+  in_or_out: z.enum(['in', 'out']),
+  storage_path: z.string().optional(),
+  filename: z.string().optional(),
+});
+
+export const updateAllowanceSchema = z.object({
+  client_id: z.string().uuid().nullable().optional(),
+  tax_filing_period_id: z.string().uuid().nullable().optional(),
+  original_invoice_serial_code: z.string().nullable().optional(),
+  original_invoice_id: z.string().uuid().nullable().optional(),
+  in_or_out: z.enum(['in', 'out']).optional(),
+  status: z.enum(['uploaded', 'processing', 'processed', 'confirmed', 'failed']).optional(),
+  extracted_data: extractedAllowanceDataSchema.nullable().optional(),
+});
+
+export type Allowance = z.infer<typeof allowanceSchema>;
+export type ExtractedAllowanceData = z.infer<typeof extractedAllowanceDataSchema>;
+export type CreateAllowanceInput = z.infer<typeof createAllowanceSchema>;
+export type UpdateAllowanceInput = z.infer<typeof updateAllowanceSchema>;
+
 // ===== Invoice Range Schemas =====
 export const invoiceRangeSchema = z.object({
   id: z.string().uuid(),

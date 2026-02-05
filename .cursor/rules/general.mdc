@@ -4,6 +4,8 @@ alwaysApply: true
 General
 - Always `npm run lint` to fix all the issues after you make changes
 - DO NOT auto git-add or git-commit the changes for me unless specifically asked
+- Always format the document after you make changes
+- Re-read and udpate the doc, e.g. task checkboxes, if asked to implement certain sections of a design doc
 
 Frontend
 - UI Components: Use shadcn library. Only build custom components if necessary

@@ -49,53 +49,53 @@ export function AllowanceTable({
 
   return (
     <div className="border rounded-md">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>折讓單號碼</TableHead>
-            <TableHead>原發票號碼</TableHead>
-            <TableHead>類型</TableHead>
-            <TableHead className="text-right">折讓金額</TableHead>
-            <TableHead className="text-right">折讓稅額</TableHead>
-            <TableHead>折讓日期</TableHead>
-            <TableHead>狀態</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {isLoading ? (
+      <TooltipProvider>
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={7} className="h-24 text-center">
-                <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
-              </TableCell>
+              <TableHead>折讓單號碼</TableHead>
+              <TableHead>原發票號碼</TableHead>
+              <TableHead>類型</TableHead>
+              <TableHead className="text-right">折讓金額</TableHead>
+              <TableHead className="text-right">折讓稅額</TableHead>
+              <TableHead>折讓日期</TableHead>
+              <TableHead>狀態</TableHead>
             </TableRow>
-          ) : allowances.length === 0 ? (
-            <TableRow>
-              <TableCell
-                colSpan={7}
-                className="h-24 text-center text-muted-foreground"
-              >
-                無折讓資料。
-              </TableCell>
-            </TableRow>
-          ) : (
-            allowances.map((allowance) => {
-              const extractedData = allowance.extracted_data;
-              const hasUnlinkedWarning = allowance.original_invoice_serial_code && !allowance.original_invoice_id;
-              
-              return (
-                <TableRow 
-                  key={allowance.id}
-                  className={onReview ? "cursor-pointer hover:bg-muted/50" : ""}
-                  onClick={() => onReview?.(allowance)}
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={7} className="h-24 text-center">
+                  <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+                </TableCell>
+              </TableRow>
+            ) : allowances.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={7}
+                  className="h-24 text-center text-muted-foreground"
                 >
-                  <TableCell className="font-mono tabular-nums">
-                    {allowance.allowance_serial_code || "-"}
-                  </TableCell>
-                  <TableCell className="font-mono tabular-nums">
-                    <div className="flex items-center gap-1">
-                      {allowance.original_invoice_serial_code || "-"}
-                      {hasUnlinkedWarning && (
-                        <TooltipProvider>
+                  無折讓資料。
+                </TableCell>
+              </TableRow>
+            ) : (
+              allowances.map((allowance) => {
+                const extractedData = allowance.extracted_data;
+                const hasUnlinkedWarning = allowance.original_invoice_serial_code && !allowance.original_invoice_id;
+                
+                return (
+                  <TableRow 
+                    key={allowance.id}
+                    className={onReview ? "cursor-pointer hover:bg-muted/50" : ""}
+                    onClick={() => onReview?.(allowance)}
+                  >
+                    <TableCell className="font-mono tabular-nums">
+                      {allowance.allowance_serial_code || "-"}
+                    </TableCell>
+                    <TableCell className="font-mono tabular-nums">
+                      <div className="flex items-center gap-1">
+                        {allowance.original_invoice_serial_code || "-"}
+                        {hasUnlinkedWarning && (
                           <Tooltip>
                             <TooltipTrigger>
                               <AlertTriangle className="h-4 w-4 text-amber-500" />
@@ -104,29 +104,29 @@ export function AllowanceTable({
                               <p>找不到原始發票</p>
                             </TooltipContent>
                           </Tooltip>
-                        </TooltipProvider>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {allowance.in_or_out === "in" ? "進項折讓" : "銷項折讓"}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatAmount(extractedData?.amount)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatAmount(extractedData?.taxAmount)}
-                  </TableCell>
-                  <TableCell>
-                    {extractedData?.date || "-"}
-                  </TableCell>
-                  <TableCell>{getStatusBadge(allowance.status || "uploaded")}</TableCell>
-                </TableRow>
-              );
-            })
-          )}
-        </TableBody>
-      </Table>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {allowance.in_or_out === "in" ? "進項折讓" : "銷項折讓"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatAmount(extractedData?.amount)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatAmount(extractedData?.taxAmount)}
+                    </TableCell>
+                    <TableCell>
+                      {extractedData?.date || "-"}
+                    </TableCell>
+                    <TableCell>{getStatusBadge(allowance.status || "uploaded")}</TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+      </TooltipProvider>
     </div>
   );
 }

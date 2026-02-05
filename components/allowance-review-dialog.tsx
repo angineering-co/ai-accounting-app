@@ -227,7 +227,7 @@ export function AllowanceReviewDialog({
     } else {
       setExcelData(null);
     }
-  }, [allowance, isOpen, form, supabase.storage]);
+  }, [allowance, isOpen, form, supabase]);
 
   const handleSave = useCallback(
     async (

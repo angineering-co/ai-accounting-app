@@ -38,8 +38,10 @@ import {
 } from "lucide-react";
 import {
   extractedInvoiceDataSchema,
+  allowanceSchema,
   type ExtractedInvoiceData,
   type Invoice,
+  type Allowance,
 } from "@/lib/domain/models";
 import { ACCOUNTS, ACCOUNT_LIST } from "@/lib/data/accounts";
 import { RocPeriod } from "@/lib/domain/roc-period";
@@ -64,6 +66,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface InvoiceReviewDialogProps {
   invoice: Invoice | null;
@@ -96,6 +99,7 @@ export function InvoiceReviewDialog({
     headers: string[];
     rows: unknown[][];
   } | null>(null);
+  const [linkedAllowances, setLinkedAllowances] = useState<Allowance[]>([]);
   const supabase = createClient();
 
   const form = useForm<ExtractedInvoiceData>({
@@ -323,12 +327,28 @@ export function InvoiceReviewDialog({
         }
       };
       getPreview();
+
+      // Fetch linked allowances
+      const fetchLinkedAllowances = async () => {
+        const { data } = await supabase
+          .from("allowances")
+          .select("*")
+          .eq("original_invoice_id", invoice.id);
+        
+        if (data) {
+          setLinkedAllowances(allowanceSchema.array().parse(data));
+        } else {
+          setLinkedAllowances([]);
+        }
+      };
+      fetchLinkedAllowances();
     } else {
       setPreviewUrl(null);
       setPreviewText(null);
       setExcelData(null);
+      setLinkedAllowances([]);
     }
-  }, [invoice, isOpen, form, supabase.storage]);
+  }, [invoice, isOpen, form, supabase.storage, supabase]);
 
   const handleSave = useCallback(
     async (
@@ -1052,6 +1072,44 @@ export function InvoiceReviewDialog({
             </form>
           </Form>
         </div>
+
+        {/* Linked Allowances Section */}
+        {linkedAllowances.length > 0 && (
+          <Card className="mt-4">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">
+                相關折讓單 ({linkedAllowances.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="space-y-2">
+                {linkedAllowances.map((allowance) => (
+                  <div
+                    key={allowance.id}
+                    className="flex items-center justify-between text-sm p-2 bg-muted rounded-md"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono">
+                        {allowance.allowance_serial_code || "-"}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {allowance.extracted_data?.date || "-"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-red-600 font-medium">
+                        -${(allowance.extracted_data?.amount || 0).toLocaleString()}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {allowance.status === "confirmed" ? "已確認" : "待確認"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <DialogFooter className="flex flex-col sm:flex-row gap-2">
           <TooltipProvider>

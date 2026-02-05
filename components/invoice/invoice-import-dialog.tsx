@@ -28,6 +28,7 @@ interface InvoiceImportDialogProps {
   clientId: string;
   period: RocPeriod;
   onSuccess: () => void;
+  onAllowanceSuccess?: () => void; // Optional callback when allowances are imported
 }
 
 export function InvoiceImportDialog({
@@ -37,6 +38,7 @@ export function InvoiceImportDialog({
   clientId,
   period,
   onSuccess,
+  onAllowanceSuccess,
 }: InvoiceImportDialogProps) {
   const [importPeriod, setImportPeriod] = useState<RocPeriod>(period);
   const [isProcessingImport, setIsProcessingImport] = useState(false);
@@ -53,7 +55,7 @@ export function InvoiceImportDialog({
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "application/vnd.ms-excel",
     ],
-    maxFiles: 1,
+    maxFiles: 4, // Allow up to 4 files (in/out invoices + in/out allowances)
     maxFileSize: 5 * 1024 * 1024,
     getStorageKey: (file) => {
       // Sanitize filename to ensure valid storage key
@@ -76,29 +78,75 @@ export function InvoiceImportDialog({
     setIsProcessingImport(true);
 
     try {
-      const file = importUploadedFiles[0];
-
-      const result = await processElectronicInvoiceFile(
-        clientId,
-        firmId,
-        file.path,
-        file.name,
-        importPeriod.toString(),
+      // Process all files in parallel
+      const results = await Promise.allSettled(
+        importUploadedFiles.map(file =>
+          processElectronicInvoiceFile(
+            clientId,
+            firmId,
+            file.path,
+            file.name,
+            importPeriod.toString(),
+          )
+        )
       );
 
-      if (result.inserted > 0 || result.updated > 0) {
-        toast.success(
-          `成功匯入 ${result.inserted + result.updated} 筆發票 (新增 ${result.inserted} 筆，更新 ${result.updated} 筆)`,
-        );
+      // Aggregate results by type
+      const aggregated = {
+        invoices: { inserted: 0, updated: 0, failed: 0 },
+        allowances: { inserted: 0, updated: 0, failed: 0 },
+        errors: [] as string[],
+      };
+
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          const r = result.value;
+          if (r.fileType === 'allowance') {
+            aggregated.allowances.inserted += r.inserted;
+            aggregated.allowances.updated += r.updated;
+            aggregated.allowances.failed += r.failed;
+          } else {
+            aggregated.invoices.inserted += r.inserted;
+            aggregated.invoices.updated += r.updated;
+            aggregated.invoices.failed += r.failed;
+          }
+          aggregated.errors.push(...r.errors);
+        } else {
+          aggregated.errors.push(`${importUploadedFiles[index].name}: ${result.reason}`);
+        }
+      });
+
+      // Show success messages
+      const invoiceCount = aggregated.invoices.inserted + aggregated.invoices.updated;
+      const allowanceCount = aggregated.allowances.inserted + aggregated.allowances.updated;
+      const totalSuccess = invoiceCount + allowanceCount;
+
+      if (totalSuccess > 0) {
+        const messages: string[] = [];
+        if (invoiceCount > 0) {
+          messages.push(`${invoiceCount} 筆發票`);
+        }
+        if (allowanceCount > 0) {
+          messages.push(`${allowanceCount} 筆折讓`);
+        }
+        toast.success(`成功匯入 ${messages.join('、')}`);
+        
         onOpenChange(false);
         setImportFiles([]);
         setImportUploadedFiles([]);
         onSuccess();
+        
+        // Also refresh allowances if any were imported
+        if (allowanceCount > 0 && onAllowanceSuccess) {
+          onAllowanceSuccess();
+        }
       }
 
-      if (result.failed > 0) {
-        toast.error(`${result.failed} 筆發票匯入失敗，請查看詳情`);
-        console.error("Import errors:", result.errors);
+      // Show error messages
+      const totalFailed = aggregated.invoices.failed + aggregated.allowances.failed;
+      if (totalFailed > 0 || aggregated.errors.length > 0) {
+        toast.error(`${totalFailed} 筆匯入失敗，請查看詳情`);
+        console.error("Import errors:", aggregated.errors);
       }
     } catch (error) {
       console.error("Processing error:", error);
@@ -114,6 +162,7 @@ export function InvoiceImportDialog({
     setImportFiles,
     setImportUploadedFiles,
     onSuccess,
+    onAllowanceSuccess,
     importPeriod,
     onOpenChange,
   ]);
@@ -138,9 +187,9 @@ export function InvoiceImportDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <ResponsiveDialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>匯入電子發票</DialogTitle>
+          <DialogTitle>匯入電子發票/折讓</DialogTitle>
           <DialogDescription>
-            請選擇所屬期別並上傳電子發票 Excel 檔。
+            上傳電子發票或折讓 Excel 檔（最多 4 個檔案），系統會自動識別檔案類型。
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">

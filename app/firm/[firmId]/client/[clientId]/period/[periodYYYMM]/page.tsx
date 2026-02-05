@@ -5,13 +5,15 @@ import useSWR from "swr";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, ArrowLeft, Lock, Unlock, Plus, FileText } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { InvoiceTable } from "@/components/invoice-table";
+import { AllowanceTable } from "@/components/allowance-table";
 import { RangeManagement } from "@/components/range-management";
 import { ReportGeneration } from "@/components/report-generation";
 import { toast } from "sonner";
-import { type Invoice, invoiceSchema, clientSchema } from "@/lib/domain/models";
+import { type Invoice, type Allowance, invoiceSchema, allowanceSchema, clientSchema } from "@/lib/domain/models";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import {
   getTaxPeriodByYYYMM,
@@ -24,6 +26,7 @@ import { InvoiceUploadDialog } from "@/components/invoice/invoice-upload-dialog"
 import { InvoiceImportDialog } from "@/components/invoice/invoice-import-dialog";
 import { InvoiceEditDialog } from "@/components/invoice/invoice-edit-dialog";
 import { InvoiceDeleteDialog } from "@/components/invoice/invoice-delete-dialog";
+import { AllowanceReviewDialog } from "@/components/allowance-review-dialog";
 
 export default function PeriodDetailPage({
   params,
@@ -37,6 +40,7 @@ export default function PeriodDetailPage({
 
   // State
   const [reviewingInvoice, setReviewingInvoice] = useState<Invoice | null>(null);
+  const [reviewingAllowance, setReviewingAllowance] = useState<Allowance | null>(null);
   const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
@@ -86,6 +90,25 @@ export default function PeriodDetailPage({
     },
   );
 
+  // Fetch Allowances (Filtered by Period ID)
+  const { 
+    data: allowances = [], 
+    isLoading: isAllowancesLoading,
+    mutate: fetchAllowances
+  } = useSWR(
+    period ? ["period-allowances", period.id] : null,
+    async () => {
+      if (!period) return [];
+      const { data, error } = await supabase
+        .from("allowances")
+        .select("*")
+        .eq("tax_filing_period_id", period.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return allowanceSchema.array().parse(data || []);
+    },
+  );
+
   const handleToggleLock = async () => {
     if (!period) return;
     const newStatus = period.status === "locked" ? "open" : "locked";
@@ -131,6 +154,26 @@ export default function PeriodDetailPage({
     );
     if (currentIndex > 0) {
       setReviewingInvoice(invoices[currentIndex - 1]);
+    }
+  };
+
+  const handleAllowanceReviewNext = () => {
+    if (!reviewingAllowance) return;
+    const currentIndex = allowances.findIndex(
+      (a) => a.id === reviewingAllowance.id
+    );
+    if (currentIndex >= 0 && currentIndex < allowances.length - 1) {
+      setReviewingAllowance(allowances[currentIndex + 1]);
+    }
+  };
+
+  const handleAllowanceReviewPrevious = () => {
+    if (!reviewingAllowance) return;
+    const currentIndex = allowances.findIndex(
+      (a) => a.id === reviewingAllowance.id
+    );
+    if (currentIndex > 0) {
+      setReviewingAllowance(allowances[currentIndex - 1]);
     }
   };
 
@@ -210,15 +253,15 @@ export default function PeriodDetailPage({
         </TabsList>
 
         <TabsContent value="invoices" className="mt-6 space-y-6">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">本期發票</h2>
+          {/* Action buttons */}
+          <div className="flex justify-end">
             <div className="flex gap-2">
               <Button
                 variant="outline"
                 onClick={() => setIsImportModalOpen(true)}
                 disabled={isLocked}
               >
-                <FileText className="mr-2 h-4 w-4" /> 匯入電子發票
+                <FileText className="mr-2 h-4 w-4" /> 匯入電子發票/折讓
               </Button>
               <Button
                 onClick={() => setIsUploadModalOpen(true)}
@@ -229,15 +272,37 @@ export default function PeriodDetailPage({
             </div>
           </div>
 
-          <InvoiceTable
-            invoices={invoices}
-            isLoading={isInvoicesLoading}
-            onReview={setReviewingInvoice}
-            onExtractAI={isLocked ? undefined : handleExtractInvoice}
-            onEdit={isLocked ? undefined : setEditingInvoice}
-            onDelete={isLocked ? undefined : setInvoiceToDelete}
-            showClientColumn={false}
-          />
+          {/* Invoices Section */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">發票 ({invoices.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <InvoiceTable
+                invoices={invoices}
+                isLoading={isInvoicesLoading}
+                onReview={setReviewingInvoice}
+                onExtractAI={isLocked ? undefined : handleExtractInvoice}
+                onEdit={isLocked ? undefined : setEditingInvoice}
+                onDelete={isLocked ? undefined : setInvoiceToDelete}
+                showClientColumn={false}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Allowances Section */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">折讓 ({allowances.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <AllowanceTable
+                allowances={allowances}
+                isLoading={isAllowancesLoading}
+                onReview={setReviewingAllowance}
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="ranges" className="mt-6">
@@ -256,6 +321,7 @@ export default function PeriodDetailPage({
         clientId={clientId}
         period={rocPeriod}
         onSuccess={fetchInvoices}
+        onAllowanceSuccess={fetchAllowances}
       />
 
       <InvoiceUploadDialog
@@ -294,6 +360,16 @@ export default function PeriodDetailPage({
         open={!!invoiceToDelete}
         onOpenChange={(open) => !open && setInvoiceToDelete(null)}
         onSuccess={fetchInvoices}
+      />
+
+      <AllowanceReviewDialog
+        allowance={reviewingAllowance}
+        isOpen={!!reviewingAllowance}
+        onOpenChange={(open) => !open && setReviewingAllowance(null)}
+        onSuccess={fetchAllowances}
+        onNext={handleAllowanceReviewNext}
+        onPrevious={handleAllowanceReviewPrevious}
+        isLocked={isLocked}
       />
     </div>
   );

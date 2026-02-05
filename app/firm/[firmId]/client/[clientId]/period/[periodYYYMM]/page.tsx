@@ -102,6 +102,7 @@ export default function PeriodDetailPage({
       const { data, error } = await supabase
         .from("allowances")
         .select("*")
+        .eq("client_id", clientId)
         .eq("tax_filing_period_id", period.id)
         .order("created_at", { ascending: false });
       if (error) throw error;

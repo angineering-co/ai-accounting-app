@@ -31,6 +31,10 @@ import {
   CheckCircle,
   Save,
   AlertTriangle,
+  Hand,
+  ZoomIn,
+  ZoomOut,
+  RotateCw,
 } from "lucide-react";
 import {
   extractedAllowanceDataSchema,
@@ -58,6 +62,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import Image from "next/image";
 
 interface AllowanceReviewDialogProps {
   allowance: Allowance | null;
@@ -82,6 +87,14 @@ export function AllowanceReviewDialog({
     headers: string[];
     rows: unknown[][];
   } | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewText, setPreviewText] = useState<string | null>(null);
+  const [rotation, setRotation] = useState(0);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanMode, setIsPanMode] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [previewLoading, setPreviewLoading] = useState(false);
   const supabase = createClient();
 
@@ -119,12 +132,7 @@ export function AllowanceReviewDialog({
       !dateValue ||
       !amount
     );
-  }, [
-    allowance?.status,
-    originalInvoiceSerialCode,
-    dateValue,
-    amount,
-  ]);
+  }, [allowance?.status, originalInvoiceSerialCode, dateValue, amount]);
 
   const confirmDisabledReason = useMemo(() => {
     if (isLocked) return "此折讓目前已被鎖定，無法修改";
@@ -185,40 +193,58 @@ export function AllowanceReviewDialog({
         ...extractedData,
       });
 
-      // Load Excel preview if source is import-excel
+      // Load preview based on source
       const loadPreview = async () => {
         const isExcelImport = extractedData.source === "import-excel";
-        if (!isExcelImport || !allowance.storage_path) {
+        if (!allowance.storage_path) {
           setExcelData(null);
+          setPreviewUrl(null);
+          setPreviewText("無文件預覽");
           return;
         }
 
         setPreviewLoading(true);
         try {
-          const { data, error } = await supabase.storage
-            .from("electronic-invoices")
-            .download(allowance.storage_path);
+          if (isExcelImport) {
+            const { data, error } = await supabase.storage
+              .from("electronic-invoices")
+              .download(allowance.storage_path);
 
-          if (error) throw error;
+            if (error) throw error;
 
-          if (data) {
-            const buffer = await data.arrayBuffer();
-            const XLSX = await import("xlsx");
-            const workbook = XLSX.read(buffer, { type: "array" });
-            const sheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[sheetName];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet, {
-              header: 1,
-            }) as unknown[][];
+            if (data) {
+              const buffer = await data.arrayBuffer();
+              const XLSX = await import("xlsx");
+              const workbook = XLSX.read(buffer, { type: "array" });
+              const sheetName = workbook.SheetNames[0];
+              const worksheet = workbook.Sheets[sheetName];
+              const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+                header: 1,
+              }) as unknown[][];
 
-            if (jsonData && jsonData.length > 0) {
-              const headers = jsonData[0] as string[];
-              const rows = jsonData.slice(1);
-              setExcelData({ headers, rows });
+              if (jsonData && jsonData.length > 0) {
+                const headers = jsonData[0] as string[];
+                const rows = jsonData.slice(1);
+                setExcelData({ headers, rows });
+                setPreviewUrl(null);
+                setPreviewText(null);
+              } else {
+                setExcelData(null);
+                setPreviewText("Excel 檔案為空");
+              }
             }
+          } else {
+            setExcelData(null);
+            setPreviewText(null);
+            const { data } = await supabase.storage
+              .from("invoices")
+              .createSignedUrl(allowance.storage_path, 3600);
+
+            if (data) setPreviewUrl(data.signedUrl);
           }
         } catch (e) {
           console.error("Error previewing excel:", e);
+          setPreviewText("無法預覽檔案");
         } finally {
           setPreviewLoading(false);
         }
@@ -226,6 +252,8 @@ export function AllowanceReviewDialog({
       loadPreview();
     } else {
       setExcelData(null);
+      setPreviewUrl(null);
+      setPreviewText(null);
     }
   }, [allowance, isOpen, form, supabase]);
 
@@ -283,6 +311,32 @@ export function AllowanceReviewDialog({
       if (isInput) return;
 
       switch (e.key) {
+        case "+":
+        case "=": // Also handle = key which is often same key as +
+          if (!previewText && !excelData) {
+            e.preventDefault();
+            setZoom((prev) => Math.min(prev + 0.1, 3));
+          }
+          break;
+        case "-":
+        case "_":
+          if (!previewText && !excelData) {
+            e.preventDefault();
+            setZoom((prev) => Math.max(prev - 0.1, 0.5));
+          }
+          break;
+        case "ArrowLeft":
+          if (!previewText && !excelData) {
+            e.preventDefault();
+            setRotation((prev) => prev - 90);
+          }
+          break;
+        case "ArrowRight":
+          if (!previewText && !excelData) {
+            e.preventDefault();
+            setRotation((prev) => prev + 90);
+          }
+          break;
         case "ArrowUp":
           e.preventDefault();
           onPrevious?.();
@@ -296,9 +350,32 @@ export function AllowanceReviewDialog({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onNext, onPrevious, form, handleSave]);
+  }, [isOpen, previewText, excelData, onNext, onPrevious, form, handleSave]);
 
   const allowanceCode = allowance?.allowance_serial_code;
+  const isPdf = allowance?.filename?.toLowerCase().endsWith(".pdf");
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if ((isPanMode || !isPdf) && previewUrl && !excelData) {
+      e.preventDefault();
+      setIsDragging(true);
+      setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isDragging) {
+      e.preventDefault();
+      setPan({
+        x: e.clientX - dragStart.x,
+        y: e.clientY - dragStart.y,
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -315,7 +392,69 @@ export function AllowanceReviewDialog({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
           {/* Preview Section */}
-          <div className="border rounded-lg bg-muted flex items-center justify-center min-h-[300px] overflow-hidden relative">
+          <div
+            className={`border rounded-lg bg-muted flex items-center justify-center min-h-[300px] overflow-hidden relative group ${
+              (isPanMode || !isPdf) && previewUrl && !excelData
+                ? isDragging
+                  ? "cursor-grabbing"
+                  : "cursor-grab"
+                : ""
+            }`}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+          >
+            {/* Image Controls Overlay */}
+            {!previewText && !excelData && previewUrl && (
+              <div className="absolute top-2 right-2 flex gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 p-1 rounded-lg backdrop-blur-sm">
+                <Button
+                  type="button"
+                  variant={isPanMode ? "secondary" : "ghost"}
+                  size="icon"
+                  className={`h-8 w-8 ${
+                    isPanMode
+                      ? "bg-white text-black hover:bg-white/90"
+                      : "text-white hover:text-white hover:bg-white/20"
+                  }`}
+                  onClick={() => setIsPanMode(!isPanMode)}
+                  title={isPanMode ? "關閉拖曳模式" : "開啟拖曳模式"}
+                >
+                  <Hand className="h-4 w-4" />
+                </Button>
+                <div className="w-px h-4 bg-white/20 my-auto mx-1" />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-white hover:text-white hover:bg-white/20"
+                  onClick={() => setZoom((z) => Math.min(z + 0.1, 3))}
+                  title="放大 (+)"
+                >
+                  <ZoomIn className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-white hover:text-white hover:bg-white/20"
+                  onClick={() => setZoom((z) => Math.max(z - 0.1, 0.5))}
+                  title="縮小 (-)"
+                >
+                  <ZoomOut className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-white hover:text-white hover:bg-white/20"
+                  onClick={() => setRotation((r) => r + 90)}
+                  title="旋轉"
+                >
+                  <RotateCw className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
             {previewLoading ? (
               <div className="flex flex-col items-center gap-2 text-muted-foreground">
                 <Loader2 className="h-8 w-8 animate-spin" />
@@ -365,10 +504,44 @@ export function AllowanceReviewDialog({
                   </TableBody>
                 </Table>
               </div>
+            ) : previewUrl ? (
+              <div
+                className="w-full h-full flex items-center justify-center transition-transform duration-75 ease-linear"
+                style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}
+              >
+                {isPdf ? (
+                  <div className="relative w-full h-full min-h-[400px]">
+                    <iframe
+                      src={previewUrl}
+                      className="w-full h-full transition-transform duration-200 ease-in-out origin-center bg-white"
+                      style={{
+                        transform: `rotate(${rotation}deg) scale(${zoom})`,
+                      }}
+                      title="Allowance Preview"
+                    />
+                    {isPanMode && (
+                      <div className="absolute inset-0 z-10 bg-transparent" />
+                    )}
+                  </div>
+                ) : (
+                  <Image
+                    src={previewUrl}
+                    alt="Allowance Preview"
+                    width={0}
+                    height={0}
+                    sizes="100vw"
+                    className="w-auto h-auto max-w-full max-h-full object-contain transition-transform duration-200 ease-in-out origin-center"
+                    style={{
+                      transform: `rotate(${rotation}deg) scale(${zoom})`,
+                    }}
+                    unoptimized
+                  />
+                )}
+              </div>
             ) : (
               <div className="flex flex-col items-center gap-2 text-muted-foreground p-4 text-center">
-                <p>此折讓來自電子發票匯入</p>
-                <p className="text-sm">無文件預覽</p>
+                <p>無文件預覽</p>
+                {previewText && <p className="text-sm">{previewText}</p>}
               </div>
             )}
           </div>
@@ -485,9 +658,7 @@ export function AllowanceReviewDialog({
                           {...field}
                           type="number"
                           value={field.value ?? ""}
-                          className={cn(
-                            getConfidenceStyle("amount"),
-                          )}
+                          className={cn(getConfidenceStyle("amount"))}
                           onChange={(e) => {
                             field.onChange(
                               e.target.value
@@ -513,9 +684,7 @@ export function AllowanceReviewDialog({
                           {...field}
                           type="number"
                           value={field.value ?? ""}
-                          className={cn(
-                            getConfidenceStyle("taxAmount"),
-                          )}
+                          className={cn(getConfidenceStyle("taxAmount"))}
                           onChange={(e) => {
                             field.onChange(
                               e.target.value

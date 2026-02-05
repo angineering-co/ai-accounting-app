@@ -334,6 +334,7 @@ export default function PeriodDetailPage({
         periodId={period.id}
         clientName={client.name}
         onSuccess={fetchInvoices}
+        onAllowanceSuccess={fetchAllowances}
       />
 
       <InvoiceReviewDialog

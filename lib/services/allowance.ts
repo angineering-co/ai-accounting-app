@@ -2,11 +2,39 @@
 
 import { createClient } from "@/lib/supabase/server";
 import {
+  createAllowanceSchema,
   updateAllowanceSchema,
+  type CreateAllowanceInput,
   type UpdateAllowanceInput,
 } from "@/lib/domain/models";
 import { type Json, type TablesUpdate } from "@/supabase/database.types";
 import { tryLinkOriginalInvoice } from "@/lib/services/invoice-import";
+
+/**
+ * Create an allowance record
+ */
+export async function createAllowance(data: CreateAllowanceInput) {
+  const supabase = await createClient();
+
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Unauthorized');
+
+  const validated = createAllowanceSchema.parse(data);
+
+  const { data: allowance, error } = await supabase
+    .from('allowances')
+    .insert({
+      ...validated,
+      uploaded_by: user.id,
+      status: 'uploaded',
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return allowance;
+}
 
 /**
  * Update an allowance record

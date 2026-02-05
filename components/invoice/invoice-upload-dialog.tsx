@@ -31,14 +31,37 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { createInvoice } from "@/lib/services/invoice";
+import { createAllowance } from "@/lib/services/allowance";
 import { useSupabaseUpload } from "@/hooks/use-supabase-upload";
 
 const uploadFormSchema = z.object({
-  in_or_out: z.enum(["in", "out"]),
+  document_type: z.enum([
+    "invoice-in",
+    "invoice-out",
+    "allowance-in",
+    "allowance-out",
+  ]),
   period: z.instanceof(RocPeriod),
 });
 
 type UploadFormInput = z.infer<typeof uploadFormSchema>;
+
+const documentTypeOptions = [
+  { value: "invoice-in", label: "進項發票", type: "invoice", inOrOut: "in" },
+  { value: "invoice-out", label: "銷項發票", type: "invoice", inOrOut: "out" },
+  { value: "allowance-in", label: "進項折讓", type: "allowance", inOrOut: "in" },
+  { value: "allowance-out", label: "銷項折讓", type: "allowance", inOrOut: "out" },
+] as const;
+
+type DocumentTypeValue = (typeof documentTypeOptions)[number]["value"];
+
+const getDocumentTypeMeta = (value: DocumentTypeValue) => {
+  const match = documentTypeOptions.find((option) => option.value === value);
+  if (!match) {
+    return { type: "invoice" as const, inOrOut: "in" as const };
+  }
+  return { type: match.type, inOrOut: match.inOrOut };
+};
 
 interface InvoiceUploadDialogProps {
   open: boolean;
@@ -49,6 +72,7 @@ interface InvoiceUploadDialogProps {
   periodId: string;
   clientName: string;
   onSuccess: () => void;
+  onAllowanceSuccess: () => void;
 }
 
 export function InvoiceUploadDialog({
@@ -60,6 +84,7 @@ export function InvoiceUploadDialog({
   periodId,
   clientName,
   onSuccess,
+  onAllowanceSuccess,
 }: InvoiceUploadDialogProps) {
   const [uploadFolderId, setUploadFolderId] = useState<string>(() =>
     crypto.randomUUID(),
@@ -69,7 +94,7 @@ export function InvoiceUploadDialog({
   const uploadForm = useForm<UploadFormInput>({
     resolver: zodResolver(uploadFormSchema),
     defaultValues: {
-      in_or_out: "in",
+      document_type: "invoice-in",
       period: period,
     },
   });
@@ -78,7 +103,7 @@ export function InvoiceUploadDialog({
   useEffect(() => {
     if (open) {
       uploadForm.reset({
-        in_or_out: "in",
+        document_type: "invoice-in",
         period: period,
       });
     }
@@ -100,34 +125,51 @@ export function InvoiceUploadDialog({
     if (isProcessingUpload) return;
     setIsProcessingUpload(true);
     const formData = uploadForm.getValues();
+    const documentMeta = getDocumentTypeMeta(formData.document_type);
 
     try {
       const promises = uploadProps.uploadedFiles.map(async (uploadedFile) => {
+        if (documentMeta.type === "allowance") {
+          await createAllowance({
+            firm_id: firmId,
+            client_id: clientId,
+            storage_path: uploadedFile.path,
+            filename: uploadedFile.name,
+            in_or_out: documentMeta.inOrOut,
+            tax_filing_period_id: periodId,
+          });
+          return;
+        }
+
         await createInvoice({
           firm_id: firmId,
           client_id: clientId,
           storage_path: uploadedFile.path,
           filename: uploadedFile.name,
-          in_or_out: formData.in_or_out,
+          in_or_out: documentMeta.inOrOut,
           year_month: formData.period.toString(),
           tax_filing_period_id: periodId,
         });
       });
 
       await Promise.all(promises);
-      toast.success("發票上傳成功");
+      toast.success("單據上傳成功");
       onOpenChange(false);
 
       // Reset
       uploadForm.reset({
-        in_or_out: "in",
+        document_type: "invoice-in",
         period: period,
       });
       uploadProps.setFiles([]);
       uploadProps.setUploadedFiles([]);
       setUploadFolderId(crypto.randomUUID());
 
-      onSuccess();
+      if (documentMeta.type === "allowance") {
+        onAllowanceSuccess();
+      } else {
+        onSuccess();
+      }
     } catch (error) {
       console.error("Upload error:", error);
       toast.error("上傳失敗");
@@ -142,6 +184,7 @@ export function InvoiceUploadDialog({
     uploadProps,
     periodId,
     onSuccess,
+    onAllowanceSuccess,
     onOpenChange,
     period,
   ]);
@@ -156,7 +199,7 @@ export function InvoiceUploadDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <ResponsiveDialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>上傳發票 - {clientName}</DialogTitle>
+          <DialogTitle>上傳單據 - {clientName}</DialogTitle>
         </DialogHeader>
         <Form {...uploadForm}>
           <form className="space-y-4 py-4">
@@ -179,10 +222,10 @@ export function InvoiceUploadDialog({
             />
             <FormField
               control={uploadForm.control}
-              name="in_or_out"
+              name="document_type"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>發票類型</FormLabel>
+                  <FormLabel>文件類型</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
@@ -190,8 +233,11 @@ export function InvoiceUploadDialog({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="in">進項發票</SelectItem>
-                      <SelectItem value="out">銷項發票</SelectItem>
+                      {documentTypeOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormMessage />

@@ -27,6 +27,8 @@ import { InvoiceImportDialog } from "@/components/invoice/invoice-import-dialog"
 import { InvoiceEditDialog } from "@/components/invoice/invoice-edit-dialog";
 import { InvoiceDeleteDialog } from "@/components/invoice/invoice-delete-dialog";
 import { AllowanceReviewDialog } from "@/components/allowance-review-dialog";
+import { AllowanceDeleteDialog } from "@/components/allowance-delete-dialog";
+import { extractAllowanceDataAction } from "@/lib/services/allowance";
 
 export default function PeriodDetailPage({
   params,
@@ -42,6 +44,7 @@ export default function PeriodDetailPage({
   const [reviewingInvoice, setReviewingInvoice] = useState<Invoice | null>(null);
   const [reviewingAllowance, setReviewingAllowance] = useState<Allowance | null>(null);
   const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
+  const [allowanceToDelete, setAllowanceToDelete] = useState<Allowance | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   
@@ -135,6 +138,21 @@ export default function PeriodDetailPage({
       const errorMessage = error instanceof Error ? error.message : "AI 提取失敗";
       toast.error(errorMessage);
       fetchInvoices(); // Refresh to show updated status (likely "failed")
+    }
+  };
+
+  const handleExtractAllowance = async (allowanceId: string) => {
+    try {
+      toast.info("AI 正在處理中...");
+      await extractAllowanceDataAction(allowanceId);
+      fetchAllowances();
+      toast.success("AI 處理完成，請進行確認");
+    } catch (error) {
+      console.error("Error extracting allowance data:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "AI 提取失敗";
+      toast.error(errorMessage);
+      fetchAllowances();
     }
   };
 
@@ -276,7 +294,9 @@ export default function PeriodDetailPage({
           {/* Invoices Section */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-lg">發票 ({invoices.length})</CardTitle>
+              <CardTitle className="text-lg">
+                發票 ({invoices.length})
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <InvoiceTable
@@ -294,20 +314,28 @@ export default function PeriodDetailPage({
           {/* Allowances Section */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-lg">折讓 ({allowances.length})</CardTitle>
+              <CardTitle className="text-lg">
+                折讓 ({allowances.length})
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <AllowanceTable
                 allowances={allowances}
                 isLoading={isAllowancesLoading}
                 onReview={setReviewingAllowance}
+                onExtractAI={isLocked ? undefined : handleExtractAllowance}
+                onDelete={isLocked ? undefined : setAllowanceToDelete}
               />
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="ranges" className="mt-6">
-          <RangeManagement clientId={clientId} period={rocPeriod} isLocked={isLocked} />
+          <RangeManagement
+            clientId={clientId}
+            period={rocPeriod}
+            isLocked={isLocked}
+          />
         </TabsContent>
 
         <TabsContent value="reports" className="mt-6">
@@ -362,6 +390,13 @@ export default function PeriodDetailPage({
         open={!!invoiceToDelete}
         onOpenChange={(open) => !open && setInvoiceToDelete(null)}
         onSuccess={fetchInvoices}
+      />
+
+      <AllowanceDeleteDialog
+        allowance={allowanceToDelete}
+        open={!!allowanceToDelete}
+        onOpenChange={(open) => !open && setAllowanceToDelete(null)}
+        onSuccess={fetchAllowances}
       />
 
       <AllowanceReviewDialog

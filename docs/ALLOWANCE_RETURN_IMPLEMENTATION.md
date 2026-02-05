@@ -618,9 +618,7 @@ For 折讓證明單 extraction, continue to extract these fields:
 - **amount**: The allowance amount (折讓金額)
 - **taxAmount**: The tax amount (折讓稅額)
 - **date**: The allowance date
-- **sellerName**, **sellerTaxId**, **buyerName**, **buyerTaxId**: Party info (used to determine 進項/銷項)
-
-Note: We still don't ask AI to extract `inOrOut` directly. Instead, we derive it by comparing `sellerTaxId`/`buyerTaxId` with the client's `tax_id`.
+- **sellerName**, **sellerTaxId**, **buyerName**, **buyerTaxId**: Party info
 
 **Step 4.2: Route based on user-selected type after extraction**
 
@@ -676,8 +674,6 @@ async function processUploadedDocument(
 
 **Verification:**
 - [ ] Upload photo of 折讓證明單
-- [ ] Verify AI extracts `isAllowance: true`
-- [ ] Verify `in_or_out` is correctly derived from seller/buyer tax ID
 - [ ] Verify record inserted into `allowances` table
 - [ ] Verify linking attempted after extraction
 - [ ] Verify warning shown if original invoice not found

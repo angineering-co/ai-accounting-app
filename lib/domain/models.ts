@@ -111,7 +111,6 @@ export const extractedAllowanceDataSchema = z.object({
   // Amounts (totals for the entire allowance)
   amount: z.number().optional(),      // 折讓金額 (銷售額)
   taxAmount: z.number().optional(),   // 折讓稅額
-  totalAmount: z.number().optional(), // 合計
 
   // Date
   date: z.string().optional(),  // YYYY/MM/DD format
@@ -125,6 +124,13 @@ export const extractedAllowanceDataSchema = z.object({
   // Combined line items as text (for display, similar to invoice summary)
   // Groups multiple rows with same 折讓單號碼 into a single text field
   summary: z.string().optional(),
+
+  // Line items (kept granular for report export)
+  items: z.array(z.object({
+    amount: z.number().optional(),    // 折讓金額 (銷售額)
+    taxAmount: z.number().optional(), // 折讓稅額
+    description: z.string().optional(),
+  })).optional(),
 
   // For 進項 allowances: deduction type
   deductionCode: z.enum(['1', '2']).optional(),  // 1=進貨費用, 2=固定資產

@@ -125,7 +125,6 @@ export const extractedAllowanceDataSchema = z.object({
   // Amounts (totals for the entire allowance)
   amount: z.number().optional(),      // 折讓金額 (銷售額)
   taxAmount: z.number().optional(),   // 折讓稅額
-  totalAmount: z.number().optional(), // 合計
   
   // Date
   date: z.string().optional(),  // YYYY/MM/DD format
@@ -136,9 +135,16 @@ export const extractedAllowanceDataSchema = z.object({
   buyerName: z.string().optional(),
   buyerTaxId: z.string().optional(),
   
-  // Combined line items as text (for display, similar to invoice summary)
-  // Groups multiple rows with same 折讓單號碼 into a single text field
-  summary: z.string().optional(),
+ // Combined line items as text (for display, similar to invoice summary)
+ // Groups multiple rows with same 折讓單號碼 into a single text field
+ summary: z.string().optional(),
+
+ // Line items (kept granular for report export)
+ items: z.array(z.object({
+  amount: z.number().optional(),    // 折讓金額 (銷售額)
+  taxAmount: z.number().optional(), // 折讓稅額
+  description: z.string().optional(),
+ })).optional(),
   
   // For 進項 allowances: deduction type
   deductionCode: z.enum(['1', '2']).optional(),  // 1=進貨費用, 2=固定資產
@@ -150,6 +156,10 @@ export const extractedAllowanceDataSchema = z.object({
 
 export type ExtractedAllowanceData = z.infer<typeof extractedAllowanceDataSchema>;
 ```
+
+**Design note:** we keep `items` in the serialized JSON so the TXT report can emit
+one row per line item. `summary` is optional and only used for display; older
+records without `items` should fall back to the existing grouped behavior.
 
 ### Deriving `in_or_out` from Party Info
 
@@ -594,19 +604,15 @@ if (allowance.original_invoice_serial_code && !allowance.original_invoice_id) {
 
 ### Phase 4: AI Extraction Updates (Paper Allowances)
 
-**Step 4.1: Update Gemini prompt (`lib/services/gemini.ts`)**
+**Step 4.1: UI-selected document type (no AI auto-detection)**
 
-Add document type detection:
+When uploading a paper document image, the user must select the document type.
 
-```
-**IMPORTANT: Document Type Detection**
+- Add **進項折讓** and **銷項折讓** to the upload dialog dropdown
+- Use the selected type to choose the correct Gemini prompt
+- Do not ask Gemini to detect invoice vs allowance
 
-First, identify the document type:
-
-1. **統一發票** (Invoice): Regular invoice with "統一發票" header
-2. **折讓證明單** (Allowance Certificate): Contains "銷貨退回或折讓證明單" or "進貨退出或折讓證明單"
-
-For 折讓證明單, extract these fields:
+For 折讓證明單 extraction, continue to extract these fields:
 - **originalInvoiceSerialCode**: The original invoice number being referenced
 - **allowanceType**: One of "三聯式折讓", "電子發票折讓", or "二聯式折讓"
 - **amount**: The allowance amount (折讓金額)
@@ -614,12 +620,9 @@ For 折讓證明單, extract these fields:
 - **date**: The allowance date
 - **sellerName**, **sellerTaxId**, **buyerName**, **buyerTaxId**: Party info (used to determine 進項/銷項)
 
-Return `isAllowance: true` to indicate this is an allowance document.
-```
+Note: We still don't ask AI to extract `inOrOut` directly. Instead, we derive it by comparing `sellerTaxId`/`buyerTaxId` with the client's `tax_id`.
 
-Note: We don't ask AI to extract `inOrOut` directly. Instead, we derive it by comparing `sellerTaxId`/`buyerTaxId` with the client's `tax_id`.
-
-**Step 4.2: Route to correct table after extraction**
+**Step 4.2: Route based on user-selected type after extraction**
 
 ```typescript
 async function processUploadedDocument(
@@ -627,9 +630,9 @@ async function processUploadedDocument(
   clientId: string,
   clientTaxId: string
 ) {
-  const extractedData = await extractWithGemini(file);
+  const extractedData = await extractWithGemini(file, selectedDocumentType);
   
-  if (extractedData.isAllowance) {
+  if (selectedDocumentType === '進項折讓' || selectedDocumentType === '銷項折讓') {
     // Derive in_or_out from party info
     const inOrOut = deriveInOrOut(clientTaxId, extractedData);
     
@@ -709,28 +712,36 @@ async function getReportData(clientId: string, periodId: string) {
 }
 ```
 
-**Step 5.2: Generate TXT rows for allowances**
+**Step 5.2: Generate TXT rows for allowances (one row per line item)**
 
 ```typescript
-function generateAllowanceTxtRow(
-  allowance: Allowance, 
-  rowNum: number, 
+function generateAllowanceTxtRows(
+  allowance: Allowance,
+  startRowNum: number,
   taxPayerId: string
-): string {
+): { rows: string[]; nextRowNum: number } {
   const data = allowance.extracted_data;
   const formatCode = getAllowanceFormatCode(
     allowance.in_or_out,
     data?.allowanceType || '電子發票折讓'
   );
-  
-  let row = '';
-  row += formatCode;                           // Bytes 1-2: Format code
-  row += String(rowNum).padStart(7, '0');      // Bytes 3-9: Row number
-  row += taxPayerId.padEnd(8, ' ');            // Bytes 10-17: Tax payer ID
-  row += (allowance.allowance_serial_code || '').padEnd(10, ' '); // Bytes 18-27
-  // ... continue with allowance-specific format
-  
-  return row;
+
+  const items = data?.items?.length
+    ? data.items
+    : [{ amount: data?.amount, taxAmount: data?.taxAmount }];
+
+  const rows = items.map((item, index) => {
+    const rowNum = startRowNum + index;
+    let row = '';
+    row += formatCode;                           // Bytes 1-2: Format code
+    row += String(rowNum).padStart(7, '0');      // Bytes 3-9: Row number
+    row += taxPayerId.padEnd(8, ' ');            // Bytes 10-17: Tax payer ID
+    // Use item.amount / item.taxAmount for line-level values
+    // ... continue with allowance-specific format
+    return row;
+  });
+
+  return { rows, nextRowNum: startRowNum + rows.length };
 }
 ```
 
@@ -967,13 +978,49 @@ if (extractedData.isAllowance) {
 }
 ```
 
-**Step 6.6: Allowance edit form**
+**Step 6.6: Allowance review dialog (`components/allowance-review-dialog.tsx`)**
 
-Similar to invoice edit form, with:
-- Original invoice serial code field (editable)
-- Link to original invoice (if exists, show as clickable link)
-- Allowance type dropdown
-- **On save**: If `original_invoice_serial_code` changed, attempt to re-link
+Similar to `InvoiceReviewDialog`, with allowance-specific fields:
+
+```typescript
+interface AllowanceReviewDialogProps {
+  allowance: Allowance | null;
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
+  onNext?: () => void;
+  onPrevious?: () => void;
+  isLocked?: boolean;
+}
+```
+
+Form fields:
+- `allowanceType`: dropdown (電子發票折讓, 三聯式折讓, 二聯式折讓)
+- `date`: 折讓日期 (YYYY/MM/DD)
+- `originalInvoiceSerialCode`: 原發票號碼 (editable, triggers re-link on save)
+- `amount` / `taxAmount` / `totalAmount`: with math validation
+- `sellerName` / `sellerTaxId` / `buyerName` / `buyerTaxId`
+- `deductionCode`: 扣抵類別 (only for 進項 allowances: 1=進貨費用, 2=固定資產)
+- `summary`: 品項摘要
+
+Features:
+- Excel preview for import-excel source (highlights matching rows by `折讓單號碼`)
+- Unlinked warning alert when `original_invoice_serial_code` exists but `original_invoice_id` is null
+- Math validation: amount + taxAmount = totalAmount
+- Save as "processed" or "confirmed"
+- Keyboard navigation: Arrow Up/Down for prev/next, Shift+Enter to confirm
+- **On save**: If `original_invoice_serial_code` changed, call `tryLinkOriginalInvoice`
+
+Server action (`lib/services/allowance.ts`):
+
+```typescript
+export async function updateAllowance(allowanceId: string, data: UpdateAllowanceInput) {
+  // 1. Validate input
+  // 2. Update extracted_data and status
+  // 3. Sync original_invoice_serial_code column
+  // 4. If serial code changed, attempt re-link via tryLinkOriginalInvoice
+}
+```
 
 **Step 6.7: Unlinked allowance warning**
 
@@ -1016,28 +1063,25 @@ const { data: allowances } = await supabase
 ```
 
 **Verification:**
-- [ ] Page displays separate sections for invoices and allowances
+- [x] Page displays separate sections for invoices and allowances
 - [ ] Each section has independent pagination
-- [ ] Single import button opens dialog accepting both file types
-- [ ] Multi-file import processes all files in parallel
-- [ ] Auto-detection correctly identifies invoice vs allowance files by header
-- [ ] Aggregated result shows correct counts (X 筆發票, Y 筆折讓)
+- [x] Single import button opens dialog accepting both file types
+- [x] Multi-file import processes all files in parallel
+- [x] Aggregated result shows correct counts (X 筆發票, Y 筆折讓)
 - [ ] Paper allowance upload routes to correct confirmation form
-- [ ] Unlinked allowance shows warning
-- [ ] Invoice detail shows linked allowances
+- [x] Unlinked allowance shows warning in table
+- [x] Invoice detail shows linked allowances
+- [x] Clicking allowance row opens review dialog
+- [x] Allowance review dialog shows form with allowance-specific fields
+- [x] Allowance review dialog shows Excel preview for import-excel source
+- [x] Allowance review dialog validates amount + taxAmount = totalAmount
+- [x] Allowance review dialog allows save as "processed" or "confirmed"
+- [x] Allowance review dialog re-links original invoice when serial code changes
+- [x] Keyboard navigation works (Arrow Up/Down, Shift+Enter)
 
 ---
 
 ## Testing Checklist
-
-### Unit Tests
-- [ ] `getAllowanceFormatCode()` function
-- [ ] `isAllowanceFormatCode()` function
-- [ ] `ALLOWANCE_FORMAT_CODE_MAP` lookups
-- [ ] `deriveInOrOut()` function
-- [ ] `aggregateReportData()` with allowances
-- [ ] `detectFileType()` correctly identifies invoice vs allowance Excel files
-- [ ] `parseAllowanceFromRows()` groups rows by `折讓單號碼`
 
 ### Integration Tests
 - [ ] Excel import auto-detects file type by header (`折讓單號碼` = allowance)

@@ -1,10 +1,11 @@
 'use server';
 
 import { createClient } from "@/lib/supabase/server";
-import { type ExtractedInvoiceData, type TaxFilingPeriod } from "@/lib/domain/models";
+import { type ExtractedInvoiceData, type ExtractedAllowanceData, type TaxFilingPeriod } from "@/lib/domain/models";
 import { type Database, type TablesInsert, type Json } from "@/supabase/database.types";
 import { type SupabaseClient } from "@supabase/supabase-js";
 import { RocPeriod } from "@/lib/domain/roc-period";
+import { ALLOWANCE_FORMAT_CODE_MAP } from "@/lib/domain/format-codes";
 import * as XLSX from 'xlsx';
 import { getTaxPeriodByYYYMM } from "@/lib/services/tax-period";
 
@@ -15,6 +16,35 @@ interface ImportResult {
   skipped: number;
   failed: number;
   errors: string[];
+  // Optional breakdown by type (for aggregated reporting)
+  fileType?: 'invoice' | 'allowance';
+}
+
+type FileType = 'invoice' | 'allowance';
+
+/**
+ * Detect file type by examining Excel headers.
+ * Allowance files have '折讓單號碼' column, invoice files don't.
+ */
+function detectFileType(workbook: XLSX.WorkBook): FileType {
+  for (const name of workbook.SheetNames) {
+    const sheet = workbook.Sheets[name];
+    const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
+    const firstRowValues: string[] = [];
+
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      const cell = sheet[XLSX.utils.encode_cell({ r: range.s.r, c: C })];
+      if (cell && cell.v) firstRowValues.push(String(cell.v));
+    }
+
+    // Allowance files have 折讓單號碼 header
+    if (firstRowValues.some(v => v.includes('折讓單號碼'))) {
+      return 'allowance';
+    }
+  }
+
+  // Default to invoice (existing behavior)
+  return 'invoice';
 }
 
 // This is for testing purposes only
@@ -84,8 +114,27 @@ export async function processElectronicInvoiceFile(
       throw new Error("僅支援 Excel 檔案格式 (.xlsx, .xls)");
     }
 
-    const invoicesToInsert = await processExcelFile(
-      buffer,
+    const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+    const fileType = detectFileType(workbook);
+    result.fileType = fileType;
+
+    if (fileType === 'allowance') {
+      // Process as allowance file
+      return await processAllowanceExcelFile(
+        workbook,
+        clientId,
+        firmId,
+        storagePath,
+        filename,
+        userId,
+        period,
+        supabase
+      );
+    }
+
+    // Process as invoice file (existing logic)
+    const invoicesToInsert = await processInvoiceExcelFile(
+      workbook,
       clientId,
       firmId,
       storagePath,
@@ -168,8 +217,8 @@ function getNumber(row: ExcelRow, key: string): number {
   return 0;
 }
 
-async function processExcelFile(
-    buffer: Buffer,
+async function processInvoiceExcelFile(
+    workbook: XLSX.WorkBook,
     clientId: string,
     firmId: string,
     storagePath: string,
@@ -180,7 +229,7 @@ async function processExcelFile(
 ): Promise<TablesInsert<'invoices'>[]> {
   const filingPeriodRoc = RocPeriod.fromYYYMM(filingPeriod.year_month);
   const filingPeriodId = filingPeriod.id;
-  const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+  result.fileType = 'invoice';
   
   let headerSheetName: string | undefined;
   let detailSheetName: string | undefined;
@@ -237,22 +286,10 @@ async function processExcelFile(
         const invoiceNo = getString(row, '發票號碼');
         if (!invoiceNo) continue;
         
-        let dateObj: Date;
         const dateVal = getRowValue(row, '發票日期');
-        
-        if (dateVal instanceof Date) {
-            dateObj = dateVal;
-        } else {
-            // Try parsing YYYY/MM/DD or YYYY-MM-DD
-            // If string is "2025-11-10 12:00:00", new Date() usually parses it correctly in JS
-            dateObj = new Date(String(dateVal));
-            if (isNaN(dateObj.getTime())) {
-              throw new Error(`Invalid date for invoice ${invoiceNo}: ${dateVal}`);
-            }
-        }
-        
+        const dateObj = parseDate(dateVal, `invoice ${invoiceNo}`);
         const rocPeriod = RocPeriod.fromDate(dateObj);
-        const dateStr = `${dateObj.getFullYear()}/${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
+        const dateStr = formatDate(dateVal);
         
         const formatCode = getString(row, '格式代號');
         const inOrOut = formatCode.startsWith('2') ? 'in' : 'out';
@@ -366,4 +403,349 @@ function getInvoiceTypeFromCode(code: string): string {
     case '35': return '電子發票';
     default: return '電子發票'; // Fallback
   }
+}
+
+// ===== Allowance Excel Processing =====
+
+/**
+ * Process an allowance Excel file.
+ * Groups rows by 折讓單號碼 and inserts into allowances table.
+ */
+async function processAllowanceExcelFile(
+  workbook: XLSX.WorkBook,
+  clientId: string,
+  firmId: string,
+  storagePath: string,
+  filename: string,
+  userId: string,
+  filingPeriod: TaxFilingPeriod,
+  supabase: SupabaseClient<Database>
+): Promise<ImportResult> {
+  const result: ImportResult = {
+    total: 0,
+    inserted: 0,
+    updated: 0,
+    skipped: 0,
+    failed: 0,
+    errors: [],
+    fileType: 'allowance',
+  };
+
+  // Allowance files have a single sheet
+  const sheetName = workbook.SheetNames[0];
+  const rows = XLSX.utils.sheet_to_json<ExcelRow>(workbook.Sheets[sheetName]);
+
+  // Group rows by 折讓單號碼
+  const groupedRows = new Map<string, ExcelRow[]>();
+  for (const row of rows) {
+    const serialCode = getString(row, '折讓單號碼');
+    if (!serialCode) continue;
+
+    if (!groupedRows.has(serialCode)) {
+      groupedRows.set(serialCode, []);
+    }
+    groupedRows.get(serialCode)!.push(row);
+  }
+
+  result.total = groupedRows.size;
+  const allowancesToInsert: TablesInsert<'allowances'>[] = [];
+
+  for (const [serialCode, itemRows] of groupedRows) {
+    try {
+      const allowance = parseAllowanceFromRows(
+        serialCode,
+        itemRows,
+        clientId,
+        firmId,
+        storagePath,
+        filename,
+        filingPeriod.id,
+        userId
+      );
+      allowancesToInsert.push(allowance);
+    } catch (e) {
+      result.failed++;
+      result.errors.push(`折讓單 ${serialCode}: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    }
+  }
+
+  // Batch upsert
+  if (allowancesToInsert.length > 0) {
+    // Check existing
+    const serialCodes = allowancesToInsert
+      .map(a => a.allowance_serial_code)
+      .filter((code): code is string => Boolean(code));
+
+    let existingCount = 0;
+    if (serialCodes.length > 0) {
+      const { data: existingAllowances, error: existingError } = await supabase
+        .from('allowances')
+        .select('allowance_serial_code')
+        .eq('client_id', clientId)
+        .in('allowance_serial_code', serialCodes);
+
+      if (existingError) {
+        throw existingError;
+      }
+
+      existingCount = existingAllowances?.length || 0;
+    }
+
+    const { data, error } = await supabase
+      .from('allowances')
+      .upsert(allowancesToInsert, {
+        onConflict: 'client_id, allowance_serial_code',
+      })
+      .select('id');
+
+    if (error) {
+      result.failed += allowancesToInsert.length;
+      result.errors.push(error.message);
+    } else {
+      const upsertedCount = data?.length || 0;
+      result.updated = Math.min(existingCount, upsertedCount);
+      result.inserted = Math.max(upsertedCount - existingCount, 0);
+
+      // Attempt to link to original invoices
+      const allowanceIds = data?.map(a => a.id) || [];
+      await linkAllowancesToInvoices(clientId, allowanceIds, supabase);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Parse allowance data from grouped Excel rows.
+ * Multiple rows with the same 折讓單號碼 are combined into one record.
+ */
+function parseAllowanceFromRows(
+  serialCode: string,
+  itemRows: ExcelRow[],
+  clientId: string,
+  firmId: string,
+  storagePath: string,
+  filename: string,
+  periodId: string,
+  userId: string
+): TablesInsert<'allowances'> {
+  // Take common fields from first row
+  const firstRow = itemRows[0];
+  const formatCode = getString(firstRow, '格式代號');
+
+  const formatMapping = ALLOWANCE_FORMAT_CODE_MAP[formatCode];
+  if (!formatMapping) {
+    throw new Error(`Unknown format code: ${formatCode}`);
+  }
+  const { inOrOut, allowanceType } = formatMapping;
+
+  const originalSerialCode = getString(firstRow, '發票號碼');
+  const dateVal = getRowValue(firstRow, '折讓單日期');
+  const dateStr = formatDate(dateVal);
+
+  // Combine line items into summary text (similar to invoice details)
+  const summary = itemRows
+    .map(row => {
+      const desc = getString(row, '品項名稱');
+      const amt = getNumber(row, '品項折讓金額(不含稅)');
+      return `品名：${desc}, 折讓金額：${amt}`;
+    })
+    .join('\n');
+
+  const items = itemRows.map(row => ({
+    amount: getNumber(row, '品項折讓金額(不含稅)'),
+    taxAmount: getNumber(row, '品項折讓稅額'),
+    description: getString(row, '品項名稱'),
+  }));
+
+  const sellerTaxId = getString(firstRow, '賣方統一編號');
+  const sellerName = getString(firstRow, '賣方名稱');
+  const buyerTaxId = getString(firstRow, '買方統一編號');
+  const buyerName = getString(firstRow, '買方名稱');
+
+  const extractedData: ExtractedAllowanceData = {
+    allowanceType,
+    amount: getNumber(firstRow, '折讓金額(不含稅)'),
+    taxAmount: getNumber(firstRow, '折讓稅額'),
+    date: dateStr,
+    sellerTaxId,
+    sellerName,
+    buyerTaxId: buyerTaxId === "0000000000" ? undefined : buyerTaxId, // B2C：賣方填入統一編號，買方填入 10 個"0"
+    buyerName,
+    originalInvoiceSerialCode: originalSerialCode,
+    summary,
+    items,
+    source: 'import-excel',
+    account: inOrOut === 'out' ? '4202 銷貨折讓' : '5023 進貨折讓',
+  };
+
+  return {
+    firm_id: firmId,
+    client_id: clientId,
+    storage_path: storagePath,
+    filename: filename,
+    tax_filing_period_id: periodId,
+    allowance_serial_code: serialCode,
+    original_invoice_serial_code: originalSerialCode,
+    in_or_out: inOrOut,
+    status: 'uploaded',
+    uploaded_by: userId,
+    extracted_data: extractedData as unknown as Json,
+  };
+}
+
+/**
+ * Parse date value from Excel to Date object.
+ * Throws if the date is invalid.
+ */
+function parseDate(dateVal: unknown, context?: string): Date {
+  if (!dateVal) {
+    throw new Error(`Missing date${context ? ` for ${context}` : ''}`);
+  }
+
+  if (dateVal instanceof Date) {
+    return dateVal;
+  }
+
+  const dateObj = new Date(String(dateVal));
+  if (isNaN(dateObj.getTime())) {
+    throw new Error(`Invalid date${context ? ` for ${context}` : ''}: ${dateVal}`);
+  }
+
+  return dateObj;
+}
+
+/**
+ * Format date value from Excel to YYYY/MM/DD string.
+ */
+function formatDate(dateVal: unknown): string {
+  if (!dateVal) return '';
+
+  try {
+    const dateObj = parseDate(dateVal);
+    return `${dateObj.getFullYear()}/${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
+  } catch {
+    return String(dateVal);
+  }
+}
+
+/**
+ * Attempts to link a single allowance to its original invoice.
+ * Use this for manual updates or when a single allowance needs re-linking.
+ */
+export async function tryLinkOriginalInvoice(
+  clientId: string,
+  allowanceId: string,
+  originalSerialCode: string,
+  supabaseClient?: SupabaseClient<Database>
+): Promise<{ linked: boolean; invoiceId?: string }> {
+  const supabase = supabaseClient ?? await createClient();
+
+  const { data: invoice } = await supabase
+    .from('invoices')
+    .select('id')
+    .eq('client_id', clientId)
+    .eq('invoice_serial_code', originalSerialCode)
+    .maybeSingle();
+
+  if (invoice) {
+    await supabase
+      .from('allowances')
+      .update({ original_invoice_id: invoice.id })
+      .eq('id', allowanceId);
+
+    return { linked: true, invoiceId: invoice.id };
+  }
+
+  return { linked: false };
+}
+
+/**
+ * Batch link multiple allowances after import.
+ * Optimized to use bulk queries instead of N+1.
+ */
+async function linkAllowancesToInvoices(
+  clientId: string,
+  allowanceIds: string[],
+  supabase: SupabaseClient<Database>
+): Promise<{ linked: number; unlinked: number }> {
+  if (allowanceIds.length === 0) return { linked: 0, unlinked: 0 };
+
+  // 1. Get all allowances needing linking (one query)
+  const { data: allowances } = await supabase
+    .from('allowances')
+    .select('id, original_invoice_serial_code')
+    .in('id', allowanceIds)
+    .is('original_invoice_id', null)
+    .not('original_invoice_serial_code', 'is', null);
+
+  if (!allowances || allowances.length === 0) {
+    return { linked: 0, unlinked: 0 };
+  }
+
+  // 2. Collect all unique serial codes
+  const serialCodes = [...new Set(
+    allowances
+      .map(a => a.original_invoice_serial_code)
+      .filter((code): code is string => Boolean(code))
+  )];
+
+  if (serialCodes.length === 0) {
+    return { linked: 0, unlinked: allowances.length };
+  }
+
+  // 3. Query all matching invoices in one call
+  const { data: invoices } = await supabase
+    .from('invoices')
+    .select('id, invoice_serial_code')
+    .eq('client_id', clientId)
+    .in('invoice_serial_code', serialCodes);
+
+  if (!invoices || invoices.length === 0) {
+    return { linked: 0, unlinked: allowances.length };
+  }
+
+  // 4. Build mapping: serial_code -> invoice_id
+  const serialToInvoiceId = new Map<string, string>();
+  for (const inv of invoices) {
+    if (inv.invoice_serial_code) {
+      serialToInvoiceId.set(inv.invoice_serial_code, inv.id);
+    }
+  }
+
+  // 5. Group allowances by their target invoice_id for batch updates
+  const invoiceIdToAllowanceIds = new Map<string, string[]>();
+  let unlinkedCount = 0;
+
+  for (const allowance of allowances) {
+    const invoiceId = allowance.original_invoice_serial_code
+      ? serialToInvoiceId.get(allowance.original_invoice_serial_code)
+      : undefined;
+
+    if (invoiceId) {
+      if (!invoiceIdToAllowanceIds.has(invoiceId)) {
+        invoiceIdToAllowanceIds.set(invoiceId, []);
+      }
+      invoiceIdToAllowanceIds.get(invoiceId)!.push(allowance.id);
+    } else {
+      unlinkedCount++;
+    }
+  }
+
+  // 6. Batch update: one update per unique invoice_id
+  let linkedCount = 0;
+  for (const [invoiceId, allowanceIdsToUpdate] of invoiceIdToAllowanceIds) {
+    const { error } = await supabase
+      .from('allowances')
+      .update({ original_invoice_id: invoiceId })
+      .in('id', allowanceIdsToUpdate);
+
+    if (!error) {
+      linkedCount += allowanceIdsToUpdate.length;
+    } else {
+      unlinkedCount += allowanceIdsToUpdate.length;
+    }
+  }
+
+  return { linked: linkedCount, unlinked: unlinkedCount };
 }

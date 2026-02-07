@@ -2,9 +2,13 @@
 
 import { createClient as createSupabaseClient } from "@/lib/supabase/server";
 import {
+  type ExtractedAllowanceData,
   type ExtractedInvoiceData,
   type TetUConfig,
+  type InvoiceInOrOut,
 } from "@/lib/domain/models";
+import { getAllowanceFormatCode, getInvoiceFormatCode } from "@/lib/domain/format-codes";
+import { getTaxPeriodByYYYMM } from "@/lib/services/tax-period";
 import { getInvoiceRanges } from "./invoice-range";
 import { toRocYearMonth } from "@/lib/utils";
 import { RocPeriod } from "@/lib/domain/roc-period";
@@ -114,13 +118,30 @@ function padString(str: string, length: number): string {
   return b.toString('ascii');
 }
 
-function sortBySerialCodeNum(a: ExtractedInvoiceData, b: ExtractedInvoiceData) {
-  // Compare the whole serial number alphanumerically including the prefix
-  const aCode = a.invoiceSerialCode || '';
-  const bCode = b.invoiceSerialCode || '';
-  if (aCode < bCode) return -1;
-  if (aCode > bCode) return 1;
-  return 0;
+type TxtRowInput = {
+  formatCode: string;
+  inOrOut: InvoiceInOrOut;
+  date?: string;
+  buyerTaxId?: string;
+  sellerTaxId?: string;
+  invoiceSerialCode?: string;
+  taxType?: ExtractedInvoiceData["taxType"];
+  totalSales?: number;
+  tax?: number;
+  deductionCode?: "1" | "2";
+};
+
+type AllowanceRowData = {
+  in_or_out: "in" | "out";
+  original_invoice_serial_code: string | null;
+  extracted_data: ExtractedAllowanceData | null;
+};
+
+function sortByFormatCodeAndSerial(a: TxtRowInput, b: TxtRowInput) {
+  const aFormat = parseInt(a.formatCode, 10);
+  const bFormat = parseInt(b.formatCode, 10);
+  if (aFormat !== bFormat) return aFormat - bFormat;
+  return (a.invoiceSerialCode || "").localeCompare(b.invoiceSerialCode || "");
 }
 
 /**
@@ -139,77 +160,140 @@ export async function generateTxtReport(clientId: string, serializedReportPeriod
     .single();
   if (clientError || !client) throw new Error("Client not found");
 
+  const taxPeriod = await getTaxPeriodByYYYMM(clientId, period.toString());
+  const taxPeriodId = taxPeriod?.id;
+
   // 2. Fetch Invoices for the period (Confirmed status)
-  const gregorianYear = period.gregorianYear;
-
-  const prefix1 = `${gregorianYear}/${period.startMonth.toString().padStart(2, '0')}`;
-  const prefix2 = `${gregorianYear}/${period.endMonth.toString().padStart(2, '0')}`;
-
-  const { data: invoicesData, error: invoicesError } = await supabase
-    .from("invoices")
-    .select("*")
-    .eq("client_id", clientId)
-    .eq("year_month", period.toString())
-    .eq("status", "confirmed");
+  const { data: invoicesData, error: invoicesError } = taxPeriodId
+    ? await supabase
+      .from("invoices")
+      .select("*")
+      .eq("client_id", clientId)
+      .eq("tax_filing_period_id", taxPeriodId)
+      .eq("status", "confirmed")
+    : { data: [], error: null };
   
   if (invoicesError) throw new Error("Error fetching invoices");
 
-  const invoices = (invoicesData || [])
-    .map(inv => inv.extracted_data as ExtractedInvoiceData)
-    .filter(data => data && data.date && (data.date.startsWith(prefix1) || data.date.startsWith(prefix2)));
+  const invoices = invoicesData?.map(inv => inv.extracted_data as ExtractedInvoiceData) || [];
 
-  if (invoicesData && invoicesData.length !== invoices.length) {
-    throw new Error(
-      `Invoice data mismatch for period ${period.toString()}. The database has ${
-        invoicesData.length
-      } invoices for this period, but only ${
-        invoices.length
-      } have a matching date in their extracted data. Please review the invoices.`
-    );
-  }
+  // 3. Fetch Allowances for the period (Confirmed status)
+  const { data: allowancesData, error: allowancesError } = taxPeriodId
+    ? await supabase
+      .from("allowances")
+      .select("in_or_out, original_invoice_serial_code, extracted_data")
+      .eq("client_id", clientId)
+      .eq("tax_filing_period_id", taxPeriodId)
+      .eq("status", "confirmed")
+    : { data: [], error: null };
 
-  // 3. Fetch Invoice Ranges
+  if (allowancesError) throw new Error("Error fetching allowances");
+
+  const allowances = (allowancesData || []) as AllowanceRowData[];
+
+  // 4. Fetch Invoice Ranges
   const ranges = await getInvoiceRanges(clientId, period.toString());
 
-  // 4. Generate Rows
+  // 5. Generate Rows
   const rows: string[] = [];
   let currentRowNum = 1;
+
+  const allowanceRows: TxtRowInput[] = allowances.flatMap((allowance) => {
+    const extracted = allowance.extracted_data;
+    if (!extracted) return [];
+
+    const items = extracted.items?.length
+      ? extracted.items
+      : [{ amount: extracted.amount, taxAmount: extracted.taxAmount }];
+
+    const inOrOut: InvoiceInOrOut =
+      allowance.in_or_out === "in" ? "進項" : "銷項";
+
+    const formatCode = getAllowanceFormatCode(
+      inOrOut,
+      extracted.allowanceType || "電子發票折讓"
+    );
+
+    const baseSerial =
+      allowance.original_invoice_serial_code || extracted.originalInvoiceSerialCode || "";
+
+    return items.map((item) => ({
+      formatCode,
+      inOrOut,
+      date: extracted.date,
+      buyerTaxId: extracted.buyerTaxId,
+      sellerTaxId: extracted.sellerTaxId,
+      invoiceSerialCode: baseSerial,
+      taxType: "應稅",
+      totalSales: item.amount ?? extracted.amount ?? 0,
+      tax: item.taxAmount ?? extracted.taxAmount ?? 0,
+      deductionCode: extracted.deductionCode,
+    }));
+  });
 
   // Split into input and output
   const inputInvoices = invoices
     .filter((i) => i.inOrOut === "進項")
-    .filter((i) => i.deductible === true) // Only deductible input invoices are included
-    .sort(sortBySerialCodeNum);
+    .filter((i) => i.deductible === true); // Only deductible input invoices are included
   const outputInvoices = invoices
-    .filter((i) => i.inOrOut === "銷項") // All output invoices are included regardless of deductible
-    .sort(sortBySerialCodeNum);
+    .filter((i) => i.inOrOut === "銷項"); // All output invoices are included regardless of deductible
 
-  // Sort input invoices
-  inputInvoices.forEach(inv => {
-    rows.push(generateTxtRow(inv, currentRowNum++, client.tax_payer_id));
-  });
+  const inputRows: TxtRowInput[] = [
+    ...inputInvoices.map((inv) => ({
+      formatCode: getInvoiceFormatCode(
+        inv.inOrOut === "進項" ? "進項" : "銷項",
+        inv.invoiceType
+      ),
+      inOrOut: "進項" as const,
+      date: inv.date,
+      buyerTaxId: inv.buyerTaxId,
+      sellerTaxId: inv.sellerTaxId,
+      invoiceSerialCode: inv.invoiceSerialCode,
+      taxType: inv.taxType,
+      totalSales: inv.totalSales,
+      tax: inv.tax,
+    })),
+    ...allowanceRows.filter((row) => row.inOrOut === "進項"),
+  ].sort(sortByFormatCodeAndSerial);
 
-  // Group output by type for range calculation
+  const outputRows: TxtRowInput[] = [
+    ...outputInvoices.map((inv) => ({
+      formatCode: getInvoiceFormatCode(
+        inv.inOrOut === "進項" ? "進項" : "銷項",
+        inv.invoiceType
+      ),
+      inOrOut: "銷項" as const,
+      date: inv.date,
+      buyerTaxId: inv.buyerTaxId,
+      sellerTaxId: inv.sellerTaxId,
+      invoiceSerialCode: inv.invoiceSerialCode,
+      taxType: inv.taxType,
+      totalSales: inv.totalSales,
+      tax: inv.tax,
+    })),
+    ...allowanceRows.filter((row) => row.inOrOut === "銷項"),
+  ];
+
+  // Group output invoices by type for range calculation
   const groupedOutput = new Map<string, ExtractedInvoiceData[]>();
-  outputInvoices.forEach(inv => {
-    const type = inv.invoiceType || 'Unknown';
+  outputInvoices.forEach((inv) => {
+    const type = inv.invoiceType || "Unknown";
     if (!groupedOutput.has(type)) groupedOutput.set(type, []);
     groupedOutput.get(type)!.push(inv);
   });
 
-  const allTypes = new Set([...groupedOutput.keys(), ...ranges.map(r => r.invoice_type)]);
+  const unusedRowsByFormat = new Map<string, TxtRowInput[]>();
+  const allTypes = new Set([
+    ...groupedOutput.keys(),
+    ...ranges.map((range) => range.invoice_type),
+  ]);
 
-  allTypes.forEach(type => {
+  allTypes.forEach((type) => {
     const typeInvoices = groupedOutput.get(type) || [];
-    typeInvoices.sort(sortBySerialCodeNum);
-
-    typeInvoices.forEach(inv => {
-      rows.push(generateTxtRow(inv, currentRowNum++, client.tax_payer_id));
-    });
 
     // Unused ranges
-    const relevantRanges = ranges.filter(r => r.invoice_type === type);
-    relevantRanges.forEach(range => {
+    const relevantRanges = ranges.filter((range) => range.invoice_type === type);
+    relevantRanges.forEach((range) => {
       const getPrefix = (s: string) => s.substring(0, 2);
       const getNum = (s: string) => parseInt(s.substring(2), 10);
 
@@ -217,40 +301,83 @@ export async function generateTxtReport(clientId: string, serializedReportPeriod
       const rangeStartNum = getNum(range.start_number);
       const rangeEndNum = getNum(range.end_number);
 
-      const invoicesInRange = typeInvoices.filter(inv => {
+      const invoicesInRange = typeInvoices.filter((inv) => {
         const s = inv.invoiceSerialCode;
         if (!s || s.length !== 10) return false;
-        return getPrefix(s) === rangePrefix && getNum(s) >= rangeStartNum && getNum(s) <= rangeEndNum;
+        return (
+          getPrefix(s) === rangePrefix &&
+          getNum(s) >= rangeStartNum &&
+          getNum(s) <= rangeEndNum
+        );
       });
 
       let nextUnusedNum = rangeStartNum;
       if (invoicesInRange.length > 0) {
-        const maxNum = Math.max(...invoicesInRange.map(inv => getNum(inv.invoiceSerialCode || '')));
+        const maxNum = Math.max(
+          ...invoicesInRange.map((inv) => getNum(inv.invoiceSerialCode || ""))
+        );
         nextUnusedNum = maxNum + 1;
       }
 
+      // TODO: We need to handle 電子發票字軌 unused range
       if (nextUnusedNum <= rangeEndNum) {
         const unusedStart = `${rangePrefix}${padNumber(nextUnusedNum, 8)}`;
         const unusedEnd = range.end_number;
-
-        // Pseudo-invoice for unused
-        const item: ExtractedInvoiceData = {
+        const formatCode = getInvoiceFormatCode(
+          "銷項",
+          type as ExtractedInvoiceData["invoiceType"]
+        );
+        const unusedRow: TxtRowInput = {
+          formatCode,
           inOrOut: "銷項",
-          invoiceType:
-            range.invoice_type as ExtractedInvoiceData["invoiceType"],
-          date: `${gregorianYear}/${period.startMonth.toString().padStart(2, '0')}/01`,
+          date: `${period.gregorianYear}/${period.startMonth.toString().padStart(2, "0")}/01`,
           buyerTaxId: unusedEnd.substring(2),
           sellerTaxId: client.tax_id,
           invoiceSerialCode: unusedStart,
           taxType: "彙加",
           totalSales: 0,
           tax: 0,
-          totalAmount: 0,
         };
-        rows.push(
-          generateTxtRow(item, currentRowNum++, client.tax_payer_id)
-        );
+
+        if (!unusedRowsByFormat.has(formatCode)) {
+          unusedRowsByFormat.set(formatCode, []);
+        }
+        unusedRowsByFormat.get(formatCode)!.push(unusedRow);
       }
+    });
+  });
+
+  inputRows.forEach((rowInput) => {
+    rows.push(generateTxtRow(rowInput, currentRowNum++, client.tax_payer_id));
+  });
+
+  const outputRowsByFormat = new Map<string, TxtRowInput[]>();
+  outputRows.forEach((row) => {
+    if (!outputRowsByFormat.has(row.formatCode)) {
+      outputRowsByFormat.set(row.formatCode, []);
+    }
+    outputRowsByFormat.get(row.formatCode)!.push(row);
+  });
+
+  const outputFormatCodes = new Set([
+    ...outputRowsByFormat.keys(),
+    ...unusedRowsByFormat.keys(),
+  ]);
+
+  const sortedOutputFormatCodes = Array.from(outputFormatCodes).sort(
+    (a, b) => parseInt(a, 10) - parseInt(b, 10)
+  );
+
+  sortedOutputFormatCodes.forEach((formatCode) => {
+    const groupedRows = outputRowsByFormat.get(formatCode) || [];
+    groupedRows.sort(sortByFormatCodeAndSerial);
+    groupedRows.forEach((rowInput) => {
+      rows.push(generateTxtRow(rowInput, currentRowNum++, client.tax_payer_id));
+    });
+
+    const unusedRows = unusedRowsByFormat.get(formatCode) || [];
+    unusedRows.forEach((rowInput) => {
+      rows.push(generateTxtRow(rowInput, currentRowNum++, client.tax_payer_id));
     });
   });
 
@@ -265,24 +392,11 @@ const COUNTY_CITY_CODES: Record<string, string> = {
   '澎湖縣': 'X', '連江縣': 'Z'
 };
 
-function generateTxtRow(inv: ExtractedInvoiceData, rowNum: number, taxPayerId: string): string {
+function generateTxtRow(data: TxtRowInput, rowNum: number, taxPayerId: string): string {
   let row = '';
 
   // Bytes 1-2: Format Code
-  const type = inv.invoiceType || '';
-  if (inv.inOrOut === '進項') {
-    if (type.includes('三聯') && type.includes('收銀機')) row += '25';
-    else if (type.includes('三聯')) row += '21';
-    else if (type.includes('二聯')) row += '22';
-    else if (type.includes('電子發票')) row += '25';
-    else row += '21';
-  } else {
-    if (type.includes('三聯') && type.includes('收銀機')) row += '35';
-    else if (type.includes('三聯')) row += '31';
-    else if (type.includes('二聯')) row += '32';
-    else if (type.includes('電子發票')) row += '35';
-    else row += '35';
-  }
+  row += data.formatCode;
 
   // Bytes 3-11: Tax Payer ID
   row += padString(taxPayerId, 9);
@@ -291,24 +405,24 @@ function generateTxtRow(inv: ExtractedInvoiceData, rowNum: number, taxPayerId: s
   row += padNumber(rowNum, 7);
 
   // Bytes 19-23: YearMonth
-  row += toRocYearMonth(inv.date);
+  row += toRocYearMonth(data.date);
 
   // Bytes 24-31: Buyer Tax ID (or End Number for unused)
-  if (inv.taxType === '作廢') row += padString('', 8);
-  else row += padString(inv.buyerTaxId || '', 8);
+  if (data.taxType === '作廢') row += padString('', 8);
+  else row += padString(data.buyerTaxId || '', 8);
 
   // Bytes 32-39: Seller Tax ID
-  row += padString(inv.sellerTaxId || '', 8);
+  row += padString(data.sellerTaxId || '', 8);
 
   // Bytes 40-49: Serial Number
-  row += padString(inv.invoiceSerialCode || '', 10);
+  row += padString(data.invoiceSerialCode || '', 10);
 
   // Bytes 50-61: Sales Amount
-  if (inv.taxType === '作廢') row += padNumber(0, 12);
-  else row += padNumber(inv.totalSales || 0, 12);
+  if (data.taxType === '作廢') row += padNumber(0, 12);
+  else row += padNumber(data.totalSales || 0, 12);
 
   // Byte 62: Tax Type
-  switch (inv.taxType) {
+  switch (data.taxType) {
     case '應稅': row += '1'; break;
     case '零稅率': row += '2'; break;
     case '免稅': row += '3'; break;
@@ -318,12 +432,12 @@ function generateTxtRow(inv: ExtractedInvoiceData, rowNum: number, taxPayerId: s
   }
 
   // Bytes 63-72: Tax Amount
-  if (inv.taxType === '作廢') row += padNumber(0, 10);
-  else row += padNumber(inv.tax || 0, 10);
+  if (data.taxType === '作廢') row += padNumber(0, 10);
+  else row += padNumber(data.tax || 0, 10);
 
   // Byte 73: Deduction Code
-  if (inv.inOrOut === '銷項') row += ' ';
-  else row += '1'; // Default to進貨及費用可抵扣
+  if (data.inOrOut === '銷項') row += ' ';
+  else row += data.deductionCode || '1'; // default to 1 (進貨及費用可抵扣)
 
   // Byte 74-78: Reserved
   row += '     ';
@@ -332,7 +446,7 @@ function generateTxtRow(inv: ExtractedInvoiceData, rowNum: number, taxPayerId: s
   row += ' ';
 
   // Byte 80: Aggregate Mark
-  row += inv.taxType === '彙加' ? 'A' : ' ';
+  row += data.taxType === '彙加' ? 'A' : ' ';
 
   // Byte 81: Customs Mark
   row += ' ';

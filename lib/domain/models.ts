@@ -97,6 +97,8 @@ export type Invoice = z.infer<typeof invoiceSchema>;
 export type ExtractedInvoiceData = z.infer<typeof extractedInvoiceDataSchema>;
 export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
 export type UpdateInvoiceInput = z.infer<typeof updateInvoiceSchema>;
+export type InvoiceType = NonNullable<ExtractedInvoiceData["invoiceType"]>;
+export type InvoiceInOrOut = NonNullable<ExtractedInvoiceData["inOrOut"]>;
 
 // ===== Allowance Schemas =====
 
@@ -182,6 +184,7 @@ export type Allowance = z.infer<typeof allowanceSchema>;
 export type ExtractedAllowanceData = z.infer<typeof extractedAllowanceDataSchema>;
 export type CreateAllowanceInput = z.infer<typeof createAllowanceSchema>;
 export type UpdateAllowanceInput = z.infer<typeof updateAllowanceSchema>;
+export type AllowanceType = NonNullable<ExtractedAllowanceData["allowanceType"]>;
 
 // ===== Invoice Range Schemas =====
 export const invoiceRangeSchema = z.object({

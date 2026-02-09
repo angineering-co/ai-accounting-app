@@ -1,6 +1,8 @@
 "use server";
 
 import { createClient as createSupabaseClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/supabase/database.types";
 import {
   type ExtractedAllowanceData,
   type ExtractedInvoiceData,
@@ -146,6 +148,10 @@ type AllowanceRowData = {
   extracted_data: ExtractedAllowanceData | null;
 };
 
+type ReportServiceOptions = {
+  supabaseClient?: SupabaseClient<Database>;
+};
+
 function sortByFormatCodeAndSerial(a: TxtRowInput, b: TxtRowInput) {
   const aFormat = parseInt(a.formatCode, 10);
   const bFormat = parseInt(b.formatCode, 10);
@@ -156,8 +162,12 @@ function sortByFormatCodeAndSerial(a: TxtRowInput, b: TxtRowInput) {
 /**
  * .TXT Report Generation (81-byte format)
  */
-export async function generateTxtReport(clientId: string, serializedReportPeriod: string) {
-  const supabase = await createSupabaseClient();
+export async function generateTxtReport(
+  clientId: string,
+  serializedReportPeriod: string,
+  options?: ReportServiceOptions
+) {
+  const supabase = options?.supabaseClient ?? await createSupabaseClient();
   
   const period = RocPeriod.fromYYYMM(serializedReportPeriod);
 
@@ -169,7 +179,9 @@ export async function generateTxtReport(clientId: string, serializedReportPeriod
     .single();
   if (clientError || !client) throw new Error("Client not found");
 
-  const taxPeriod = await getTaxPeriodByYYYMM(clientId, period.toString());
+  const taxPeriod = await getTaxPeriodByYYYMM(clientId, period.toString(), {
+    supabaseClient: supabase,
+  });
   const taxPeriodId = taxPeriod?.id;
 
   // 2. Fetch Invoices for the period (Confirmed status)
@@ -201,7 +213,9 @@ export async function generateTxtReport(clientId: string, serializedReportPeriod
   const allowances = (allowancesData || []) as AllowanceRowData[];
 
   // 4. Fetch Invoice Ranges
-  const ranges = await getInvoiceRanges(clientId, period.toString());
+  const ranges = await getInvoiceRanges(clientId, period.toString(), {
+    supabaseClient: supabase,
+  });
 
   // 5. Generate Rows
   const rows: string[] = [];
@@ -506,8 +520,13 @@ function generateTxtRow(data: TxtRowInput, rowNum: number, taxPayerId: string): 
 /**
  * .TET_U Report Generation (112-field pipe-separated)
  */
-export async function generateTetUReport(clientId: string, serializedReportPeriod: string, config: TetUConfig) {
-  const supabase = await createSupabaseClient();
+export async function generateTetUReport(
+  clientId: string,
+  serializedReportPeriod: string,
+  config: TetUConfig,
+  options?: ReportServiceOptions
+) {
+  const supabase = options?.supabaseClient ?? await createSupabaseClient();
   
   const period = RocPeriod.fromYYYMM(serializedReportPeriod);
 

@@ -1,6 +1,8 @@
 "use server";
 
 import { createClient as createSupabaseClient } from "@/lib/supabase/server";
+import { type SupabaseClient } from "@supabase/supabase-js";
+import { type Database } from "@/supabase/database.types";
 import {
   invoiceRangeSchema,
   createInvoiceRangeSchema,
@@ -10,8 +12,16 @@ import { RocPeriod } from "@/lib/domain/roc-period";
 import { revalidatePath } from "next/cache";
 import { ensurePeriodEditable } from "@/lib/services/tax-period";
 
-export async function getInvoiceRanges(clientId: string, serializedReportPeriod?: string) {
-  const supabase = await createSupabaseClient();
+interface InvoiceRangeServiceTestOptions {
+  supabaseClient: SupabaseClient<Database>;
+}
+
+export async function getInvoiceRanges(
+  clientId: string,
+  serializedReportPeriod?: string,
+  options?: InvoiceRangeServiceTestOptions
+) {
+  const supabase = options ? options.supabaseClient : await createSupabaseClient();
   let query = supabase
     .from("invoice_ranges")
     .select("*")

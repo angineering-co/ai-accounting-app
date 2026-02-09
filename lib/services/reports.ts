@@ -531,6 +531,11 @@ export async function generateTetUReport(
   
   const period = RocPeriod.fromYYYMM(serializedReportPeriod);
 
+  const taxPeriod = await getTaxPeriodByYYYMM(clientId, period.toString(), {
+    supabaseClient: supabase,
+  });
+  const taxPeriodId = taxPeriod?.id;
+
   // 1. Fetch Client
   const { data: client, error: clientError } = await supabase
     .from("clients")
@@ -540,34 +545,37 @@ export async function generateTetUReport(
   if (clientError || !client) throw new Error("Client not found");
 
   // 2. Fetch Invoices
-  const gregorianYear = period.gregorianYear;
+  const { data: invoicesData, error: invoicesError } = taxPeriodId
+    ? await supabase
+      .from("invoices")
+      .select("*")
+      .eq("client_id", clientId)
+      .eq("tax_filing_period_id", taxPeriodId)
+      .eq("status", "confirmed")
+    : { data: [], error: null };
 
-  const prefix1 = `${gregorianYear}/${period.startMonth.toString().padStart(2, '0')}`;
-  const prefix2 = `${gregorianYear}/${period.endMonth.toString().padStart(2, '0')}`;
-
-  const { data: invoicesData } = await supabase
-    .from("invoices")
-    .select("*")
-    .eq("client_id", clientId)
-    .eq("year_month", period.toString())
-    .eq("status", "confirmed");
+  if (invoicesError) throw new Error("Error fetching invoices");
 
   const invoices = (invoicesData || [])
     .map(inv => inv.extracted_data as ExtractedInvoiceData)
-    .filter(data => data && data.date && (data.date.startsWith(prefix1) || data.date.startsWith(prefix2)));
+    .filter(Boolean);
 
-  if (invoicesData && invoicesData.length !== invoices.length) {
-    throw new Error(
-      `Invoice data mismatch for period ${period.toString()}. The database has ${
-        invoicesData.length
-      } invoices for this period, but only ${
-        invoices.length
-      } have a matching date in their extracted data. Please review the invoices.`
-    );
-  }
+  // 3. Fetch Allowances for the period (Confirmed status)
+  const { data: allowancesData, error: allowancesError } = taxPeriodId
+    ? await supabase
+      .from("allowances")
+      .select("in_or_out, extracted_data")
+      .eq("client_id", clientId)
+      .eq("tax_filing_period_id", taxPeriodId)
+      .eq("status", "confirmed")
+    : { data: [], error: null };
+
+  if (allowancesError) throw new Error("Error fetching allowances");
+
+  const allowances = (allowancesData || []) as AllowanceRowData[];
 
   // Aggregate invoice data
-  const aggregated = aggregateInvoiceData(invoices);
+  const aggregated = aggregateInvoiceData(invoices, allowances);
 
   // Field construction
   const fields: string[] = [];
@@ -727,7 +735,7 @@ export async function generateTetUReport(
   fields.push(formatX(getCountyCityCode(config.countyCity), 1));          // Field 97: 縣市別
   fields.push(formatX(config.declarationMethod, 1));                      // Field 98: 自行或委託辦理申報註記
   fields.push(formatX(config.declarerId, 10));                            // Field 99: 申報人身分證統一編號
-  fields.push(formatC(config.declarerName, 12));                          // Field 100: 申報人姓名
+  fields.push(config.declarerName);                                       // Field 100: 申報人姓名 (C(012) - 文數字，可含中文字) (實際不需 padding)
   fields.push(formatX(config.declarerPhoneAreaCode, 4));                  // Field 101: 申報人電話區域碼
   fields.push(formatX(config.declarerPhone, 11));                         // Field 102: 申報人電話
   fields.push(formatX(config.declarerPhoneExtension, 5));                 // Field 103: 申報人電話分機
@@ -748,7 +756,10 @@ export async function generateTetUReport(
   return fields.join('|');
 }
 
-function aggregateInvoiceData(invoices: ExtractedInvoiceData[]) {
+function aggregateInvoiceData(
+  invoices: ExtractedInvoiceData[],
+  allowances: AllowanceRowData[]
+) {
   const result = {
     invoiceCount: 0,
     output: {
@@ -791,7 +802,6 @@ function aggregateInvoiceData(invoices: ExtractedInvoiceData[]) {
   // Process output (銷項) invoices
   const outputInvoices = invoices.filter(inv => inv.inOrOut === '銷項');
   outputInvoices.forEach(inv => {
-    const isReturn = false; // TODO: 退回及折讓要再彙總計算
     const sales = Math.round(inv.totalSales || 0);
     const tax = Math.round(inv.tax || 0);
     
@@ -799,38 +809,28 @@ function aggregateInvoiceData(invoices: ExtractedInvoiceData[]) {
     const invoiceType = inv.invoiceType || '';
 
     if (inv.taxType === '應稅') {
-      if (isReturn) {
-        result.output.returnsAndAllowances.sales += sales;
-        result.output.returnsAndAllowances.tax += tax;
-      } else {
-        // B2C 二聯發票 (無買受人統一編號) 稅額要再彙總計算
-        if (!inv.buyerTaxId) {
-          totalSalesWithoutBuyerTaxId += sales;
-        }
+      // B2C 二聯發票 (無買受人統一編號) 稅額要再彙總計算
+      if (!inv.buyerTaxId) {
+        totalSalesWithoutBuyerTaxId += sales;
+      }
 
-        // Categorize by invoice type
-        if (invoiceType.includes('手開三聯式') || (invoiceType.includes('三聯式') && !invoiceType.includes('收銀機'))) {
-          result.output.triplicate.sales += sales;
-          result.output.triplicate.tax += tax;
-        } else if (invoiceType.includes('電子發票') || (invoiceType.includes('三聯式') && invoiceType.includes('收銀機'))) {
-          result.output.cashRegisterAndElectronic.sales += sales;
-          result.output.cashRegisterAndElectronic.tax += tax;
-        } else if (invoiceType.includes('二聯式')) {
-          result.output.duplicateCashRegister.sales += sales;
-          result.output.duplicateCashRegister.tax += tax;
-        } else {
-          // Note: this should not happen. 
-          throw new Error(`Unsupported invoice type: ${invoiceType}`);
-        }
+      // Categorize by invoice type
+      if (invoiceType === '手開三聯式') {
+        result.output.triplicate.sales += sales;
+        result.output.triplicate.tax += tax;
+      } else if (invoiceType === '電子發票' || invoiceType === '三聯式收銀機') {
+        result.output.cashRegisterAndElectronic.sales += sales;
+        result.output.cashRegisterAndElectronic.tax += tax;
+      } else if (invoiceType.includes('二聯式')) {
+        result.output.duplicateCashRegister.sales += sales;
+        result.output.duplicateCashRegister.tax += tax;
+      } else {
+        // Note: this should not happen. 
+        throw new Error(`Unsupported invoice type: ${invoiceType}`);
       }
     } else if (inv.taxType === '零稅率') {
       // TODO: 零稅率銷售額
-      if (isReturn) {
-        result.output.zeroTax.returnsAndAllowances += sales;
-      } else {
-        // TODO: We need to identify the type of zero tax sales
-        result.output.zeroTax.withoutDocuments += sales;
-      }
+      result.output.zeroTax.withoutDocuments += sales;
     } else if (inv.taxType === '免稅') {
       // 免稅
       result.output.exemptFromIssuance.sales += sales;
@@ -849,6 +849,34 @@ function aggregateInvoiceData(invoices: ExtractedInvoiceData[]) {
     }
   });
  
+  // Process allowances (退回及折讓)
+  allowances.forEach((allowance) => {
+    const data = allowance.extracted_data!;
+    const allowanceTaxType = data.taxType!;
+    const isOutput = allowance.in_or_out! === 'out';
+
+    const sales = Math.round(data.amount ?? 0);
+    const tax = Math.round(data.taxAmount ?? 0);
+
+    if (isOutput) {
+      if (allowanceTaxType === '零稅率') {
+        result.output.zeroTax.returnsAndAllowances += sales;
+      } else {
+        result.output.returnsAndAllowances.sales += sales;
+        result.output.returnsAndAllowances.tax += tax;
+      }
+    } else {
+      const isFixedAsset = data.deductionCode! === '2';
+      if (isFixedAsset) {
+        result.input.returnsAndAllowances.fixedAssets += sales;
+        result.input.returnsAndAllowances.fixedAssetsTax += tax;
+      } else {
+        result.input.returnsAndAllowances.purchasesAndExpenses += sales;
+        result.input.returnsAndAllowances.purchasesAndExpensesTax += tax;
+      }
+    }
+  });
+
   // 銷項統一發票之買受人為非營業人者，其發票所載金額應含營業稅額，於填寫申報書時，再彙總依下列公 式計算應申報之銷售額與稅額。 
   // 銷項稅額 = 當期開立統一發票總額 ÷（１+ 徵收率）× 徵收率（四捨五入）
   const totalTaxWithoutBuyerId = Math.round(totalSalesWithoutBuyerTaxId / 1.05 * 0.05);
@@ -874,52 +902,41 @@ function aggregateInvoiceData(invoices: ExtractedInvoiceData[]) {
   // Only deductible input invoices are included
   const inputInvoices = invoices.filter(inv => inv.inOrOut === '進項').filter(inv => inv.deductible);
   inputInvoices.forEach(inv => {
-    const isReturn = false; // TODO: 退回及折讓要再彙總計算
     const isFixedAsset = inv.summary && (inv.summary.includes('固定資產') || inv.summary.includes('設備'))
     const sales = Math.round(inv.totalSales || 0);
     const tax = Math.round(inv.tax || 0);
-    
+
     // Safety check for invoiceType
     const invoiceType = inv.invoiceType || '';
-    
+
     if (inv.taxType === '應稅') {
-      if (isReturn) {
+      // Categorize by invoice type
+      if (invoiceType === '手開三聯式') {
         if (isFixedAsset) {
-          result.input.returnsAndAllowances.fixedAssets += sales;
-          result.input.returnsAndAllowances.fixedAssetsTax += tax;
+          result.input.triplicate.fixedAssets += sales;
+          result.input.triplicate.fixedAssetsTax += tax;
         } else {
-          result.input.returnsAndAllowances.purchasesAndExpenses += sales;
-          result.input.returnsAndAllowances.purchasesAndExpensesTax += tax;
+          result.input.triplicate.purchasesAndExpenses += sales;
+          result.input.triplicate.purchasesAndExpensesTax += tax;
         }
-      } else {
-        // Categorize by invoice type
-        if (invoiceType.includes('手開三聯式') || (invoiceType.includes('三聯式') && !invoiceType.includes('收銀機'))) {
-          if (isFixedAsset) {
-            result.input.triplicate.fixedAssets += sales;
-            result.input.triplicate.fixedAssetsTax += tax;
-          } else {
-            result.input.triplicate.purchasesAndExpenses += sales;
-            result.input.triplicate.purchasesAndExpensesTax += tax;
-          }
-        } else if (invoiceType.includes('電子發票') || (invoiceType.includes('三聯式') && invoiceType.includes('收銀機'))) {
-          if (isFixedAsset) {
-            result.input.cashRegisterAndElectronic.fixedAssets += sales;
-            result.input.cashRegisterAndElectronic.fixedAssetsTax += tax;
-          } else {
-            result.input.cashRegisterAndElectronic.purchasesAndExpenses += sales;
-            result.input.cashRegisterAndElectronic.purchasesAndExpensesTax += tax;
-          }
-        } else if (invoiceType.includes('二聯式')) {
-          if (isFixedAsset) {
-            result.input.otherCertificates.fixedAssets += sales;
-            result.input.otherCertificates.fixedAssetsTax += tax;
-          } else {
-            result.input.otherCertificates.purchasesAndExpenses += sales;
-            result.input.otherCertificates.purchasesAndExpensesTax += tax;
-          }
+      } else if (invoiceType === '電子發票' || (invoiceType === '三聯式收銀機')) {
+        if (isFixedAsset) {
+          result.input.cashRegisterAndElectronic.fixedAssets += sales;
+          result.input.cashRegisterAndElectronic.fixedAssetsTax += tax;
+        } else {
+          result.input.cashRegisterAndElectronic.purchasesAndExpenses += sales;
+          result.input.cashRegisterAndElectronic.purchasesAndExpensesTax += tax;
+        }
+      } else if (invoiceType.includes('二聯式')) {
+        if (isFixedAsset) {
+          result.input.otherCertificates.fixedAssets += sales;
+          result.input.otherCertificates.fixedAssetsTax += tax;
+        } else {
+          result.input.otherCertificates.purchasesAndExpenses += sales;
+          result.input.otherCertificates.purchasesAndExpensesTax += tax;
         }
       }
-      
+
       // Add to total (all input amounts including non-deductible)
       if (isFixedAsset) {
         result.input.totalFixedAssetsAll += sales;

@@ -271,18 +271,6 @@ describe("Report Generation (integration)", () => {
         const expectedField = expectedFields[i];
         const fieldName = fieldNames[i] || `Field ${i + 1}`;
 
-        if (i === 99) {
-          if (!resultField.includes("黃勝平") || !expectedField.includes("黃勝平")) {
-            differences.push(
-              `Field ${i + 1} (${fieldName}):\n` +
-                `  Expected: "${expectedField}"\n` +
-                `  Received: "${resultField}"\n` +
-                `  Note: Known padding difference in Chinese text field`
-            );
-          }
-          continue;
-        }
-
         if (resultField !== expectedField) {
           differences.push(
             `Field ${i + 1} (${fieldName}):\n` +

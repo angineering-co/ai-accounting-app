@@ -351,6 +351,7 @@ export async function generateTxtReport(
       .toString()
       .padStart(2, "0")}/01`;
 
+    // Special case: If there are no relevant ranges and the invoice type is electronic, we need to generate unused ranges.
     if (relevantRanges.length === 0 && type === "電子發票") {
       const validInvoices = typeInvoices
         .filter((inv) => inv.invoiceSerialCode && inv.invoiceSerialCode.length === 10)
@@ -829,7 +830,7 @@ function aggregateInvoiceData(
         throw new Error(`Unsupported invoice type: ${invoiceType}`);
       }
     } else if (inv.taxType === '零稅率') {
-      // TODO: 零稅率銷售額
+      // TODO: We need to identify the type of zero tax sales between with documents and without documents
       result.output.zeroTax.withoutDocuments += sales;
     } else if (inv.taxType === '免稅') {
       // 免稅

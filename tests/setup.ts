@@ -9,6 +9,7 @@ loadEnvConfig(projectRoot, true);
 const requiredEnvVars = [
   "NEXT_PUBLIC_SUPABASE_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
+  "DATABASE_URL",
 ];
 
 for (const envVar of requiredEnvVars) {

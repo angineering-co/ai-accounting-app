@@ -21,7 +21,7 @@ export function getAllowanceFormatCode(
 
 export function getInvoiceFormatCode(
   inOrOut: InvoiceInOrOut,
-  invoiceType?: InvoiceType // TODO: this should be non-nullable once we do server-side validation
+  invoiceType: InvoiceType
 ): string {
   const isInput = inOrOut === "進項";
   switch (invoiceType) {
@@ -36,7 +36,7 @@ export function getInvoiceFormatCode(
     case "三聯式收銀機":
       return isInput ? "25" : "35";
     default:
-      return isInput ? "21" : "35";
+      throw new Error(`Cannot determine format code for unknown or missing invoiceType: "${invoiceType}"`);
   }
 }
 

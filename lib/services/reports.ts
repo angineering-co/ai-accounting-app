@@ -8,6 +8,7 @@ import {
   type ExtractedInvoiceData,
   type TetUConfig,
   type InvoiceInOrOut,
+  type InvoiceType,
 } from "@/lib/domain/models";
 import { getAllowanceFormatCode, getInvoiceFormatCode } from "@/lib/domain/format-codes";
 import { getTaxPeriodByYYYMM } from "@/lib/services/tax-period";
@@ -238,7 +239,7 @@ export async function generateTxtReport(
     );
 
     const baseSerial =
-      allowance.original_invoice_serial_code || extracted.originalInvoiceSerialCode || "";
+      allowance.original_invoice_serial_code || extracted.originalInvoiceSerialCode!;
 
     return items.map((item) => ({
       formatCode,
@@ -264,8 +265,8 @@ export async function generateTxtReport(
   const inputRows: TxtRowInput[] = [
     ...inputInvoices.map((inv) => ({
       formatCode: getInvoiceFormatCode(
-        inv.inOrOut === "進項" ? "進項" : "銷項",
-        inv.invoiceType
+        inv.inOrOut!,
+        inv.invoiceType!
       ),
       inOrOut: "進項" as const,
       date: inv.date,
@@ -282,8 +283,8 @@ export async function generateTxtReport(
   const outputRows: TxtRowInput[] = [
     ...outputInvoices.map((inv) => ({
       formatCode: getInvoiceFormatCode(
-        inv.inOrOut === "進項" ? "進項" : "銷項",
-        inv.invoiceType
+        inv.inOrOut!,
+        inv.invoiceType!
       ),
       inOrOut: "銷項" as const,
       date: inv.date,
@@ -300,7 +301,7 @@ export async function generateTxtReport(
   // Group output invoices by type for range calculation
   const groupedOutput = new Map<string, ExtractedInvoiceData[]>();
   outputInvoices.forEach((inv) => {
-    const type = inv.invoiceType || "Unknown";
+    const type = inv.invoiceType!;
     if (!groupedOutput.has(type)) groupedOutput.set(type, []);
     groupedOutput.get(type)!.push(inv);
   });
@@ -316,7 +317,7 @@ export async function generateTxtReport(
 
     const formatCode = getInvoiceFormatCode(
       "銷項",
-      type as ExtractedInvoiceData["invoiceType"]
+      type as InvoiceType
     );
     const pushUnusedRow = (
       unusedStart: string,

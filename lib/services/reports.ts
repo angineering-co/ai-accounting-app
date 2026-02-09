@@ -118,6 +118,15 @@ function padString(str: string, length: number): string {
   return b.toString('ascii');
 }
 
+function sortBySerialCodeNum(a: ExtractedInvoiceData, b: ExtractedInvoiceData) {
+  // Compare the whole serial number alphanumerically including the prefix
+  const aCode = a.invoiceSerialCode || "";
+  const bCode = b.invoiceSerialCode || "";
+  if (aCode < bCode) return -1;
+  if (aCode > bCode) return 1;
+  return 0;
+}
+
 type TxtRowInput = {
   formatCode: string;
   inOrOut: InvoiceInOrOut;
@@ -291,8 +300,68 @@ export async function generateTxtReport(clientId: string, serializedReportPeriod
   allTypes.forEach((type) => {
     const typeInvoices = groupedOutput.get(type) || [];
 
+    const formatCode = getInvoiceFormatCode(
+      "銷項",
+      type as ExtractedInvoiceData["invoiceType"]
+    );
+    const pushUnusedRow = (
+      unusedStart: string,
+      unusedEnd: string,
+      unusedDate: string
+    ) => {
+      // Special case: If only one unused, don't set unUsedEnd.
+      // This is used to indicate that the unused invoice is a single unused invoice (逐筆登錄) rather than a range of unused invoices (彙總登錄).
+      const onlyOneUnused = unusedStart === unusedEnd;
+      const unusedRow: TxtRowInput = {
+        formatCode,
+        inOrOut: "銷項",
+        date: unusedDate,
+        buyerTaxId: onlyOneUnused ? undefined : unusedEnd.substring(2),
+        sellerTaxId: client.tax_id,
+        invoiceSerialCode: unusedStart,
+        taxType: "彙加",
+        totalSales: 0,
+        tax: 0,
+      };
+
+      if (!unusedRowsByFormat.has(formatCode)) {
+        unusedRowsByFormat.set(formatCode, []);
+      }
+      unusedRowsByFormat.get(formatCode)!.push(unusedRow);
+    };
+
     // Unused ranges
     const relevantRanges = ranges.filter((range) => range.invoice_type === type);
+    const unusedDate = `${period.gregorianYear}/${period.startMonth
+      .toString()
+      .padStart(2, "0")}/01`;
+
+    if (relevantRanges.length === 0 && type === "電子發票") {
+      const validInvoices = typeInvoices
+        .filter((inv) => inv.invoiceSerialCode && inv.invoiceSerialCode.length === 10)
+        .sort(sortBySerialCodeNum);
+      const lastInvoice = validInvoices[validInvoices.length - 1];
+
+      if (lastInvoice?.invoiceSerialCode) {
+        const getPrefix = (s: string) => s.substring(0, 2);
+        const getNum = (s: string) => parseInt(s.substring(2), 10);
+
+        const lastSerial = lastInvoice.invoiceSerialCode;
+        const rangePrefix = getPrefix(lastSerial);
+        const lastNum = getNum(lastSerial);
+        const blockStartNum = Math.floor((lastNum % 100) / 50) * 50;
+        const rangeStartNum = lastNum - (lastNum % 100) + blockStartNum;
+        const rangeEndNum = rangeStartNum + 49;
+        const nextUnusedNum = lastNum + 1;
+
+        if (nextUnusedNum <= rangeEndNum) {
+          const unusedStart = `${rangePrefix}${padNumber(nextUnusedNum, 8)}`;
+          const unusedEnd = `${rangePrefix}${padNumber(rangeEndNum, 8)}`;
+          pushUnusedRow(unusedStart, unusedEnd, unusedDate);
+        }
+      }
+    }
+
     relevantRanges.forEach((range) => {
       const getPrefix = (s: string) => s.substring(0, 2);
       const getNum = (s: string) => parseInt(s.substring(2), 10);
@@ -319,30 +388,10 @@ export async function generateTxtReport(clientId: string, serializedReportPeriod
         nextUnusedNum = maxNum + 1;
       }
 
-      // TODO: We need to handle 電子發票字軌 unused range
       if (nextUnusedNum <= rangeEndNum) {
         const unusedStart = `${rangePrefix}${padNumber(nextUnusedNum, 8)}`;
         const unusedEnd = range.end_number;
-        const formatCode = getInvoiceFormatCode(
-          "銷項",
-          type as ExtractedInvoiceData["invoiceType"]
-        );
-        const unusedRow: TxtRowInput = {
-          formatCode,
-          inOrOut: "銷項",
-          date: `${period.gregorianYear}/${period.startMonth.toString().padStart(2, "0")}/01`,
-          buyerTaxId: unusedEnd.substring(2),
-          sellerTaxId: client.tax_id,
-          invoiceSerialCode: unusedStart,
-          taxType: "彙加",
-          totalSales: 0,
-          tax: 0,
-        };
-
-        if (!unusedRowsByFormat.has(formatCode)) {
-          unusedRowsByFormat.set(formatCode, []);
-        }
-        unusedRowsByFormat.get(formatCode)!.push(unusedRow);
+        pushUnusedRow(unusedStart, unusedEnd, unusedDate);
       }
     });
   });
@@ -427,7 +476,7 @@ function generateTxtRow(data: TxtRowInput, rowNum: number, taxPayerId: string): 
     case '零稅率': row += '2'; break;
     case '免稅': row += '3'; break;
     case '作廢': row += 'F'; break;
-    case '彙加': row += 'D'; break;
+    case '彙加': row += 'D'; break; // 空白未使用的發票
     default: row += '1';
   }
 
@@ -446,7 +495,7 @@ function generateTxtRow(data: TxtRowInput, rowNum: number, taxPayerId: string): 
   row += ' ';
 
   // Byte 80: Aggregate Mark
-  row += data.taxType === '彙加' ? 'A' : ' ';
+  row += data.taxType === '彙加' && data.buyerTaxId !== undefined ? 'A' : ' '; // A: 彙加資料（彙總登錄）, 空白: 非彙加資料（逐筆登錄）
 
   // Byte 81: Customs Mark
   row += ' ';

@@ -7,7 +7,7 @@ import {
   createTestFixture,
   getServiceClient,
   type TestFixture,
-} from "./fixtures/supabase";
+} from "@/tests/utils/supabase";
 
 describe("processElectronicInvoiceFile", () => {
   const supabase = getServiceClient();
@@ -24,7 +24,7 @@ describe("processElectronicInvoiceFile", () => {
   });
 
   it("upserts invoices based on client_id + invoice_serial_code", async () => {
-    const filePath = path.resolve(__dirname, "data", "60707504.xlsx");
+    const filePath = path.resolve(__dirname, "../../fixtures/files", "60707504.xlsx");
     const fileBuffer = readFileSync(filePath);
     const storagePath = `${fixture.firmId}/${fixture.clientId}/60707504.xlsx`;
 

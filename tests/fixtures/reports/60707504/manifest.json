@@ -1,0 +1,23 @@
+{
+  "clientId": "2c3c7f79-1193-406c-90d6-ae7c98de4084",
+  "reportPeriod": "11409",
+  "description": "Standard case with input/output invoices, voided invoice, unused ranges",
+  "tetUConfig": {
+    "fileNumber": "",
+    "taxPayerId": "351406082",
+    "consolidatedDeclarationCode": "0",
+    "declarationCode": "1",
+    "midYearClosureTaxPayable": 0,
+    "previousPeriodCarryForwardTax": 0,
+    "midYearClosureTaxRefundable": 0,
+    "declarationType": "1",
+    "countyCity": "新北市",
+    "declarationMethod": "2",
+    "declarerId": "          ",
+    "declarerName": "黃勝平",
+    "declarerPhoneAreaCode": "04",
+    "declarerPhone": "23758628",
+    "declarerPhoneExtension": "",
+    "agentRegistrationNumber": "104台財稅登字第4656號                             "
+  }
+}

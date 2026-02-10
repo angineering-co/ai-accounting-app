@@ -1,0 +1,23 @@
+{
+  "clientId": "b4c112df-2c95-4489-a1e7-f6d1da4752d3",
+  "reportPeriod": "11411",
+  "description": "Electronic invoices with allowances and invoice ranges",
+  "tetUConfig": {
+    "fileNumber": "",
+    "taxPayerId": "481204416",
+    "consolidatedDeclarationCode": "0",
+    "declarationCode": "1",
+    "midYearClosureTaxPayable": 0,
+    "previousPeriodCarryForwardTax": 0,
+    "midYearClosureTaxRefundable": 0,
+    "declarationType": "1",
+    "countyCity": "臺中市",
+    "declarationMethod": "2",
+    "declarerId": "          ",
+    "declarerName": "黃勝平",
+    "declarerPhoneAreaCode": "04",
+    "declarerPhone": "23758628",
+    "declarerPhoneExtension": "",
+    "agentRegistrationNumber": "104台財稅登字第4656號                             "
+  }
+}

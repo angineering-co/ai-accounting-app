@@ -1,0 +1,16 @@
+[
+  {
+    "id": "21ebb42d-bb7d-4dae-8d22-5fa3385b9d05",
+    "year_month": "11409",
+    "invoice_type": "手開二聯式",
+    "start_number": "RV25776650",
+    "end_number": "RV25776699"
+  },
+  {
+    "id": "ce04935f-7f12-4cc8-bf61-e4e7cb23f411",
+    "year_month": "11409",
+    "invoice_type": "手開三聯式",
+    "start_number": "RT33662450",
+    "end_number": "RT33662499"
+  }
+]

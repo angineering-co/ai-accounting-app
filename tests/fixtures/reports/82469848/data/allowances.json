@@ -1,0 +1,831 @@
+[
+  {
+    "id": "cc7a9cee-2f33-427c-8e96-8927aeb1f88f",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "TL82147874",
+    "extracted_data": {
+      "date": "2025/9/30",
+      "items": [
+        {
+          "amount": 75,
+          "taxAmount": 4,
+          "description": "純棉五趾襪 韓版抗菌防臭襪：台灣出貨中筒襪，男女適用運動休閒襪, 白色"
+        },
+        {
+          "amount": 75,
+          "taxAmount": 4,
+          "description": "純棉五趾襪 韓版抗菌防臭襪：台灣出貨中筒襪，男女適用運動休閒襪, 藏青色"
+        }
+      ],
+      "amount": 150,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：純棉五趾襪 韓版抗菌防臭襪：台灣出貨中筒襪，男女適用運動休閒襪, 白色, 折讓金額：75\n品名：純棉五趾襪 韓版抗菌防臭襪：台灣出貨中筒襪，男女適用運動休閒襪, 藏青色, 折讓金額：75",
+      "buyerName": "0000000000",
+      "taxAmount": 8,
+      "buyerTaxId": "",
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "TL82147874"
+    }
+  },
+  {
+    "id": "4fdc7ea1-ecd0-4b82-bcb6-3b250684eb3e",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "TL82147906",
+    "extracted_data": {
+      "date": "2025/10/31",
+      "items": [
+        {
+          "amount": 180,
+          "taxAmount": 9,
+          "description": "MINLIU SOCKS 可愛動物恐龍交通工具兒童止滑中筒襪, 【M】3-5歲"
+        },
+        {
+          "amount": 171,
+          "taxAmount": 9,
+          "description": "運費"
+        }
+      ],
+      "amount": 351,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：MINLIU SOCKS 可愛動物恐龍交通工具兒童止滑中筒襪, 【M】3-5歲, 折讓金額：180\n品名：運費, 折讓金額：171",
+      "buyerName": "0000000000",
+      "taxAmount": 18,
+      "buyerTaxId": "",
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "TL82147906"
+    }
+  },
+  {
+    "id": "70879c1f-1931-46c2-81ec-489a663902f7",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "VL58216502",
+    "extracted_data": {
+      "date": "2025/11/12",
+      "items": [
+        {
+          "amount": 38,
+          "taxAmount": 2,
+          "description": "韓國製 碎花/小熊 中筒襪 (少女/緹花), 粉色"
+        },
+        {
+          "amount": 38,
+          "taxAmount": 2,
+          "description": "正韓芭蕾緹花/壓紋/小花朵 中筒襪 女襪 INS風, 米色"
+        },
+        {
+          "amount": 38,
+          "taxAmount": 2,
+          "description": "韓國製 碎花/小熊 中筒襪 (少女/緹花), 白色"
+        },
+        {
+          "amount": 38,
+          "taxAmount": 2,
+          "description": "正韓國女中筒襪 點點圖案, 咖啡色"
+        },
+        {
+          "amount": 38,
+          "taxAmount": 2,
+          "description": "韓國製 碎花/小熊 中筒襪 (少女/緹花), 綠色"
+        },
+        {
+          "amount": 38,
+          "taxAmount": 2,
+          "description": "正韓國女中筒襪 點點圖案, 灰色"
+        },
+        {
+          "amount": 39,
+          "taxAmount": 1,
+          "description": "正韓芭蕾緹花/壓紋/小花朵 中筒襪 女襪 INS風, 綠色"
+        }
+      ],
+      "amount": 267,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：韓國製 碎花/小熊 中筒襪 (少女/緹花), 粉色, 折讓金額：38\n品名：正韓芭蕾緹花/壓紋/小花朵 中筒襪 女襪 INS風, 米色, 折讓金額：38\n品名：韓國製 碎花/小熊 中筒襪 (少女/緹花), 白色, 折讓金額：38\n品名：正韓國女中筒襪 點點圖案, 咖啡色, 折讓金額：38\n品名：韓國製 碎花/小熊 中筒襪 (少女/緹花), 綠色, 折讓金額：38\n品名：正韓國女中筒襪 點點圖案, 灰色, 折讓金額：38\n品名：正韓芭蕾緹花/壓紋/小花朵 中筒襪 女襪 INS風, 綠色, 折讓金額：39",
+      "buyerName": "0000000000",
+      "taxAmount": 13,
+      "buyerTaxId": "",
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "VL58216502"
+    }
+  },
+  {
+    "id": "edbe06f4-1d3c-44b6-a1e5-a18d2d217caa",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "TL82147897",
+    "extracted_data": {
+      "date": "2025/10/12",
+      "items": [
+        {
+          "amount": 43,
+          "taxAmount": 2,
+          "description": "運費"
+        },
+        {
+          "amount": 86,
+          "taxAmount": 4,
+          "description": "純棉五趾隱形襪 男士短襪 抗菌防臭透氣運動休閒襪, 白色"
+        }
+      ],
+      "amount": 129,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：運費, 折讓金額：43\n品名：純棉五趾隱形襪 男士短襪 抗菌防臭透氣運動休閒襪, 白色, 折讓金額：86",
+      "buyerName": "0000000000",
+      "taxAmount": 6,
+      "buyerTaxId": "",
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "TL82147897"
+    }
+  },
+  {
+    "id": "33407c1d-bb32-4f1a-84d4-b7254342841f",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "VL58216544",
+    "extracted_data": {
+      "date": "2025/11/29",
+      "items": [
+        {
+          "amount": 257,
+          "taxAmount": 13,
+          "description": "特選棉加強防漏生理褲 生理內褲 月經褲 前後防漏 抗菌內褲 女生內褲 低腰內褲 防漏救援內褲, 黑色"
+        },
+        {
+          "amount": 172,
+          "taxAmount": 8,
+          "description": "運費"
+        }
+      ],
+      "amount": 429,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：特選棉加強防漏生理褲 生理內褲 月經褲 前後防漏 抗菌內褲 女生內褲 低腰內褲 防漏救援內褲, 黑色, 折讓金額：257\n品名：運費, 折讓金額：172",
+      "buyerName": "0000000000",
+      "taxAmount": 21,
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "VL58216544"
+    }
+  },
+  {
+    "id": "e3a6b0e3-a2c4-4674-8710-7b571ffa6ba4",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "VL58216514",
+    "extracted_data": {
+      "date": "2025/11/11",
+      "items": [
+        {
+          "amount": 180,
+          "taxAmount": 9,
+          "description": "MINLIU SOCKS 兒童襪5入組 防滑透氣卡通寶寶襪, 【M】3-5歲"
+        },
+        {
+          "amount": 171,
+          "taxAmount": 9,
+          "description": "運費"
+        }
+      ],
+      "amount": 351,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：MINLIU SOCKS 兒童襪5入組 防滑透氣卡通寶寶襪, 【M】3-5歲, 折讓金額：180\n品名：運費, 折讓金額：171",
+      "buyerName": "0000000000",
+      "taxAmount": 18,
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "VL58216514"
+    }
+  },
+  {
+    "id": "ea359fac-5b64-464a-968a-302ef78f7bcf",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "VL58216549",
+    "extracted_data": {
+      "date": "2025/12/9",
+      "items": [
+        {
+          "amount": 171,
+          "taxAmount": 9,
+          "description": "運費"
+        },
+        {
+          "amount": 180,
+          "taxAmount": 9,
+          "description": "MINLIU SOCKS 兒童襪5入組 可愛恐龍防滑寶寶襪 透氣舒適童襪組合, 【M】3-5歲"
+        }
+      ],
+      "amount": 351,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：運費, 折讓金額：171\n品名：MINLIU SOCKS 兒童襪5入組 可愛恐龍防滑寶寶襪 透氣舒適童襪組合, 【M】3-5歲, 折讓金額：180",
+      "buyerName": "0000000000",
+      "taxAmount": 18,
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "VL58216549"
+    }
+  },
+  {
+    "id": "a9d01941-2a5e-4ef7-b3d8-add77388f899",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "VL58216576",
+    "extracted_data": {
+      "date": "2025/12/20",
+      "items": [
+        {
+          "amount": 257,
+          "taxAmount": 13,
+          "description": "蝴蝶結刺繡棒球帽 韓版遮陽軟頂帽子 女款刺繡蝴蝶結牛仔帽, 白色"
+        }
+      ],
+      "amount": 257,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：蝴蝶結刺繡棒球帽 韓版遮陽軟頂帽子 女款刺繡蝴蝶結牛仔帽, 白色, 折讓金額：257",
+      "buyerName": "0000000000",
+      "taxAmount": 13,
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "VL58216576"
+    }
+  },
+  {
+    "id": "14b063ab-0553-4122-ba69-048a708654f9",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "TL82147892",
+    "extracted_data": {
+      "date": "2025/10/8",
+      "items": [
+        {
+          "amount": 171,
+          "taxAmount": 9,
+          "description": "特選棉加強防漏生理褲 生理內褲 月經褲 前後防漏 抗菌內褲 女生內褲 低腰內褲 防漏救援內褲, 黑色"
+        },
+        {
+          "amount": 172,
+          "taxAmount": 8,
+          "description": "運費"
+        }
+      ],
+      "amount": 343,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：特選棉加強防漏生理褲 生理內褲 月經褲 前後防漏 抗菌內褲 女生內褲 低腰內褲 防漏救援內褲, 黑色, 折讓金額：171\n品名：運費, 折讓金額：172",
+      "buyerName": "0000000000",
+      "taxAmount": 17,
+      "buyerTaxId": "",
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "TL82147892"
+    }
+  },
+  {
+    "id": "78c8cded-db3a-456e-b0b5-b614006dd527",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "TL82147861",
+    "extracted_data": {
+      "date": "2025/9/20",
+      "items": [
+        {
+          "amount": 180,
+          "taxAmount": 9,
+          "description": "MINLIU SOCKS童襪 可愛熊熊龍龍動物造型兒童襪 男女童止滑中筒襪 5入組, 【S】1-3歲"
+        }
+      ],
+      "amount": 180,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：MINLIU SOCKS童襪 可愛熊熊龍龍動物造型兒童襪 男女童止滑中筒襪 5入組, 【S】1-3歲, 折讓金額：180",
+      "buyerName": "0000000000",
+      "taxAmount": 9,
+      "buyerTaxId": "",
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "TL82147861"
+    }
+  },
+  {
+    "id": "0a6c45a9-5bd1-461e-bff8-dec6484ef3e8",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "TL82147891",
+    "extracted_data": {
+      "date": "2025/10/21",
+      "items": [
+        {
+          "amount": 113,
+          "taxAmount": 6,
+          "description": "SKANGEL多彩糖果色羅紋休閒長襪 親膚吸汗透氣舒適百搭中筒襪, 白色"
+        },
+        {
+          "amount": 75,
+          "taxAmount": 3,
+          "description": "SKANGEL多彩糖果色羅紋休閒長襪 親膚吸汗透氣舒適百搭中筒襪, 黑色"
+        }
+      ],
+      "amount": 188,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：SKANGEL多彩糖果色羅紋休閒長襪 親膚吸汗透氣舒適百搭中筒襪, 白色, 折讓金額：113\n品名：SKANGEL多彩糖果色羅紋休閒長襪 親膚吸汗透氣舒適百搭中筒襪, 黑色, 折讓金額：75",
+      "buyerName": "0000000000",
+      "taxAmount": 9,
+      "buyerTaxId": "",
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "TL82147891"
+    }
+  },
+  {
+    "id": "d138d71e-a52b-46d2-a9d2-49c2a5862cce",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "TL82147893",
+    "extracted_data": {
+      "date": "2025/10/8",
+      "items": [
+        {
+          "amount": 171,
+          "taxAmount": 9,
+          "description": "特選棉加強防漏生理褲 生理內褲 月經褲 前後防漏 抗菌內褲 女生內褲 低腰內褲 防漏救援內褲, 黑色"
+        },
+        {
+          "amount": 172,
+          "taxAmount": 8,
+          "description": "運費"
+        }
+      ],
+      "amount": 343,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：特選棉加強防漏生理褲 生理內褲 月經褲 前後防漏 抗菌內褲 女生內褲 低腰內褲 防漏救援內褲, 黑色, 折讓金額：171\n品名：運費, 折讓金額：172",
+      "buyerName": "0000000000",
+      "taxAmount": 17,
+      "buyerTaxId": "",
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "TL82147893"
+    }
+  },
+  {
+    "id": "fe173cf5-d865-40f1-86be-3ad225d11d38",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "VL58216527",
+    "extracted_data": {
+      "date": "2025/12/1",
+      "items": [
+        {
+          "amount": 171,
+          "taxAmount": 9,
+          "description": "運費"
+        },
+        {
+          "amount": 57,
+          "taxAmount": 2,
+          "description": "HONEYCOLOR 韓系針織紋堆堆襪套 保暖素色泡泡襪套 街頭風襪腿套, 乳白色"
+        }
+      ],
+      "amount": 228,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：運費, 折讓金額：171\n品名：HONEYCOLOR 韓系針織紋堆堆襪套 保暖素色泡泡襪套 街頭風襪腿套, 乳白色, 折讓金額：57",
+      "buyerName": "0000000000",
+      "taxAmount": 11,
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "VL58216527"
+    }
+  },
+  {
+    "id": "f9143653-7e88-4b75-abec-a8f99919a867",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "VL58216563",
+    "extracted_data": {
+      "date": "2025/12/18",
+      "items": [
+        {
+          "amount": 38,
+          "taxAmount": 2,
+          "description": "微笑中筒襪, 灰色底藍束口"
+        }
+      ],
+      "amount": 38,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：微笑中筒襪, 灰色底藍束口, 折讓金額：38",
+      "buyerName": "0000000000",
+      "taxAmount": 2,
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "VL58216563"
+    }
+  },
+  {
+    "id": "24f99941-9316-4106-99fe-5c931e94e52a",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "VL58216537",
+    "extracted_data": {
+      "date": "2025/12/1",
+      "items": [
+        {
+          "amount": 60,
+          "taxAmount": 3,
+          "description": "amica運動襪 足弓襪 減震吸濕排汗 籃球襪 中長襪 止滑 專業運動系列撞色足弓襪, 1.灰色_41-46, 41-46"
+        },
+        {
+          "amount": 46,
+          "taxAmount": 2,
+          "description": "韓國 學院風撞色條紋中筒襪 (男/女), 黑色"
+        },
+        {
+          "amount": 56,
+          "taxAmount": 3,
+          "description": "HONEYCOLOR 韓系針織紋堆堆襪套 保暖素色泡泡襪套 街頭風襪腿套, 乳白色"
+        }
+      ],
+      "amount": 162,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：amica運動襪 足弓襪 減震吸濕排汗 籃球襪 中長襪 止滑 專業運動系列撞色足弓襪, 1.灰色_41-46, 41-46, 折讓金額：60\n品名：韓國 學院風撞色條紋中筒襪 (男/女), 黑色, 折讓金額：46\n品名：HONEYCOLOR 韓系針織紋堆堆襪套 保暖素色泡泡襪套 街頭風襪腿套, 乳白色, 折讓金額：56",
+      "buyerName": "0000000000",
+      "taxAmount": 8,
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "VL58216537"
+    }
+  },
+  {
+    "id": "023a7a93-a4d3-45e8-9585-595a3580cdee",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "VL58216506",
+    "extracted_data": {
+      "date": "2025/11/8",
+      "items": [
+        {
+          "amount": 111,
+          "taxAmount": 6,
+          "description": "女生褲襪 鉛筆褲襪 280D高彈力修身美腿褲襪, 黑色"
+        },
+        {
+          "amount": 172,
+          "taxAmount": 8,
+          "description": "運費"
+        }
+      ],
+      "amount": 283,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：女生褲襪 鉛筆褲襪 280D高彈力修身美腿褲襪, 黑色, 折讓金額：111\n品名：運費, 折讓金額：172",
+      "buyerName": "0000000000",
+      "taxAmount": 14,
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "VL58216506"
+    }
+  },
+  {
+    "id": "100b031f-6e7c-484f-acdd-a08b57eb11c6",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "VL58216563",
+    "extracted_data": {
+      "date": "2025/12/22",
+      "items": [
+        {
+          "amount": 44,
+          "taxAmount": 4,
+          "description": "Vivid Color 聖誕樹造型襪，舒適保暖，節慶穿搭必備, 黑色, FREE"
+        },
+        {
+          "amount": 46,
+          "taxAmount": 2,
+          "description": "可愛薑餅人聖誕襪，舒適保暖節慶襪款，時尚百搭襪子, 米色, FREE"
+        },
+        {
+          "amount": 46,
+          "taxAmount": 2,
+          "description": "Vivid Color 聖誕雪人造型襪，舒適保暖，節慶穿搭必備, 摩卡棕, FREE"
+        },
+        {
+          "amount": 46,
+          "taxAmount": 2,
+          "description": "正韓襪 熊熊泰迪熊襪 植絨字母卡通素色羅紋撞色條紋潮流中筒襪, 棕色"
+        },
+        {
+          "amount": 46,
+          "taxAmount": 2,
+          "description": "Vivid Color 聖誕主題黑色襪子 可愛卡通圖案 舒適保暖 時尚百搭, 咖啡, FREE"
+        },
+        {
+          "amount": 46,
+          "taxAmount": 2,
+          "description": "Vivid Color聖誕樹刺繡荷葉邊女襪，可愛節慶風，柔軟舒適，深綠色時尚百搭, 藍色, FREE"
+        },
+        {
+          "amount": 38,
+          "taxAmount": 2,
+          "description": "韓國製英倫風字母中筒襪 (男女適穿), 淺灰"
+        },
+        {
+          "amount": 46,
+          "taxAmount": 2,
+          "description": "正韓襪 熊熊泰迪熊襪 植絨字母卡通素色羅紋撞色條紋潮流中筒襪, 米色"
+        },
+        {
+          "amount": 38,
+          "taxAmount": 2,
+          "description": "韓國製 中筒襪/短襪 (緹花/花朵/微笑/熊熊/條紋/捲捲), 灰色"
+        },
+        {
+          "amount": 46,
+          "taxAmount": 2,
+          "description": "VIVID 熊熊襪 可愛造型襪 舒適透氣 女襪推薦, 綠色"
+        }
+      ],
+      "amount": 442,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：Vivid Color 聖誕樹造型襪，舒適保暖，節慶穿搭必備, 黑色, FREE, 折讓金額：44\n品名：可愛薑餅人聖誕襪，舒適保暖節慶襪款，時尚百搭襪子, 米色, FREE, 折讓金額：46\n品名：Vivid Color 聖誕雪人造型襪，舒適保暖，節慶穿搭必備, 摩卡棕, FREE, 折讓金額：46\n品名：正韓襪 熊熊泰迪熊襪 植絨字母卡通素色羅紋撞色條紋潮流中筒襪, 棕色, 折讓金額：46\n品名：Vivid Color 聖誕主題黑色襪子 可愛卡通圖案 舒適保暖 時尚百搭, 咖啡, FREE, 折讓金額：46\n品名：Vivid Color聖誕樹刺繡荷葉邊女襪，可愛節慶風，柔軟舒適，深綠色時尚百搭, 藍色, FREE, 折讓金額：46\n品名：韓國製英倫風字母中筒襪 (男女適穿), 淺灰, 折讓金額：38\n品名：正韓襪 熊熊泰迪熊襪 植絨字母卡通素色羅紋撞色條紋潮流中筒襪, 米色, 折讓金額：46\n品名：韓國製 中筒襪/短襪 (緹花/花朵/微笑/熊熊/條紋/捲捲), 灰色, 折讓金額：38\n品名：VIVID 熊熊襪 可愛造型襪 舒適透氣 女襪推薦, 綠色, 折讓金額：46",
+      "buyerName": "0000000000",
+      "taxAmount": 22,
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "VL58216563"
+    }
+  },
+  {
+    "id": "ace7a390-bd3d-4112-b4c7-273da8d92653",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "VL58216550",
+    "extracted_data": {
+      "date": "2025/12/5",
+      "items": [
+        {
+          "amount": 237,
+          "taxAmount": 12,
+          "description": "320G絲襪 防勾絲 光腿神器 裸膚感 連身襪 踩腳襪 加倍耐穿 顯瘦褲襪, 單面襠褲襪_【膚色踩腳-加大】"
+        }
+      ],
+      "amount": 237,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：320G絲襪 防勾絲 光腿神器 裸膚感 連身襪 踩腳襪 加倍耐穿 顯瘦褲襪, 單面襠褲襪_【膚色踩腳-加大】, 折讓金額：237",
+      "buyerName": "0000000000",
+      "taxAmount": 12,
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "VL58216550"
+    }
+  },
+  {
+    "id": "39477014-5de1-48b0-953f-1b223eeaccc4",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "VL58216581",
+    "extracted_data": {
+      "date": "2025/12/26",
+      "items": [
+        {
+          "amount": 180,
+          "taxAmount": 9,
+          "description": "MINLIU SOCKS 兒童襪5入組 可愛恐龍防滑寶寶襪 透氣舒適童襪組合, 【M】3-5歲"
+        },
+        {
+          "amount": 180,
+          "taxAmount": 9,
+          "description": "KRSKANGEL童襪 可愛卡通襪子五入組 (草莓、愛心、動物圖案) 兒童止滑中筒襪, 【M】3-5歲, Multi-color Pack"
+        },
+        {
+          "amount": 46,
+          "taxAmount": 2,
+          "description": "Vivid Color 聖誕主題黑色襪子 可愛卡通圖案 舒適保暖 時尚百搭, 紅色, FREE"
+        }
+      ],
+      "amount": 406,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：MINLIU SOCKS 兒童襪5入組 可愛恐龍防滑寶寶襪 透氣舒適童襪組合, 【M】3-5歲, 折讓金額：180\n品名：KRSKANGEL童襪 可愛卡通襪子五入組 (草莓、愛心、動物圖案) 兒童止滑中筒襪, 【M】3-5歲, Multi-color Pack, 折讓金額：180\n品名：Vivid Color 聖誕主題黑色襪子 可愛卡通圖案 舒適保暖 時尚百搭, 紅色, FREE, 折讓金額：46",
+      "buyerName": "0000000000",
+      "taxAmount": 20,
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "VL58216581"
+    }
+  },
+  {
+    "id": "c04e71cf-a7e4-434a-8d04-3a2705889978",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "TL82147865",
+    "extracted_data": {
+      "date": "2025/9/24",
+      "items": [
+        {
+          "amount": 38,
+          "taxAmount": 2,
+          "description": "正韓芭蕾緹花/壓紋/小花朵 中筒襪 女襪 INS風, 白色"
+        },
+        {
+          "amount": 171,
+          "taxAmount": 9,
+          "description": "運費"
+        },
+        {
+          "amount": 47,
+          "taxAmount": 2,
+          "description": "韓國笑臉潮流襪, 藍色"
+        },
+        {
+          "amount": 38,
+          "taxAmount": 2,
+          "description": "韓版/日系風 造型中筒襪, 白色"
+        },
+        {
+          "amount": 38,
+          "taxAmount": 2,
+          "description": "韓國製 笑臉/花朵/撞色印花襪, 杏色"
+        }
+      ],
+      "amount": 332,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：正韓芭蕾緹花/壓紋/小花朵 中筒襪 女襪 INS風, 白色, 折讓金額：38\n品名：運費, 折讓金額：171\n品名：韓國笑臉潮流襪, 藍色, 折讓金額：47\n品名：韓版/日系風 造型中筒襪, 白色, 折讓金額：38\n品名：韓國製 笑臉/花朵/撞色印花襪, 杏色, 折讓金額：38",
+      "buyerName": "0000000000",
+      "taxAmount": 17,
+      "buyerTaxId": "",
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "TL82147865"
+    }
+  },
+  {
+    "id": "192c655c-e794-4535-b87b-c9219fb233ce",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "TL82147854",
+    "extracted_data": {
+      "date": "2025/9/13",
+      "items": [
+        {
+          "amount": 103,
+          "taxAmount": 5,
+          "description": "自有品牌 冰絲袖套 寬口兔子刺繡透氣運動露指騎車戶外涼感袖套, 黑色"
+        },
+        {
+          "amount": 75,
+          "taxAmount": 4,
+          "description": "純棉抗菌防臭五指襪 (中筒/運動/休閒襪), 黑色"
+        },
+        {
+          "amount": 172,
+          "taxAmount": 8,
+          "description": "運費"
+        }
+      ],
+      "amount": 350,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：自有品牌 冰絲袖套 寬口兔子刺繡透氣運動露指騎車戶外涼感袖套, 黑色, 折讓金額：103\n品名：純棉抗菌防臭五指襪 (中筒/運動/休閒襪), 黑色, 折讓金額：75\n品名：運費, 折讓金額：172",
+      "buyerName": "0000000000",
+      "taxAmount": 17,
+      "buyerTaxId": "",
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "TL82147854"
+    }
+  },
+  {
+    "id": "401cc79e-14d9-4faf-8f12-2da6ba5cbcdb",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "TL82147857",
+    "extracted_data": {
+      "date": "2025/9/20",
+      "items": [
+        {
+          "amount": 154,
+          "taxAmount": 8,
+          "description": "石墨烯機能運動足弓短襪, 加大_灰條紋"
+        }
+      ],
+      "amount": 154,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：石墨烯機能運動足弓短襪, 加大_灰條紋, 折讓金額：154",
+      "buyerName": "0000000000",
+      "taxAmount": 8,
+      "buyerTaxId": "",
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "TL82147857"
+    }
+  },
+  {
+    "id": "6f6a8c52-8805-42a1-8524-2437e653b55d",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "TL82147868",
+    "extracted_data": {
+      "date": "2025/9/24",
+      "items": [
+        {
+          "amount": 171,
+          "taxAmount": 9,
+          "description": "運費"
+        },
+        {
+          "amount": 153,
+          "taxAmount": 7,
+          "description": "韓國條紋/撞色學院風中筒棉襪 (男女適用), 白色, 紅色, 藍色, 黃色, 綠色, 黑色, 深藍色"
+        }
+      ],
+      "amount": 324,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：運費, 折讓金額：171\n品名：韓國條紋/撞色學院風中筒棉襪 (男女適用), 白色, 紅色, 藍色, 黃色, 綠色, 黑色, 深藍色, 折讓金額：153",
+      "buyerName": "0000000000",
+      "taxAmount": 16,
+      "buyerTaxId": "",
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "TL82147868"
+    }
+  },
+  {
+    "id": "d0f0d55c-571b-4f8a-82e8-dd4d1f93ce89",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "TL82147876",
+    "extracted_data": {
+      "date": "2025/10/4",
+      "items": [
+        {
+          "amount": 150,
+          "taxAmount": 8,
+          "description": "純棉五趾襪 韓版抗菌防臭襪：台灣出貨中筒襪，男女適用運動休閒襪, 黑色"
+        }
+      ],
+      "amount": 150,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：純棉五趾襪 韓版抗菌防臭襪：台灣出貨中筒襪，男女適用運動休閒襪, 黑色, 折讓金額：150",
+      "buyerName": "0000000000",
+      "taxAmount": 8,
+      "buyerTaxId": "",
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "TL82147876"
+    }
+  },
+  {
+    "id": "9e5c9d2c-42b9-4595-986a-e960576945ea",
+    "in_or_out": "out",
+    "original_invoice_serial_code": "TL82147863",
+    "extracted_data": {
+      "date": "2025/9/21",
+      "items": [
+        {
+          "amount": 323,
+          "taxAmount": 16,
+          "description": "正韓高爾夫球提臀褲襪, 黑色"
+        },
+        {
+          "amount": 171,
+          "taxAmount": 9,
+          "description": "運費"
+        }
+      ],
+      "amount": 494,
+      "source": "import-excel",
+      "account": "4202 銷貨折讓",
+      "summary": "品名：正韓高爾夫球提臀褲襪, 黑色, 折讓金額：323\n品名：運費, 折讓金額：171",
+      "buyerName": "0000000000",
+      "taxAmount": 25,
+      "buyerTaxId": "",
+      "sellerName": "二哥團購商行",
+      "sellerTaxId": "82469848",
+      "allowanceType": "電子發票折讓",
+      "originalInvoiceSerialCode": "TL82147863"
+    }
+  }
+]

@@ -1,0 +1,23 @@
+[
+  {
+    "id": "f7601e22-2555-4628-a77b-66450d4eeb64",
+    "year_month": "11411",
+    "invoice_type": "手開三聯式",
+    "start_number": "TT33766050",
+    "end_number": "TT33766099"
+  },
+  {
+    "id": "5b6a490b-403f-437b-a750-41c9044b8fd4",
+    "year_month": "11411",
+    "invoice_type": "手開二聯式",
+    "start_number": "TV25811200",
+    "end_number": "TV25811249"
+  },
+  {
+    "id": "4bdf61ad-0193-47df-a62e-45e89af54371",
+    "year_month": "11411",
+    "invoice_type": "手開二聯式",
+    "start_number": "TV25811250",
+    "end_number": "TV25811299"
+  }
+]

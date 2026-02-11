@@ -45,7 +45,7 @@ import { updateAllowance } from "@/lib/services/allowance";
 import { toast } from "sonner";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { cn } from "@/lib/utils";
+import { cn, formatDateToYYYYMMDD, normalizeDateInput, parseNormalizedDate } from "@/lib/utils";
 import {
   Select,
   SelectItem,
@@ -70,7 +70,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
-const allowanceDatePattern = /^\d{4}\/\d{2}\/\d{2}$/;
+const allowanceDatePattern = /^\d{4}\/(?:0?[1-9]|1[0-2])\/(?:0?[1-9]|[12]\d|3[01])$/;
 const taxIdPattern = /^\d{8}$/;
 const invoiceSerialPattern = /^[A-Z]{2}\d{8}$/;
 
@@ -137,58 +137,6 @@ const allowanceReviewFormSchema = z
   .passthrough();
 
 type AllowanceReviewFormValues = z.infer<typeof allowanceReviewFormSchema>;
-
-function formatDateToYYYYMMDD(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}/${month}/${day}`;
-}
-
-function normalizeDateInput(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-
-  const normalized = trimmed.replace(/-/g, "/");
-  const parts = normalized.split("/");
-  if (parts.length !== 3) return undefined;
-
-  const [y, m, d] = parts.map((part) => part.trim());
-  if (!/^\d{4}$/.test(y) || !/^\d{1,2}$/.test(m) || !/^\d{1,2}$/.test(d)) {
-    return undefined;
-  }
-
-  const year = Number(y);
-  const month = Number(m);
-  const day = Number(d);
-  const date = new Date(year, month - 1, day);
-  if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== month - 1 ||
-    date.getDate() !== day
-  ) {
-    return undefined;
-  }
-
-  return `${year}/${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}`;
-}
-
-function parseNormalizedDate(dateValue: string | undefined): Date | undefined {
-  const normalized = normalizeDateInput(dateValue);
-  if (!normalized) return undefined;
-
-  const [year, month, day] = normalized.split("/").map(Number);
-  const parsed = new Date(year, month - 1, day);
-  if (
-    parsed.getFullYear() !== year ||
-    parsed.getMonth() !== month - 1 ||
-    parsed.getDate() !== day
-  ) {
-    return undefined;
-  }
-  return parsed;
-}
 
 interface AllowanceReviewDialogProps {
   allowance: Allowance | null;

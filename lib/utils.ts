@@ -5,6 +5,51 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+export function formatDateToYYYYMMDD(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}/${month}/${day}`;
+}
+
+export function normalizeDateInput(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  const normalized = trimmed.replace(/-/g, "/");
+  const parts = normalized.split("/");
+  if (parts.length !== 3) return undefined;
+
+  const [y, m, d] = parts.map((part) => part.trim());
+  if (!/^\d{4}$/.test(y) || !/^\d{1,2}$/.test(m) || !/^\d{1,2}$/.test(d)) {
+    return undefined;
+  }
+
+  const year = Number(y);
+  const month = Number(m);
+  const day = Number(d);
+  const date = new Date(year, month - 1, day);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return undefined;
+  }
+
+  return formatDateToYYYYMMDD(date);
+}
+
+export function parseNormalizedDate(dateValue: string | undefined): Date | undefined {
+  if (!dateValue) return undefined;
+  const normalized = normalizeDateInput(dateValue);
+  if (!normalized) return undefined;
+
+  const [year, month, day] = normalized.split("/").map(Number);
+  return new Date(year, month - 1, day);
+}
+
 /**
  * Converts a date string (YYYY/MM/DD) to ROC YearMonth format (YYYMM)
  * e.g., "2024/09/01" -> "11309"

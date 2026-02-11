@@ -6,6 +6,7 @@ import { type Database, type TablesInsert, type Json } from "@/supabase/database
 import { type SupabaseClient } from "@supabase/supabase-js";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { ALLOWANCE_FORMAT_CODE_MAP } from "@/lib/domain/format-codes";
+import { formatDateToYYYYMMDD } from "@/lib/utils";
 import * as XLSX from 'xlsx';
 import { getTaxPeriodByYYYMM } from "@/lib/services/tax-period";
 
@@ -623,7 +624,7 @@ function formatDate(dateVal: unknown): string {
 
   try {
     const dateObj = parseDate(dateVal);
-    return `${dateObj.getFullYear()}/${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
+    return formatDateToYYYYMMDD(dateObj);
   } catch {
     return String(dateVal);
   }

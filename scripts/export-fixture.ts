@@ -85,11 +85,12 @@ async function main() {
     process.exit(1);
   }
 
-  // Replace firm_id with test firm to isolate from production data
-  const client = { ...dbClient, firm_id: TEST_FIRM_ID };
+  // Replace firm_id and client_id to isolate from production data
+  const client = { ...dbClient, id: crypto.randomUUID(), firm_id: TEST_FIRM_ID };
 
   console.log(`Found client: ${client.name} (${client.tax_id})`);
-  console.log(`  → Using test firm_id: ${TEST_FIRM_ID} (instead of real: ${dbClient.firm_id})`);
+  console.log(`  → Using test firm_id: ${client.firm_id} (instead of real: ${dbClient.firm_id})`);
+  console.log(`  → Using test client_id: ${client.id} (instead of real: ${dbClient.id})`);
 
   // Fetch tax period
   const { data: taxPeriod } = await supabase
@@ -113,6 +114,11 @@ async function main() {
       .eq("status", "confirmed")
     : { data: [] };
 
+  const invoicesData = invoices?.map((invoice) => ({
+    ...invoice,
+    id: crypto.randomUUID(),
+  }));
+
   console.log(`Found ${invoices?.length || 0} invoices`);
 
   // Fetch allowances
@@ -127,6 +133,11 @@ async function main() {
       .eq("status", "confirmed")
     : { data: [] };
 
+  const allowancesData = allowances?.map((allowance) => ({
+    ...allowance,
+    id: crypto.randomUUID(),
+  }));
+
   console.log(`Found ${allowances?.length || 0} allowances`);
 
   // Fetch invoice ranges
@@ -135,6 +146,11 @@ async function main() {
     .select("id, year_month, invoice_type, start_number, end_number")
     .eq("client_id", clientId)
     .eq("year_month", period);
+
+  const invoiceRangesData = invoiceRanges?.map((invoiceRange) => ({
+    ...invoiceRange,
+    id: crypto.randomUUID(),
+  }));
 
   console.log(`Found ${invoiceRanges?.length || 0} invoice ranges`);
 
@@ -162,7 +178,7 @@ async function main() {
     reportPeriod: period,
     description: "",
     tetUConfig: {
-      fileNumber: "00000000",
+      fileNumber: "",
       taxPayerId: client.tax_payer_id || "",
       consolidatedDeclarationCode: "0",
       declarationCode: "1",
@@ -195,19 +211,19 @@ async function main() {
   // Write invoices
   fs.writeFileSync(
     path.join(dataDir, "invoices.json"),
-    JSON.stringify(invoices || [], null, 2)
+    JSON.stringify(invoicesData || [], null, 2)
   );
 
   // Write allowances
   fs.writeFileSync(
     path.join(dataDir, "allowances.json"),
-    JSON.stringify(allowances || [], null, 2)
+    JSON.stringify(allowancesData || [], null, 2)
   );
 
   // Write invoice ranges
   fs.writeFileSync(
     path.join(dataDir, "invoice_ranges.json"),
-    JSON.stringify(invoiceRanges || [], null, 2)
+    JSON.stringify(invoiceRangesData || [], null, 2)
   );
 
   console.log(`\n✅ Fixture exported to: ${outputDir}`);

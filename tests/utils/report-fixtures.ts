@@ -311,6 +311,8 @@ export async function seedTestCase(
     // Only clean up the test user profile - leave fixture data intact
     // since it may be shared with other tests or be pre-existing data
     await withPgClient(async (pg) => {
+      await pg.query(`DELETE FROM invoices WHERE uploaded_by = $1`, [userId]);
+      await pg.query(`DELETE FROM allowances WHERE uploaded_by = $1`, [userId]);
       await pg.query(`DELETE FROM profiles WHERE id = $1`, [userId]);
     });
     await supabase.auth.admin.deleteUser(userId);

@@ -65,26 +65,75 @@ export function AllowanceTable({
     });
   }, [allowances]);
 
+  const getTypeIndicator = (inOrOut: Allowance["in_or_out"]) => {
+    const label = inOrOut === "in" ? "進項折讓" : "銷項折讓";
+    const barClass = inOrOut === "in" ? "bg-sky-500" : "bg-orange-500";
+
+    return (
+      <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+        <span className={`h-4 w-0.5 rounded-full ${barClass}`} />
+        {label}
+      </span>
+    );
+  };
+
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<
       string,
       {
         label: string;
-        variant: "default" | "secondary" | "destructive" | "outline";
+        badgeClass: string;
+        dotClass: string;
       }
     > = {
-      uploaded: { label: "已上傳", variant: "secondary" },
-      processing: { label: "處理中", variant: "default" },
-      processed: { label: "待確認", variant: "outline" },
-      confirmed: { label: "已確認", variant: "default" },
-      failed: { label: "失敗", variant: "destructive" },
+      uploaded: {
+        label: "已上傳",
+        badgeClass:
+          "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-300",
+        dotClass: "bg-slate-500",
+      },
+      processing: {
+        label: "處理中",
+        badgeClass:
+          "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300",
+        dotClass: "bg-blue-500 animate-pulse",
+      },
+      processed: {
+        label: "待確認",
+        badgeClass:
+          "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
+        dotClass: "bg-amber-500",
+      },
+      confirmed: {
+        label: "已確認",
+        badgeClass:
+          "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
+        dotClass: "bg-emerald-500",
+      },
+      failed: {
+        label: "失敗",
+        badgeClass:
+          "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300",
+        dotClass: "bg-rose-500",
+      },
     };
 
     const config = statusConfig[status] || {
       label: status,
-      variant: "outline",
+      badgeClass:
+        "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-300",
+      dotClass: "bg-slate-500",
     };
-    return <Badge variant={config.variant}>{config.label}</Badge>;
+
+    return (
+      <Badge
+        variant="outline"
+        className={`min-w-[72px] justify-center gap-1.5 ${config.badgeClass}`}
+      >
+        <span className={`h-1.5 w-1.5 rounded-full ${config.dotClass}`} />
+        {config.label}
+      </Badge>
+    );
   };
 
   const formatAmount = (amount: number | undefined) => {
@@ -95,18 +144,18 @@ export function AllowanceTable({
   return (
     <div className="border rounded-md">
       <TooltipProvider>
-        <Table>
+        <Table className="table-fixed">
           <TableHeader>
             <TableRow>
-              <TableHead>折讓單號碼</TableHead>
-              <TableHead>原發票號碼</TableHead>
-              <TableHead>類型</TableHead>
-              <TableHead className="text-right">折讓金額</TableHead>
-              <TableHead className="text-right">折讓稅額</TableHead>
-              <TableHead>折讓日期</TableHead>
-              <TableHead>狀態</TableHead>
+              <TableHead className="w-[180px]">原發票號碼</TableHead>
+              <TableHead className="w-[120px]">類型</TableHead>
+              <TableHead className="w-[140px]">發票類型</TableHead>
+              <TableHead className="w-[120px] text-right">折讓金額</TableHead>
+              <TableHead className="w-[120px] text-right">折讓稅額</TableHead>
+              <TableHead className="w-[120px]">折讓日期</TableHead>
+              <TableHead className="w-[100px]">狀態</TableHead>
               {(onExtractAI || onDelete) && (
-                <TableHead className="text-right">操作</TableHead>
+                <TableHead className="w-[88px] text-right">操作</TableHead>
               )}
             </TableRow>
           </TableHeader>
@@ -133,7 +182,7 @@ export function AllowanceTable({
               allowances.map((allowance) => {
                 const extractedData = allowance.extracted_data;
                 const hasUnlinkedWarning =
-                  allowance.original_invoice_serial_code &&
+                  Boolean(allowance.original_invoice_serial_code) &&
                   !allowance.original_invoice_id;
 
                 return (
@@ -144,39 +193,51 @@ export function AllowanceTable({
                     }
                     onClick={() => onReview?.(allowance)}
                   >
-                    <TableCell className="font-mono tabular-nums">
-                      {allowance.allowance_serial_code || "-"}
+                    <TableCell className="w-[180px] font-mono tabular-nums">
+                      {allowance.original_invoice_serial_code ? (
+                        <span className="inline-flex items-center gap-1">
+                          <span>{allowance.original_invoice_serial_code}</span>
+                          {hasUnlinkedWarning && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>找不到原始發票</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-amber-600">
+                          <AlertTriangle className="h-4 w-4" />
+                          TBD
+                        </span>
+                      )}
                     </TableCell>
-                    <TableCell className="font-mono tabular-nums">
-                      <div className="flex items-center gap-1">
-                        {allowance.original_invoice_serial_code || "-"}
-                        {hasUnlinkedWarning && (
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <AlertTriangle className="h-4 w-4 text-amber-500" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>找不到原始發票</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
-                      </div>
+                    <TableCell className="w-[120px]">
+                      {getTypeIndicator(allowance.in_or_out)}
                     </TableCell>
-                    <TableCell>
-                      {allowance.in_or_out === "in" ? "進項折讓" : "銷項折讓"}
+                    <TableCell
+                      className="w-[140px] truncate"
+                      title={extractedData?.allowanceType || "-"}
+                    >
+                      {extractedData?.allowanceType || "-"}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="w-[120px] text-right tabular-nums">
                       {formatAmount(extractedData?.amount)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="w-[120px] text-right tabular-nums">
                       {formatAmount(extractedData?.taxAmount)}
                     </TableCell>
-                    <TableCell>{extractedData?.date || "-"}</TableCell>
-                    <TableCell>
+                    <TableCell className="w-[120px]">
+                      {extractedData?.date || "-"}
+                    </TableCell>
+                    <TableCell className="w-[100px]">
                       {getStatusBadge(allowance.status || "uploaded")}
                     </TableCell>
                     {(onExtractAI || onDelete) && (
-                      <TableCell className="text-right">
+                      <TableCell className="w-[88px] text-right">
                         <div className="flex items-center justify-end gap-1">
                           {onExtractAI &&
                             (() => {

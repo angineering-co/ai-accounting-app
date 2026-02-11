@@ -339,7 +339,15 @@ export default function PeriodDetailPage({
         </TabsContent>
 
         <TabsContent value="reports" className="mt-6">
-          <ReportGeneration client={client} period={rocPeriod} />
+          {isInvoicesLoading || isAllowancesLoading ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : (
+            <ReportGeneration
+              client={client}
+              period={rocPeriod}
+              data={{ invoices, allowances }}
+            />
+          )}
         </TabsContent>
       </Tabs>
 

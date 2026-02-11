@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -26,9 +26,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { type Client, tetUConfigSchema, type TetUConfig } from "@/lib/domain/models";
+import {
+  type Client,
+  tetUConfigSchema,
+  type TetUConfig,
+  type Allowance,
+  type Invoice,
+} from "@/lib/domain/models";
 import { generateTxtReport, generateTetUReport } from "@/lib/services/reports";
 import { toast } from "sonner";
 import { RocPeriod } from "@/lib/domain/roc-period";
@@ -37,16 +49,28 @@ import { Download, FileText, Loader2 } from "lucide-react";
 interface ReportGenerationProps {
   client: Client;
   period: RocPeriod;
+  data: {
+    invoices: Invoice[],
+    allowances: Allowance[]
+  };
 }
 
 export function ReportGeneration({
   client,
   period,
+  data,
 }: ReportGenerationProps) {
   const clientId = client.id;
   const taxId = client.tax_id;
   const [isTetUModalOpen, setIsTetUModalOpen] = useState(false);
   const [isGeneratingTxt, setIsGeneratingTxt] = useState(false);
+  const hasUnconfirmedDocuments = useMemo(
+    () =>
+      data.invoices.some((invoice) => invoice.status !== "confirmed") ||
+      data.allowances.some((allowance) => allowance.status !== "confirmed"),
+    [data.invoices, data.allowances],
+  );
+  const disabledReason = "請先確認所有發票與折讓單，才能產生報表";
 
   const tetUForm = useForm<TetUConfig>({
     resolver: zodResolver(tetUConfigSchema),
@@ -119,22 +143,50 @@ export function ReportGeneration({
           <CardTitle>報表產生 ({period.format()})</CardTitle>
         </CardHeader>
         <CardContent className="flex gap-4">
-          <Button
-            variant="outline"
-            onClick={handleGenerateTxt}
-            disabled={isGeneratingTxt}
-          >
-            {isGeneratingTxt ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="mr-2 h-4 w-4" />
-            )}
-            下載進銷項 .TXT
-          </Button>
-          <Button onClick={() => setIsTetUModalOpen(true)}>
-            <FileText className="mr-2 h-4 w-4" />
-            產生申報書 .TET_U
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    variant="outline"
+                    onClick={handleGenerateTxt}
+                    disabled={isGeneratingTxt || hasUnconfirmedDocuments}
+                  >
+                    {isGeneratingTxt ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="mr-2 h-4 w-4" />
+                    )}
+                    下載進銷項 .TXT
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {hasUnconfirmedDocuments && (
+                <TooltipContent>
+                  <p>{disabledReason}</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    onClick={() => setIsTetUModalOpen(true)}
+                    disabled={hasUnconfirmedDocuments}
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    產生申報書 .TET_U
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {hasUnconfirmedDocuments && (
+                <TooltipContent>
+                  <p>{disabledReason}</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
         </CardContent>
       </Card>
 

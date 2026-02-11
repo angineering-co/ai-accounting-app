@@ -2,6 +2,7 @@
 
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import {
   Tooltip,
   TooltipContent,
@@ -35,9 +36,9 @@ import {
   RotateCw,
   Hand,
   AlertCircle,
+  CalendarIcon,
 } from "lucide-react";
 import {
-  extractedInvoiceDataSchema,
   allowanceSchema,
   type ExtractedInvoiceData,
   type Invoice,
@@ -67,6 +68,138 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+
+const invoiceDatePattern = /^\d{4}\/\d{2}\/\d{2}$/;
+const taxIdPattern = /^\d{8}$/;
+const invoiceSerialPattern = /^[A-Z]{2}\d{8}$/;
+
+const invoiceReviewFormSchema = z
+  .object({
+    invoiceSerialCode: z
+      .string()
+      .trim()
+      .min(1, "請輸入發票字軌號碼")
+      .regex(
+        invoiceSerialPattern,
+        "發票字軌號碼格式錯誤，請使用 2 碼英文 + 8 碼數字",
+      ),
+    date: z
+      .string()
+      .trim()
+      .min(1, "請輸入發票日期")
+      .regex(invoiceDatePattern, "日期格式錯誤，請使用 YYYY/MM/DD"),
+    totalSales: z
+      .number({ message: "請輸入銷售額" })
+      .int("請輸入非負整數")
+      .positive("銷售額需大於 0"),
+    tax: z
+      .number({ message: "請輸入稅額" })
+      .int("請輸入非負整數")
+      .nonnegative("請輸入非負整數"),
+    totalAmount: z
+      .number({ message: "請輸入總計" })
+      .int("請輸入非負整數")
+      .nonnegative("請輸入非負整數"),
+    sellerName: z.string().optional(),
+    sellerTaxId: z
+      .string()
+      .trim()
+      .min(1, "請輸入賣方統編")
+      .regex(taxIdPattern, "賣方統編需為 8 碼數字"),
+    buyerName: z.string().optional(),
+    buyerTaxId: z
+      .string()
+      .trim()
+      .optional()
+      .refine((value) => !value || taxIdPattern.test(value), {
+        message: "買方統編需為 8 碼數字",
+      }),
+    summary: z.string().optional(),
+    deductible: z.boolean().optional(),
+    account: z.enum(ACCOUNT_LIST, { message: "請選擇會計科目" }),
+    taxType: z.enum(["應稅", "零稅率", "免稅", "作廢", "彙加"]).optional(),
+    invoiceType: z
+      .enum(["手開二聯式", "手開三聯式", "電子發票", "二聯式收銀機", "三聯式收銀機"])
+      .optional(),
+    inOrOut: z.enum(["進項", "銷項"]).optional(),
+    confidence: z.record(z.string(), z.enum(["low", "medium", "high"])).optional(),
+    source: z.enum(["import-excel"]).optional(),
+  })
+  .superRefine((data, ctx) => {
+    const buyerName = data.buyerName?.trim() || "";
+    const buyerTaxId = data.buyerTaxId?.trim() || "";
+    const isConsumer = buyerName === "" || buyerName === "0000000000";
+
+    if (!buyerTaxId && !isConsumer) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["buyerTaxId"],
+        message: "買方名稱非空白或 0000000000 時，需填寫買方統編",
+      });
+    }
+  })
+  .passthrough();
+
+type InvoiceReviewFormValues = z.infer<typeof invoiceReviewFormSchema>;
+
+function formatDateToYYYYMMDD(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}/${month}/${day}`;
+}
+
+function parseNormalizedDate(dateValue: string | undefined): Date | undefined {
+  if (!dateValue) return undefined;
+  const normalized = normalizeDateInput(dateValue);
+  if (!normalized) return undefined;
+
+  const [year, month, day] = normalized.split("/").map(Number);
+  const parsed = new Date(year, month - 1, day);
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return undefined;
+  }
+  return parsed;
+}
+
+function normalizeDateInput(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  const normalized = trimmed.replace(/-/g, "/");
+  const parts = normalized.split("/");
+  if (parts.length !== 3) return undefined;
+
+  const [y, m, d] = parts.map((part) => part.trim());
+  if (!/^\d{4}$/.test(y) || !/^\d{1,2}$/.test(m) || !/^\d{1,2}$/.test(d)) {
+    return undefined;
+  }
+
+  const year = Number(y);
+  const month = Number(m);
+  const day = Number(d);
+  const date = new Date(year, month - 1, day);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return undefined;
+  }
+
+  return `${year}/${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}`;
+}
 
 interface InvoiceReviewDialogProps {
   invoice: Invoice | null;
@@ -102,8 +235,10 @@ export function InvoiceReviewDialog({
   const [linkedAllowances, setLinkedAllowances] = useState<Allowance[]>([]);
   const supabase = createClient();
 
-  const form = useForm<ExtractedInvoiceData>({
-    resolver: zodResolver(extractedInvoiceDataSchema),
+  const form = useForm<InvoiceReviewFormValues>({
+    resolver: zodResolver(invoiceReviewFormSchema),
+    mode: "onChange",
+    reValidateMode: "onChange",
     defaultValues: {
       invoiceSerialCode: "",
       date: "",
@@ -116,7 +251,7 @@ export function InvoiceReviewDialog({
       buyerTaxId: "",
       summary: "",
       deductible: false,
-      account: undefined,
+      account: undefined as unknown as InvoiceReviewFormValues["account"],
       taxType: "應稅",
       invoiceType: "手開三聯式",
       inOrOut: "進項",
@@ -126,10 +261,6 @@ export function InvoiceReviewDialog({
   const totalSales = form.watch("totalSales");
   const tax = form.watch("tax");
   const totalAmount = form.watch("totalAmount");
-  const invoiceSerialCode = form.watch("invoiceSerialCode");
-  const sellerTaxId = form.watch("sellerTaxId");
-  const buyerTaxId = form.watch("buyerTaxId");
-  const account = form.watch("account");
 
   const isMathError = useMemo(() => {
     const s = Number(totalSales) || 0;
@@ -147,7 +278,8 @@ export function InvoiceReviewDialog({
     try {
       const invoicePeriod = RocPeriod.fromYYYMM(invoice.year_month);
       // Support YYYY/MM/DD or YYYY-MM-DD
-      const dateObj = new Date(dateValue.replace(/\//g, "-"));
+      const dateObj = parseNormalizedDate(dateValue);
+      if (!dateObj) return false;
       if (isNaN(dateObj.getTime())) return false;
 
       const datePeriod = RocPeriod.fromDate(dateObj);
@@ -157,25 +289,20 @@ export function InvoiceReviewDialog({
     }
   }, [invoice?.year_month, dateValue]);
 
+  const selectedInvoiceDate = useMemo(
+    () => parseNormalizedDate(dateValue),
+    [dateValue],
+  );
+
   const isConfirmDisabled = useMemo(() => {
     return (
       invoice?.status === "confirmed" || // Already confirmed
-      !invoiceSerialCode ||
-      !dateValue ||
-      !totalSales ||
-      !sellerTaxId ||
-      !buyerTaxId ||
-      !account ||
+      !form.formState.isValid ||
       isMathError ||
       isPeriodMismatch
     );
   }, [
-    invoiceSerialCode,
-    dateValue,
-    totalSales,
-    sellerTaxId,
-    buyerTaxId,
-    account,
+    form.formState.isValid,
     isMathError,
     isPeriodMismatch,
     invoice?.status,
@@ -184,24 +311,27 @@ export function InvoiceReviewDialog({
   const confirmDisabledReason = useMemo(() => {
     if (isLocked) return "此發票目前已被鎖定，無法修改";
     if (invoice?.status === "confirmed") return "此發票已確認";
-    if (!invoiceSerialCode) return "請輸入發票字軌號碼";
-    if (!dateValue) return "請輸入發票日期";
-    if (!totalSales) return "請輸入銷售額";
-    if (!sellerTaxId) return "請輸入賣方統編";
-    if (!buyerTaxId) return "請輸入買方統編";
-    if (!account) return "請選擇會計科目";
+    if (typeof form.formState.errors.invoiceSerialCode?.message === "string")
+      return form.formState.errors.invoiceSerialCode.message;
+    if (typeof form.formState.errors.date?.message === "string")
+      return form.formState.errors.date.message;
+    if (typeof form.formState.errors.totalSales?.message === "string")
+      return form.formState.errors.totalSales.message;
+    if (typeof form.formState.errors.sellerTaxId?.message === "string")
+      return form.formState.errors.sellerTaxId.message;
+    if (typeof form.formState.errors.buyerTaxId?.message === "string")
+      return form.formState.errors.buyerTaxId.message;
+    if (typeof form.formState.errors.account?.message === "string")
+      return form.formState.errors.account.message;
     if (isMathError) return "銷售額 + 稅額 不等於 總計";
     if (isPeriodMismatch) return "日期與期別不符";
+    if (!form.formState.isValid) return "請修正欄位錯誤";
     return null;
   }, [
     isLocked,
     invoice?.status,
-    invoiceSerialCode,
-    dateValue,
-    totalSales,
-    sellerTaxId,
-    buyerTaxId,
-    account,
+    form.formState.errors,
+    form.formState.isValid,
     isMathError,
     isPeriodMismatch,
   ]);
@@ -249,7 +379,7 @@ export function InvoiceReviewDialog({
 
       form.reset({
         invoiceSerialCode: extractedData.invoiceSerialCode || "",
-        date: extractedData.date || "",
+        date: normalizeDateInput(extractedData.date) || "",
         totalSales: extractedData.totalSales ?? 0,
         tax: extractedData.tax ?? 0,
         totalAmount: extractedData.totalAmount ?? 0,
@@ -266,7 +396,7 @@ export function InvoiceReviewDialog({
           extractedData.inOrOut ||
           (invoice.in_or_out === "in" ? "進項" : "銷項"),
         ...extractedData, // Include any additional fields
-      });
+      } as InvoiceReviewFormValues);
 
       // Get signed URL or text content for preview
       const getPreview = async () => {
@@ -352,7 +482,7 @@ export function InvoiceReviewDialog({
 
   const handleSave = useCallback(
     async (
-      data: ExtractedInvoiceData,
+      data: InvoiceReviewFormValues,
       status: Invoice["status"] = "processed",
       shouldClose: boolean = true
     ) => {
@@ -669,7 +799,9 @@ export function InvoiceReviewDialog({
                         placeholder="例如: AB12345678"
                         className={getConfidenceStyle("invoiceSerialCode")}
                         onChange={(e) => {
-                          field.onChange(e);
+                          field.onChange(
+                            e.target.value.toUpperCase().replace(/\s+/g, "")
+                          );
                           clearConfidence("invoiceSerialCode");
                         }}
                       />
@@ -685,20 +817,74 @@ export function InvoiceReviewDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>發票日期</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        placeholder="YYYY/MM/DD"
-                        className={cn(
-                          getConfidenceStyle("date"),
-                          isPeriodMismatch && "ring-2 ring-orange-400 ring-offset-1"
-                        )}
-                        onChange={(e) => {
-                          field.onChange(e);
-                          clearConfidence("date");
-                        }}
-                      />
-                    </FormControl>
+                    <div className="space-y-2">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start text-left font-normal",
+                              !field.value && "text-muted-foreground",
+                              getConfidenceStyle("date"),
+                              isPeriodMismatch &&
+                                "ring-2 ring-orange-400 ring-offset-1"
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {selectedInvoiceDate
+                              ? formatDateToYYYYMMDD(selectedInvoiceDate)
+                              : "選擇發票日期"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar
+                            mode="single"
+                            selected={selectedInvoiceDate}
+                            defaultMonth={selectedInvoiceDate ?? new Date()}
+                            onSelect={(selectedDate) => {
+                              if (!selectedDate) return;
+                              form.setValue(
+                                "date",
+                                formatDateToYYYYMMDD(selectedDate),
+                                {
+                                  shouldValidate: true,
+                                  shouldDirty: true,
+                                }
+                              );
+                              form.clearErrors("date");
+                              clearConfidence("date");
+                            }}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          placeholder="YYYY/MM/DD"
+                          className={cn(
+                            getConfidenceStyle("date"),
+                            isPeriodMismatch &&
+                              "ring-2 ring-orange-400 ring-offset-1"
+                          )}
+                          onChange={(e) => {
+                            field.onChange(e.target.value);
+                            clearConfidence("date");
+                          }}
+                          onBlur={(e) => {
+                            field.onBlur();
+                            const normalized = normalizeDateInput(e.target.value);
+                            if (!e.target.value.trim()) return;
+                            if (!normalized) return;
+                            form.setValue("date", normalized, {
+                              shouldValidate: true,
+                              shouldDirty: true,
+                            });
+                          }}
+                        />
+                      </FormControl>
+                    </div>
                     {isPeriodMismatch && invoice?.year_month && (
                       <div className="flex items-center gap-1.5 mt-2 text-xs font-medium text-orange-600 bg-orange-50 p-2 rounded border border-orange-200">
                         <AlertCircle className="h-3.5 w-3.5" />
@@ -723,18 +909,30 @@ export function InvoiceReviewDialog({
                       <FormControl>
                         <Input
                           {...field}
-                          type="number"
+                          type="text"
+                          inputMode="numeric"
                           value={field.value ?? ""}
                           className={cn(
                             getConfidenceStyle("totalSales"),
                             isMathError && "ring-2 ring-orange-400 ring-offset-1"
                           )}
                           onChange={(e) => {
-                            field.onChange(
-                              e.target.value
-                                ? parseFloat(e.target.value)
-                                : undefined
-                            );
+                            const cleaned = e.target.value.replace(/[,\s]/g, "");
+                            if (!cleaned) {
+                              field.onChange(undefined);
+                              form.clearErrors("totalSales");
+                              clearConfidence("totalSales");
+                              return;
+                            }
+                            if (!/^\d+$/.test(cleaned)) {
+                              form.setError("totalSales", {
+                                type: "manual",
+                                message: "請輸入非負整數",
+                              });
+                              return;
+                            }
+                            field.onChange(Number(cleaned));
+                            form.clearErrors("totalSales");
                             clearConfidence("totalSales");
                           }}
                         />
@@ -752,18 +950,30 @@ export function InvoiceReviewDialog({
                       <FormControl>
                         <Input
                           {...field}
-                          type="number"
+                          type="text"
+                          inputMode="numeric"
                           value={field.value ?? ""}
                           className={cn(
                             getConfidenceStyle("tax"),
                             isMathError && "ring-2 ring-orange-400 ring-offset-1"
                           )}
                           onChange={(e) => {
-                            field.onChange(
-                              e.target.value
-                                ? parseFloat(e.target.value)
-                                : undefined
-                            );
+                            const cleaned = e.target.value.replace(/[,\s]/g, "");
+                            if (!cleaned) {
+                              field.onChange(undefined);
+                              form.clearErrors("tax");
+                              clearConfidence("tax");
+                              return;
+                            }
+                            if (!/^\d+$/.test(cleaned)) {
+                              form.setError("tax", {
+                                type: "manual",
+                                message: "請輸入非負整數",
+                              });
+                              return;
+                            }
+                            field.onChange(Number(cleaned));
+                            form.clearErrors("tax");
                             clearConfidence("tax");
                           }}
                         />
@@ -783,18 +993,30 @@ export function InvoiceReviewDialog({
                     <FormControl>
                       <Input
                         {...field}
-                        type="number"
+                        type="text"
+                        inputMode="numeric"
                         value={field.value ?? ""}
                         className={cn(
                           getConfidenceStyle("totalAmount"),
                           isMathError && "ring-2 ring-orange-400 ring-offset-1"
                         )}
                         onChange={(e) => {
-                          field.onChange(
-                            e.target.value
-                              ? parseFloat(e.target.value)
-                              : undefined
-                          );
+                          const cleaned = e.target.value.replace(/[,\s]/g, "");
+                          if (!cleaned) {
+                            field.onChange(undefined);
+                            form.clearErrors("totalAmount");
+                            clearConfidence("totalAmount");
+                            return;
+                          }
+                          if (!/^\d+$/.test(cleaned)) {
+                            form.setError("totalAmount", {
+                              type: "manual",
+                              message: "請輸入非負整數",
+                            });
+                            return;
+                          }
+                          field.onChange(Number(cleaned));
+                          form.clearErrors("totalAmount");
                           clearConfidence("totalAmount");
                         }}
                       />
@@ -841,14 +1063,18 @@ export function InvoiceReviewDialog({
                     <FormItem>
                       <FormLabel>賣方統編</FormLabel>
                       <FormControl>
-                        <Input
-                          {...field}
-                          className={getConfidenceStyle("sellerTaxId")}
-                          onChange={(e) => {
-                            field.onChange(e);
-                            clearConfidence("sellerTaxId");
-                          }}
-                        />
+                          <Input
+                            {...field}
+                            inputMode="numeric"
+                            maxLength={8}
+                            className={getConfidenceStyle("sellerTaxId")}
+                            onChange={(e) => {
+                              field.onChange(
+                                e.target.value.replace(/\D/g, "").slice(0, 8)
+                              );
+                              clearConfidence("sellerTaxId");
+                            }}
+                          />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -884,14 +1110,18 @@ export function InvoiceReviewDialog({
                     <FormItem>
                       <FormLabel>買方統編</FormLabel>
                       <FormControl>
-                        <Input
-                          {...field}
-                          className={getConfidenceStyle("buyerTaxId")}
-                          onChange={(e) => {
-                            field.onChange(e);
-                            clearConfidence("buyerTaxId");
-                          }}
-                        />
+                          <Input
+                            {...field}
+                            inputMode="numeric"
+                            maxLength={8}
+                            className={getConfidenceStyle("buyerTaxId")}
+                            onChange={(e) => {
+                              field.onChange(
+                                e.target.value.replace(/\D/g, "").slice(0, 8)
+                              );
+                              clearConfidence("buyerTaxId");
+                            }}
+                          />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

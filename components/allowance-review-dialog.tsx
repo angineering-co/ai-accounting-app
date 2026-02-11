@@ -2,6 +2,7 @@
 
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import {
   Tooltip,
   TooltipContent,
@@ -35,10 +36,9 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCw,
+  CalendarIcon,
 } from "lucide-react";
 import {
-  extractedAllowanceDataSchema,
-  type ExtractedAllowanceData,
   type Allowance,
 } from "@/lib/domain/models";
 import { updateAllowance } from "@/lib/services/allowance";
@@ -63,6 +63,132 @@ import {
 } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import Image from "next/image";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+
+const allowanceDatePattern = /^\d{4}\/\d{2}\/\d{2}$/;
+const taxIdPattern = /^\d{8}$/;
+const invoiceSerialPattern = /^[A-Z]{2}\d{8}$/;
+
+const allowanceReviewFormSchema = z
+  .object({
+    allowanceType: z.enum(["三聯式折讓", "電子發票折讓", "二聯式折讓"], {
+      message: "請選擇折讓類型",
+    }),
+    originalInvoiceSerialCode: z
+      .string()
+      .trim()
+      .min(1, "請輸入原發票號碼")
+      .regex(
+        invoiceSerialPattern,
+        "原發票號碼格式錯誤，請使用 2 碼英文 + 8 碼數字",
+      ),
+    amount: z
+      .number({ message: "請輸入折讓金額" })
+      .int("請輸入非負整數")
+      .positive("折讓金額需大於 0"),
+    taxAmount: z
+      .number({ message: "請輸入折讓稅額" })
+      .int("請輸入非負整數")
+      .nonnegative("請輸入非負整數"),
+    date: z
+      .string()
+      .trim()
+      .min(1, "請輸入折讓日期")
+      .regex(allowanceDatePattern, "日期格式錯誤，請使用 YYYY/MM/DD"),
+    sellerName: z.string().optional(),
+    sellerTaxId: z
+      .string()
+      .trim()
+      .optional()
+      .refine((value) => !value || taxIdPattern.test(value), {
+        message: "賣方統編需為 8 碼數字",
+      }),
+    buyerName: z.string().optional(),
+    buyerTaxId: z
+      .string()
+      .trim()
+      .optional()
+      .refine((value) => !value || taxIdPattern.test(value), {
+        message: "買方統編需為 8 碼數字",
+      }),
+    summary: z.string().optional(),
+    deductionCode: z.enum(["1", "2"]).optional(),
+    confidence: z.record(z.string(), z.enum(["low", "medium", "high"])).optional(),
+    source: z.enum(["scan", "import-excel"]).optional(),
+  })
+  .superRefine((data, ctx) => {
+    const buyerName = data.buyerName?.trim() || "";
+    const buyerTaxId = data.buyerTaxId?.trim() || "";
+    const isConsumer = buyerName === "" || buyerName === "0000000000";
+
+    if (!buyerTaxId && !isConsumer) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["buyerTaxId"],
+        message: "買方名稱非空白或 0000000000 時，需填寫買方統編",
+      });
+    }
+  })
+  .passthrough();
+
+type AllowanceReviewFormValues = z.infer<typeof allowanceReviewFormSchema>;
+
+function formatDateToYYYYMMDD(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}/${month}/${day}`;
+}
+
+function normalizeDateInput(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  const normalized = trimmed.replace(/-/g, "/");
+  const parts = normalized.split("/");
+  if (parts.length !== 3) return undefined;
+
+  const [y, m, d] = parts.map((part) => part.trim());
+  if (!/^\d{4}$/.test(y) || !/^\d{1,2}$/.test(m) || !/^\d{1,2}$/.test(d)) {
+    return undefined;
+  }
+
+  const year = Number(y);
+  const month = Number(m);
+  const day = Number(d);
+  const date = new Date(year, month - 1, day);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return undefined;
+  }
+
+  return `${year}/${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}`;
+}
+
+function parseNormalizedDate(dateValue: string | undefined): Date | undefined {
+  const normalized = normalizeDateInput(dateValue);
+  if (!normalized) return undefined;
+
+  const [year, month, day] = normalized.split("/").map(Number);
+  const parsed = new Date(year, month - 1, day);
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return undefined;
+  }
+  return parsed;
+}
 
 interface AllowanceReviewDialogProps {
   allowance: Allowance | null;
@@ -98,8 +224,10 @@ export function AllowanceReviewDialog({
   const [previewLoading, setPreviewLoading] = useState(false);
   const supabase = createClient();
 
-  const form = useForm<ExtractedAllowanceData>({
-    resolver: zodResolver(extractedAllowanceDataSchema),
+  const form = useForm<AllowanceReviewFormValues>({
+    resolver: zodResolver(allowanceReviewFormSchema),
+    mode: "onChange",
+    reValidateMode: "onChange",
     defaultValues: {
       allowanceType: "電子發票折讓",
       originalInvoiceSerialCode: "",
@@ -115,9 +243,11 @@ export function AllowanceReviewDialog({
     },
   });
 
-  const amount = form.watch("amount");
-  const originalInvoiceSerialCode = form.watch("originalInvoiceSerialCode");
   const dateValue = form.watch("date");
+  const selectedAllowanceDate = useMemo(
+    () => parseNormalizedDate(dateValue),
+    [dateValue],
+  );
 
   const hasUnlinkedWarning = useMemo(() => {
     return (
@@ -128,25 +258,32 @@ export function AllowanceReviewDialog({
   const isConfirmDisabled = useMemo(() => {
     return (
       allowance?.status === "confirmed" ||
-      !originalInvoiceSerialCode ||
-      !dateValue ||
-      !amount
+      !form.formState.isValid
     );
-  }, [allowance?.status, originalInvoiceSerialCode, dateValue, amount]);
+  }, [allowance?.status, form.formState.isValid]);
 
   const confirmDisabledReason = useMemo(() => {
     if (isLocked) return "此折讓目前已被鎖定，無法修改";
     if (allowance?.status === "confirmed") return "此折讓已確認";
-    if (!originalInvoiceSerialCode) return "請輸入原發票號碼";
-    if (!dateValue) return "請輸入折讓日期";
-    if (!amount) return "請輸入折讓金額";
+    if (
+      typeof form.formState.errors.originalInvoiceSerialCode?.message ===
+      "string"
+    ) {
+      return form.formState.errors.originalInvoiceSerialCode.message;
+    }
+    if (typeof form.formState.errors.date?.message === "string") {
+      return form.formState.errors.date.message;
+    }
+    if (typeof form.formState.errors.amount?.message === "string") {
+      return form.formState.errors.amount.message;
+    }
+    if (!form.formState.isValid) return "請修正欄位錯誤";
     return null;
   }, [
     isLocked,
     allowance?.status,
-    originalInvoiceSerialCode,
-    dateValue,
-    amount,
+    form.formState.errors,
+    form.formState.isValid,
   ]);
 
   const getConfidenceStyle = (fieldName: string) => {
@@ -183,7 +320,7 @@ export function AllowanceReviewDialog({
           "",
         amount: extractedData.amount ?? 0,
         taxAmount: extractedData.taxAmount ?? 0,
-        date: extractedData.date || "",
+        date: normalizeDateInput(extractedData.date) || "",
         sellerName: extractedData.sellerName || "",
         sellerTaxId: extractedData.sellerTaxId || "",
         buyerName: extractedData.buyerName || "",
@@ -191,7 +328,7 @@ export function AllowanceReviewDialog({
         summary: extractedData.summary || "",
         deductionCode: extractedData.deductionCode,
         ...extractedData,
-      });
+      } as AllowanceReviewFormValues);
 
       // Load preview based on source
       const loadPreview = async () => {
@@ -259,7 +396,7 @@ export function AllowanceReviewDialog({
 
   const handleSave = useCallback(
     async (
-      data: ExtractedAllowanceData,
+      data: AllowanceReviewFormValues,
       status: Allowance["status"] = "processed",
       shouldClose: boolean = true,
     ) => {
@@ -606,15 +743,66 @@ export function AllowanceReviewDialog({
                     <FormItem>
                       <FormLabel>折讓日期</FormLabel>
                       <FormControl>
-                        <Input
-                          {...field}
-                          placeholder="YYYY/MM/DD"
-                          className={getConfidenceStyle("date")}
-                          onChange={(e) => {
-                            field.onChange(e);
-                            clearConfidence("date");
-                          }}
-                        />
+                        <div className="space-y-2">
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={cn(
+                                  "w-full justify-start text-left font-normal",
+                                  !field.value && "text-muted-foreground",
+                                  getConfidenceStyle("date"),
+                                )}
+                              >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {selectedAllowanceDate
+                                  ? formatDateToYYYYMMDD(selectedAllowanceDate)
+                                  : "選擇折讓日期"}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0">
+                              <Calendar
+                                mode="single"
+                                selected={selectedAllowanceDate}
+                                defaultMonth={selectedAllowanceDate ?? new Date()}
+                                onSelect={(selectedDate) => {
+                                  if (!selectedDate) return;
+                                  form.setValue(
+                                    "date",
+                                    formatDateToYYYYMMDD(selectedDate),
+                                    {
+                                      shouldValidate: true,
+                                      shouldDirty: true,
+                                    },
+                                  );
+                                  form.clearErrors("date");
+                                  clearConfidence("date");
+                                }}
+                                initialFocus
+                              />
+                            </PopoverContent>
+                          </Popover>
+                          <Input
+                            {...field}
+                            placeholder="YYYY/MM/DD"
+                            className={getConfidenceStyle("date")}
+                            onChange={(e) => {
+                              field.onChange(e.target.value);
+                              clearConfidence("date");
+                            }}
+                            onBlur={(e) => {
+                              field.onBlur();
+                              const normalized = normalizeDateInput(e.target.value);
+                              if (!e.target.value.trim()) return;
+                              if (!normalized) return;
+                              form.setValue("date", normalized, {
+                                shouldValidate: true,
+                                shouldDirty: true,
+                              });
+                            }}
+                          />
+                        </div>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -629,17 +817,19 @@ export function AllowanceReviewDialog({
                   <FormItem>
                     <FormLabel>原發票號碼</FormLabel>
                     <FormControl>
-                      <Input
-                        {...field}
-                        placeholder="例如: AB12345678"
-                        className={getConfidenceStyle(
-                          "originalInvoiceSerialCode",
-                        )}
-                        onChange={(e) => {
-                          field.onChange(e);
-                          clearConfidence("originalInvoiceSerialCode");
-                        }}
-                      />
+                        <Input
+                          {...field}
+                          placeholder="例如: AB12345678"
+                          className={getConfidenceStyle(
+                            "originalInvoiceSerialCode",
+                          )}
+                          onChange={(e) => {
+                            field.onChange(
+                              e.target.value.toUpperCase().replace(/\s+/g, ""),
+                            );
+                            clearConfidence("originalInvoiceSerialCode");
+                          }}
+                        />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -656,15 +846,27 @@ export function AllowanceReviewDialog({
                       <FormControl>
                         <Input
                           {...field}
-                          type="number"
+                          type="text"
+                          inputMode="numeric"
                           value={field.value ?? ""}
                           className={cn(getConfidenceStyle("amount"))}
                           onChange={(e) => {
-                            field.onChange(
-                              e.target.value
-                                ? parseFloat(e.target.value)
-                                : undefined,
-                            );
+                            const cleaned = e.target.value.replace(/[,\s]/g, "");
+                            if (!cleaned) {
+                              field.onChange(undefined);
+                              form.clearErrors("amount");
+                              clearConfidence("amount");
+                              return;
+                            }
+                            if (!/^\d+$/.test(cleaned)) {
+                              form.setError("amount", {
+                                type: "manual",
+                                message: "請輸入非負整數",
+                              });
+                              return;
+                            }
+                            field.onChange(Number(cleaned));
+                            form.clearErrors("amount");
                             clearConfidence("amount");
                           }}
                         />
@@ -682,15 +884,27 @@ export function AllowanceReviewDialog({
                       <FormControl>
                         <Input
                           {...field}
-                          type="number"
+                          type="text"
+                          inputMode="numeric"
                           value={field.value ?? ""}
                           className={cn(getConfidenceStyle("taxAmount"))}
                           onChange={(e) => {
-                            field.onChange(
-                              e.target.value
-                                ? parseFloat(e.target.value)
-                                : undefined,
-                            );
+                            const cleaned = e.target.value.replace(/[,\s]/g, "");
+                            if (!cleaned) {
+                              field.onChange(undefined);
+                              form.clearErrors("taxAmount");
+                              clearConfidence("taxAmount");
+                              return;
+                            }
+                            if (!/^\d+$/.test(cleaned)) {
+                              form.setError("taxAmount", {
+                                type: "manual",
+                                message: "請輸入非負整數",
+                              });
+                              return;
+                            }
+                            field.onChange(Number(cleaned));
+                            form.clearErrors("taxAmount");
                             clearConfidence("taxAmount");
                           }}
                         />
@@ -731,9 +945,13 @@ export function AllowanceReviewDialog({
                       <FormControl>
                         <Input
                           {...field}
+                          inputMode="numeric"
+                          maxLength={8}
                           className={getConfidenceStyle("sellerTaxId")}
                           onChange={(e) => {
-                            field.onChange(e);
+                            field.onChange(
+                              e.target.value.replace(/\D/g, "").slice(0, 8),
+                            );
                             clearConfidence("sellerTaxId");
                           }}
                         />
@@ -774,9 +992,13 @@ export function AllowanceReviewDialog({
                       <FormControl>
                         <Input
                           {...field}
+                          inputMode="numeric"
+                          maxLength={8}
                           className={getConfidenceStyle("buyerTaxId")}
                           onChange={(e) => {
-                            field.onChange(e);
+                            field.onChange(
+                              e.target.value.replace(/\D/g, "").slice(0, 8),
+                            );
                             clearConfidence("buyerTaxId");
                           }}
                         />

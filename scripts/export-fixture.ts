@@ -17,7 +17,7 @@ dotenv.config({ path: ".env.local" });
 import * as fs from "fs";
 import * as path from "path";
 import type { Database } from "@/supabase/database.types";
-import { TEST_FIRM_ID } from "@/tests/fixtures/constants";
+import { TEST_FIRM_ID } from "@/tests/utils/constants";
 
 // ============================================================================
 // Arg Parsing

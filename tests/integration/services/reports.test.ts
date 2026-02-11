@@ -280,17 +280,3 @@ describe("Edge Cases", () => {
     ).rejects.toThrow();
   });
 });
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-function findFirstDifference(str1: string, str2: string): number {
-  const minLen = Math.min(str1.length, str2.length);
-  for (let i = 0; i < minLen; i++) {
-    if (str1[i] !== str2[i]) {
-      return i;
-    }
-  }
-  return minLen;
-}

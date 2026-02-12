@@ -38,14 +38,17 @@ import {
   RotateCw,
   CalendarIcon,
 } from "lucide-react";
-import {
-  type Allowance,
-} from "@/lib/domain/models";
+import { type Allowance } from "@/lib/domain/models";
 import { updateAllowance } from "@/lib/services/allowance";
 import { toast } from "sonner";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { cn, formatDateToYYYYMMDD, normalizeDateInput, parseNormalizedDate } from "@/lib/utils";
+import {
+  cn,
+  formatDateToYYYYMMDD,
+  normalizeDateInput,
+  parseNormalizedDate,
+} from "@/lib/utils";
 import {
   Select,
   SelectItem,
@@ -70,7 +73,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
-const allowanceDatePattern = /^\d{4}\/(?:0?[1-9]|1[0-2])\/(?:0?[1-9]|[12]\d|3[01])$/;
+const allowanceDatePattern =
+  /^\d{4}\/(?:0?[1-9]|1[0-2])\/(?:0?[1-9]|[12]\d|3[01])$/;
 const taxIdPattern = /^\d{8}$/;
 const invoiceSerialPattern = /^[A-Z]{2}\d{8}$/;
 
@@ -118,7 +122,9 @@ const allowanceReviewFormSchema = z
       }),
     summary: z.string().optional(),
     deductionCode: z.enum(["1", "2"]).optional(),
-    confidence: z.record(z.string(), z.enum(["low", "medium", "high"])).optional(),
+    confidence: z
+      .record(z.string(), z.enum(["low", "medium", "high"]))
+      .optional(),
     source: z.enum(["scan", "import-excel"]).optional(),
   })
   .superRefine((data, ctx) => {
@@ -191,6 +197,9 @@ export function AllowanceReviewDialog({
     },
   });
 
+  const source = form.watch("source");
+  const isExcelImport = source === "import-excel";
+
   const dateValue = form.watch("date");
   const selectedAllowanceDate = useMemo(
     () => parseNormalizedDate(dateValue),
@@ -204,10 +213,7 @@ export function AllowanceReviewDialog({
   }, [allowance]);
 
   const isConfirmDisabled = useMemo(() => {
-    return (
-      allowance?.status === "confirmed" ||
-      !form.formState.isValid
-    );
+    return allowance?.status === "confirmed" || !form.formState.isValid;
   }, [allowance?.status, form.formState.isValid]);
 
   const confirmDisabledReason = useMemo(() => {
@@ -664,6 +670,7 @@ export function AllowanceReviewDialog({
                         >
                           <SelectTrigger
                             className={getConfidenceStyle("allowanceType")}
+                            disabled={isLocked || isExcelImport}
                           >
                             <SelectValue placeholder="選擇折讓類型" />
                           </SelectTrigger>
@@ -697,6 +704,7 @@ export function AllowanceReviewDialog({
                               <Button
                                 type="button"
                                 variant="outline"
+                                disabled={isLocked || isExcelImport}
                                 className={cn(
                                   "w-full justify-start text-left font-normal",
                                   !field.value && "text-muted-foreground",
@@ -713,7 +721,9 @@ export function AllowanceReviewDialog({
                               <Calendar
                                 mode="single"
                                 selected={selectedAllowanceDate}
-                                defaultMonth={selectedAllowanceDate ?? new Date()}
+                                defaultMonth={
+                                  selectedAllowanceDate ?? new Date()
+                                }
                                 onSelect={(selectedDate) => {
                                   if (!selectedDate) return;
                                   form.setValue(
@@ -735,13 +745,16 @@ export function AllowanceReviewDialog({
                             {...field}
                             placeholder="YYYY/MM/DD"
                             className={getConfidenceStyle("date")}
+                            disabled={isLocked || isExcelImport}
                             onChange={(e) => {
                               field.onChange(e.target.value);
                               clearConfidence("date");
                             }}
                             onBlur={(e) => {
                               field.onBlur();
-                              const normalized = normalizeDateInput(e.target.value);
+                              const normalized = normalizeDateInput(
+                                e.target.value,
+                              );
                               if (!e.target.value.trim()) return;
                               if (!normalized) return;
                               form.setValue("date", normalized, {
@@ -765,19 +778,20 @@ export function AllowanceReviewDialog({
                   <FormItem>
                     <FormLabel>原發票號碼</FormLabel>
                     <FormControl>
-                        <Input
-                          {...field}
-                          placeholder="例如: AB12345678"
-                          className={getConfidenceStyle(
-                            "originalInvoiceSerialCode",
-                          )}
-                          onChange={(e) => {
-                            field.onChange(
-                              e.target.value.toUpperCase().replace(/\s+/g, ""),
-                            );
-                            clearConfidence("originalInvoiceSerialCode");
-                          }}
-                        />
+                      <Input
+                        {...field}
+                        placeholder="例如: AB12345678"
+                        className={getConfidenceStyle(
+                          "originalInvoiceSerialCode",
+                        )}
+                        disabled={isLocked || isExcelImport}
+                        onChange={(e) => {
+                          field.onChange(
+                            e.target.value.toUpperCase().replace(/\s+/g, ""),
+                          );
+                          clearConfidence("originalInvoiceSerialCode");
+                        }}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -798,8 +812,12 @@ export function AllowanceReviewDialog({
                           inputMode="numeric"
                           value={field.value ?? ""}
                           className={cn(getConfidenceStyle("amount"))}
+                          disabled={isLocked || isExcelImport}
                           onChange={(e) => {
-                            const cleaned = e.target.value.replace(/[,\s]/g, "");
+                            const cleaned = e.target.value.replace(
+                              /[,\s]/g,
+                              "",
+                            );
                             if (!cleaned) {
                               field.onChange(undefined);
                               form.clearErrors("amount");
@@ -836,8 +854,12 @@ export function AllowanceReviewDialog({
                           inputMode="numeric"
                           value={field.value ?? ""}
                           className={cn(getConfidenceStyle("taxAmount"))}
+                          disabled={isLocked || isExcelImport}
                           onChange={(e) => {
-                            const cleaned = e.target.value.replace(/[,\s]/g, "");
+                            const cleaned = e.target.value.replace(
+                              /[,\s]/g,
+                              "",
+                            );
                             if (!cleaned) {
                               field.onChange(undefined);
                               form.clearErrors("taxAmount");
@@ -874,6 +896,7 @@ export function AllowanceReviewDialog({
                         <Input
                           {...field}
                           className={getConfidenceStyle("sellerName")}
+                          disabled={isLocked || isExcelImport}
                           onChange={(e) => {
                             field.onChange(e);
                             clearConfidence("sellerName");
@@ -896,6 +919,7 @@ export function AllowanceReviewDialog({
                           inputMode="numeric"
                           maxLength={8}
                           className={getConfidenceStyle("sellerTaxId")}
+                          disabled={isLocked || isExcelImport}
                           onChange={(e) => {
                             field.onChange(
                               e.target.value.replace(/\D/g, "").slice(0, 8),
@@ -921,6 +945,7 @@ export function AllowanceReviewDialog({
                         <Input
                           {...field}
                           className={getConfidenceStyle("buyerName")}
+                          disabled={isLocked || isExcelImport}
                           onChange={(e) => {
                             field.onChange(e);
                             clearConfidence("buyerName");
@@ -943,6 +968,7 @@ export function AllowanceReviewDialog({
                           inputMode="numeric"
                           maxLength={8}
                           className={getConfidenceStyle("buyerTaxId")}
+                          disabled={isLocked || isExcelImport}
                           onChange={(e) => {
                             field.onChange(
                               e.target.value.replace(/\D/g, "").slice(0, 8),
@@ -1000,6 +1026,7 @@ export function AllowanceReviewDialog({
                         {...field}
                         placeholder="品項說明"
                         className={getConfidenceStyle("summary")}
+                        disabled={isLocked || isExcelImport}
                         onChange={(e) => {
                           field.onChange(e);
                           clearConfidence("summary");

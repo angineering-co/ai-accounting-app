@@ -51,7 +51,12 @@ import { toast } from "sonner";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Image from "next/image";
-import { cn, formatDateToYYYYMMDD, normalizeDateInput, parseNormalizedDate } from "@/lib/utils";
+import {
+  cn,
+  formatDateToYYYYMMDD,
+  normalizeDateInput,
+  parseNormalizedDate,
+} from "@/lib/utils";
 import {
   Select,
   SelectItem,
@@ -75,7 +80,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
-const invoiceDatePattern = /^\d{4}\/(?:0?[1-9]|1[0-2])\/(?:0?[1-9]|[12]\d|3[01])$/;
+const invoiceDatePattern =
+  /^\d{4}\/(?:0?[1-9]|1[0-2])\/(?:0?[1-9]|[12]\d|3[01])$/;
 const taxIdPattern = /^\d{8}$/;
 const invoiceSerialPattern = /^[A-Z]{2}\d{8}$/;
 
@@ -125,10 +131,18 @@ const invoiceReviewFormSchema = z
     account: z.enum(ACCOUNT_LIST, { message: "請選擇會計科目" }),
     taxType: z.enum(["應稅", "零稅率", "免稅", "作廢", "彙加"]).optional(),
     invoiceType: z
-      .enum(["手開二聯式", "手開三聯式", "電子發票", "二聯式收銀機", "三聯式收銀機"])
+      .enum([
+        "手開二聯式",
+        "手開三聯式",
+        "電子發票",
+        "二聯式收銀機",
+        "三聯式收銀機",
+      ])
       .optional(),
     inOrOut: z.enum(["進項", "銷項"]).optional(),
-    confidence: z.record(z.string(), z.enum(["low", "medium", "high"])).optional(),
+    confidence: z
+      .record(z.string(), z.enum(["low", "medium", "high"]))
+      .optional(),
     source: z.enum(["import-excel"]).optional(),
   })
   .superRefine((data, ctx) => {
@@ -208,6 +222,8 @@ export function InvoiceReviewDialog({
   const totalSales = form.watch("totalSales");
   const tax = form.watch("tax");
   const totalAmount = form.watch("totalAmount");
+  const source = form.watch("source");
+  const isExcelImport = source === "import-excel";
 
   const isMathError = useMemo(() => {
     const s = Number(totalSales) || 0;
@@ -248,12 +264,7 @@ export function InvoiceReviewDialog({
       isMathError ||
       isPeriodMismatch
     );
-  }, [
-    form.formState.isValid,
-    isMathError,
-    isPeriodMismatch,
-    invoice?.status,
-  ]);
+  }, [form.formState.isValid, isMathError, isPeriodMismatch, invoice?.status]);
 
   const confirmDisabledReason = useMemo(() => {
     if (isLocked) return "此發票目前已被鎖定，無法修改";
@@ -411,7 +422,7 @@ export function InvoiceReviewDialog({
           .from("allowances")
           .select("*")
           .eq("original_invoice_id", invoice.id);
-        
+
         if (data) {
           setLinkedAllowances(allowanceSchema.array().parse(data));
         } else {
@@ -431,7 +442,7 @@ export function InvoiceReviewDialog({
     async (
       data: InvoiceReviewFormValues,
       status: Invoice["status"] = "processed",
-      shouldClose: boolean = true
+      shouldClose: boolean = true,
     ) => {
       if (!invoice) return;
 
@@ -456,7 +467,7 @@ export function InvoiceReviewDialog({
         toast.error("更新失敗");
       }
     },
-    [invoice, onOpenChange, onSuccess]
+    [invoice, onOpenChange, onSuccess],
   );
 
   useEffect(() => {
@@ -745,9 +756,10 @@ export function InvoiceReviewDialog({
                         {...field}
                         placeholder="例如: AB12345678"
                         className={getConfidenceStyle("invoiceSerialCode")}
+                        disabled={isLocked || isExcelImport}
                         onChange={(e) => {
                           field.onChange(
-                            e.target.value.toUpperCase().replace(/\s+/g, "")
+                            e.target.value.toUpperCase().replace(/\s+/g, ""),
                           );
                           clearConfidence("invoiceSerialCode");
                         }}
@@ -770,12 +782,13 @@ export function InvoiceReviewDialog({
                           <Button
                             type="button"
                             variant="outline"
+                            disabled={isLocked || isExcelImport}
                             className={cn(
                               "w-full justify-start text-left font-normal",
                               !field.value && "text-muted-foreground",
                               getConfidenceStyle("date"),
                               isPeriodMismatch &&
-                                "ring-2 ring-orange-400 ring-offset-1"
+                                "ring-2 ring-orange-400 ring-offset-1",
                             )}
                           >
                             <CalendarIcon className="mr-2 h-4 w-4" />
@@ -797,7 +810,7 @@ export function InvoiceReviewDialog({
                                 {
                                   shouldValidate: true,
                                   shouldDirty: true,
-                                }
+                                },
                               );
                               form.clearErrors("date");
                               clearConfidence("date");
@@ -813,15 +826,18 @@ export function InvoiceReviewDialog({
                           className={cn(
                             getConfidenceStyle("date"),
                             isPeriodMismatch &&
-                              "ring-2 ring-orange-400 ring-offset-1"
+                              "ring-2 ring-orange-400 ring-offset-1",
                           )}
+                          disabled={isLocked || isExcelImport}
                           onChange={(e) => {
                             field.onChange(e.target.value);
                             clearConfidence("date");
                           }}
                           onBlur={(e) => {
                             field.onBlur();
-                            const normalized = normalizeDateInput(e.target.value);
+                            const normalized = normalizeDateInput(
+                              e.target.value,
+                            );
                             if (!e.target.value.trim()) return;
                             if (!normalized) return;
                             form.setValue("date", normalized, {
@@ -861,10 +877,15 @@ export function InvoiceReviewDialog({
                           value={field.value ?? ""}
                           className={cn(
                             getConfidenceStyle("totalSales"),
-                            isMathError && "ring-2 ring-orange-400 ring-offset-1"
+                            isMathError &&
+                              "ring-2 ring-orange-400 ring-offset-1",
                           )}
+                          disabled={isLocked || isExcelImport}
                           onChange={(e) => {
-                            const cleaned = e.target.value.replace(/[,\s]/g, "");
+                            const cleaned = e.target.value.replace(
+                              /[,\s]/g,
+                              "",
+                            );
                             if (!cleaned) {
                               field.onChange(undefined);
                               form.clearErrors("totalSales");
@@ -902,10 +923,15 @@ export function InvoiceReviewDialog({
                           value={field.value ?? ""}
                           className={cn(
                             getConfidenceStyle("tax"),
-                            isMathError && "ring-2 ring-orange-400 ring-offset-1"
+                            isMathError &&
+                              "ring-2 ring-orange-400 ring-offset-1",
                           )}
+                          disabled={isLocked || isExcelImport}
                           onChange={(e) => {
-                            const cleaned = e.target.value.replace(/[,\s]/g, "");
+                            const cleaned = e.target.value.replace(
+                              /[,\s]/g,
+                              "",
+                            );
                             if (!cleaned) {
                               field.onChange(undefined);
                               form.clearErrors("tax");
@@ -945,8 +971,9 @@ export function InvoiceReviewDialog({
                         value={field.value ?? ""}
                         className={cn(
                           getConfidenceStyle("totalAmount"),
-                          isMathError && "ring-2 ring-orange-400 ring-offset-1"
+                          isMathError && "ring-2 ring-orange-400 ring-offset-1",
                         )}
+                        disabled={isLocked || isExcelImport}
                         onChange={(e) => {
                           const cleaned = e.target.value.replace(/[,\s]/g, "");
                           if (!cleaned) {
@@ -972,8 +999,8 @@ export function InvoiceReviewDialog({
                       <div className="flex items-center gap-1.5 mt-2 text-xs font-medium text-orange-600 bg-orange-50 p-2 rounded border border-orange-200">
                         <AlertCircle className="h-3.5 w-3.5" />
                         <span>
-                          銷售額 ({totalSales || 0}) + 稅額 ({tax || 0}) ≠ 總計 (
-                          {totalAmount || 0})
+                          銷售額 ({totalSales || 0}) + 稅額 ({tax || 0}) ≠ 總計
+                          ({totalAmount || 0})
                         </span>
                       </div>
                     )}
@@ -993,6 +1020,7 @@ export function InvoiceReviewDialog({
                         <Input
                           {...field}
                           className={getConfidenceStyle("sellerName")}
+                          disabled={isLocked || isExcelImport}
                           onChange={(e) => {
                             field.onChange(e);
                             clearConfidence("sellerName");
@@ -1010,18 +1038,19 @@ export function InvoiceReviewDialog({
                     <FormItem>
                       <FormLabel>賣方統編</FormLabel>
                       <FormControl>
-                          <Input
-                            {...field}
-                            inputMode="numeric"
-                            maxLength={8}
-                            className={getConfidenceStyle("sellerTaxId")}
-                            onChange={(e) => {
-                              field.onChange(
-                                e.target.value.replace(/\D/g, "").slice(0, 8)
-                              );
-                              clearConfidence("sellerTaxId");
-                            }}
-                          />
+                        <Input
+                          {...field}
+                          inputMode="numeric"
+                          maxLength={8}
+                          className={getConfidenceStyle("sellerTaxId")}
+                          disabled={isLocked || isExcelImport}
+                          onChange={(e) => {
+                            field.onChange(
+                              e.target.value.replace(/\D/g, "").slice(0, 8),
+                            );
+                            clearConfidence("sellerTaxId");
+                          }}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1040,6 +1069,7 @@ export function InvoiceReviewDialog({
                         <Input
                           {...field}
                           className={getConfidenceStyle("buyerName")}
+                          disabled={isLocked || isExcelImport}
                           onChange={(e) => {
                             field.onChange(e);
                             clearConfidence("buyerName");
@@ -1057,18 +1087,19 @@ export function InvoiceReviewDialog({
                     <FormItem>
                       <FormLabel>買方統編</FormLabel>
                       <FormControl>
-                          <Input
-                            {...field}
-                            inputMode="numeric"
-                            maxLength={8}
-                            className={getConfidenceStyle("buyerTaxId")}
-                            onChange={(e) => {
-                              field.onChange(
-                                e.target.value.replace(/\D/g, "").slice(0, 8)
-                              );
-                              clearConfidence("buyerTaxId");
-                            }}
-                          />
+                        <Input
+                          {...field}
+                          inputMode="numeric"
+                          maxLength={8}
+                          className={getConfidenceStyle("buyerTaxId")}
+                          disabled={isLocked || isExcelImport}
+                          onChange={(e) => {
+                            field.onChange(
+                              e.target.value.replace(/\D/g, "").slice(0, 8),
+                            );
+                            clearConfidence("buyerTaxId");
+                          }}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1087,6 +1118,7 @@ export function InvoiceReviewDialog({
                         {...field}
                         placeholder="簡要描述"
                         className={getConfidenceStyle("summary")}
+                        disabled={isLocked || isExcelImport}
                         onChange={(e) => {
                           field.onChange(e);
                           clearConfidence("summary");
@@ -1114,11 +1146,13 @@ export function InvoiceReviewDialog({
 
                             // Update deductible based on selected account
                             const accountCode = value.split(" ")[0];
-                            if (ACCOUNTS[accountCode as keyof typeof ACCOUNTS]) {
+                            if (
+                              ACCOUNTS[accountCode as keyof typeof ACCOUNTS]
+                            ) {
                               form.setValue(
                                 "deductible",
                                 ACCOUNTS[accountCode as keyof typeof ACCOUNTS]
-                                  .deductible
+                                  .deductible,
                               );
                               clearConfidence("deductible");
                             }
@@ -1151,6 +1185,7 @@ export function InvoiceReviewDialog({
                       <FormControl>
                         <Select
                           value={field.value}
+                          disabled={isLocked || isExcelImport}
                           onValueChange={(value) => {
                             field.onChange(value);
                             clearConfidence("taxType");
@@ -1185,6 +1220,7 @@ export function InvoiceReviewDialog({
                       <FormControl>
                         <Select
                           value={field.value}
+                          disabled={isLocked || isExcelImport}
                           onValueChange={(value) => {
                             field.onChange(value);
                             clearConfidence("invoiceType");
@@ -1275,7 +1311,10 @@ export function InvoiceReviewDialog({
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-red-600 font-medium">
-                        -${(allowance.extracted_data?.amount || 0).toLocaleString()}
+                        -$
+                        {(
+                          allowance.extracted_data?.amount || 0
+                        ).toLocaleString()}
                       </span>
                       <span className="text-xs text-muted-foreground">
                         {allowance.status === "confirmed" ? "已確認" : "待確認"}
@@ -1296,7 +1335,7 @@ export function InvoiceReviewDialog({
                   <Button
                     variant="outline"
                     onClick={form.handleSubmit((data) =>
-                      handleSave(data, "processed")
+                      handleSave(data, "processed"),
                     )}
                     disabled={form.formState.isSubmitting || isLocked}
                     className="w-full"
@@ -1316,7 +1355,7 @@ export function InvoiceReviewDialog({
                 <div className="flex-1">
                   <Button
                     onClick={form.handleSubmit((data) =>
-                      handleSave(data, "confirmed")
+                      handleSave(data, "confirmed"),
                     )}
                     disabled={
                       form.formState.isSubmitting ||

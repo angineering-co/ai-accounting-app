@@ -450,10 +450,12 @@ export function InvoiceReviewDialog({
         // Clear confidence data as the user has reviewed/edited it
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { confidence, ...dataToSave } = data;
+        const inOrOutValue = dataToSave.inOrOut === "進項" ? "in" : "out";
 
         await updateInvoice(invoice.id, {
           extracted_data: dataToSave,
           status: status,
+          in_or_out: inOrOutValue,
         });
         toast.success(status === "confirmed" ? "發票已確認" : "變更已儲存");
 
@@ -1213,6 +1215,36 @@ export function InvoiceReviewDialog({
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
+                  name="inOrOut"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>進銷項</FormLabel>
+                      <FormControl>
+                        <Select
+                          value={field.value}
+                          disabled={isLocked || isExcelImport}
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            clearConfidence("inOrOut");
+                          }}
+                        >
+                          <SelectTrigger
+                            className={getConfidenceStyle("inOrOut")}
+                          >
+                            <SelectValue placeholder="選擇進銷項" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="進項">進項</SelectItem>
+                            <SelectItem value="銷項">銷項</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
                   name="invoiceType"
                   render={({ field }) => (
                     <FormItem>
@@ -1252,6 +1284,9 @@ export function InvoiceReviewDialog({
                     </FormItem>
                   )}
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="deductible"

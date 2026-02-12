@@ -13,7 +13,13 @@ import { AllowanceTable } from "@/components/allowance-table";
 import { RangeManagement } from "@/components/range-management";
 import { ReportGeneration } from "@/components/report-generation";
 import { toast } from "sonner";
-import { type Invoice, type Allowance, invoiceSchema, allowanceSchema, clientSchema } from "@/lib/domain/models";
+import {
+  type Invoice,
+  type Allowance,
+  invoiceSchema,
+  allowanceSchema,
+  clientSchema,
+} from "@/lib/domain/models";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import {
   getTaxPeriodByYYYMM,
@@ -24,7 +30,7 @@ import { InvoiceReviewDialog } from "@/components/invoice-review-dialog";
 import { extractInvoiceDataAction } from "@/lib/services/invoice";
 import { InvoiceUploadDialog } from "@/components/invoice/invoice-upload-dialog";
 import { InvoiceImportDialog } from "@/components/invoice/invoice-import-dialog";
-import { InvoiceEditDialog } from "@/components/invoice/invoice-edit-dialog";
+
 import { InvoiceDeleteDialog } from "@/components/invoice/invoice-delete-dialog";
 import { AllowanceReviewDialog } from "@/components/allowance-review-dialog";
 import { AllowanceDeleteDialog } from "@/components/allowance-delete-dialog";
@@ -41,13 +47,17 @@ export default function PeriodDetailPage({
   const rocPeriod = RocPeriod.fromYYYMM(periodYYYMM);
 
   // State
-  const [reviewingInvoice, setReviewingInvoice] = useState<Invoice | null>(null);
-  const [reviewingAllowance, setReviewingAllowance] = useState<Allowance | null>(null);
+  const [reviewingInvoice, setReviewingInvoice] = useState<Invoice | null>(
+    null,
+  );
+  const [reviewingAllowance, setReviewingAllowance] =
+    useState<Allowance | null>(null);
   const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
-  const [allowanceToDelete, setAllowanceToDelete] = useState<Allowance | null>(null);
+  const [allowanceToDelete, setAllowanceToDelete] = useState<Allowance | null>(
+    null,
+  );
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
-  
+
   // Import Electronic Invoice State
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
@@ -75,43 +85,37 @@ export default function PeriodDetailPage({
   );
 
   // Fetch Invoices (Filtered by Period ID)
-  const { 
-    data: invoices = [], 
+  const {
+    data: invoices = [],
     isLoading: isInvoicesLoading,
-    mutate: fetchInvoices
-  } = useSWR(
-    period ? ["period-invoices", period.id] : null,
-    async () => {
-      if (!period) return [];
-      const { data, error } = await supabase
-        .from("invoices")
-        .select("*")
-        .eq("tax_filing_period_id", period.id)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return invoiceSchema.array().parse(data || []);
-    },
-  );
+    mutate: fetchInvoices,
+  } = useSWR(period ? ["period-invoices", period.id] : null, async () => {
+    if (!period) return [];
+    const { data, error } = await supabase
+      .from("invoices")
+      .select("*")
+      .eq("tax_filing_period_id", period.id)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return invoiceSchema.array().parse(data || []);
+  });
 
   // Fetch Allowances (Filtered by Period ID)
-  const { 
-    data: allowances = [], 
+  const {
+    data: allowances = [],
     isLoading: isAllowancesLoading,
-    mutate: fetchAllowances
-  } = useSWR(
-    period ? ["period-allowances", period.id] : null,
-    async () => {
-      if (!period) return [];
-      const { data, error } = await supabase
-        .from("allowances")
-        .select("*")
-        .eq("client_id", clientId)
-        .eq("tax_filing_period_id", period.id)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return allowanceSchema.array().parse(data || []);
-    },
-  );
+    mutate: fetchAllowances,
+  } = useSWR(period ? ["period-allowances", period.id] : null, async () => {
+    if (!period) return [];
+    const { data, error } = await supabase
+      .from("allowances")
+      .select("*")
+      .eq("client_id", clientId)
+      .eq("tax_filing_period_id", period.id)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return allowanceSchema.array().parse(data || []);
+  });
 
   const handleToggleLock = async () => {
     if (!period) return;
@@ -135,7 +139,8 @@ export default function PeriodDetailPage({
       toast.success("AI 處理完成，請進行確認");
     } catch (error) {
       console.error("Error extracting invoice data:", error);
-      const errorMessage = error instanceof Error ? error.message : "AI 提取失敗";
+      const errorMessage =
+        error instanceof Error ? error.message : "AI 提取失敗";
       toast.error(errorMessage);
       fetchInvoices(); // Refresh to show updated status (likely "failed")
     }
@@ -159,7 +164,7 @@ export default function PeriodDetailPage({
   const handleReviewNext = () => {
     if (!reviewingInvoice) return;
     const currentIndex = invoices.findIndex(
-      (inv) => inv.id === reviewingInvoice.id
+      (inv) => inv.id === reviewingInvoice.id,
     );
     if (currentIndex >= 0 && currentIndex < invoices.length - 1) {
       setReviewingInvoice(invoices[currentIndex + 1]);
@@ -169,7 +174,7 @@ export default function PeriodDetailPage({
   const handleReviewPrevious = () => {
     if (!reviewingInvoice) return;
     const currentIndex = invoices.findIndex(
-      (inv) => inv.id === reviewingInvoice.id
+      (inv) => inv.id === reviewingInvoice.id,
     );
     if (currentIndex > 0) {
       setReviewingInvoice(invoices[currentIndex - 1]);
@@ -179,7 +184,7 @@ export default function PeriodDetailPage({
   const handleAllowanceReviewNext = () => {
     if (!reviewingAllowance) return;
     const currentIndex = allowances.findIndex(
-      (a) => a.id === reviewingAllowance.id
+      (a) => a.id === reviewingAllowance.id,
     );
     if (currentIndex >= 0 && currentIndex < allowances.length - 1) {
       setReviewingAllowance(allowances[currentIndex + 1]);
@@ -189,7 +194,7 @@ export default function PeriodDetailPage({
   const handleAllowanceReviewPrevious = () => {
     if (!reviewingAllowance) return;
     const currentIndex = allowances.findIndex(
-      (a) => a.id === reviewingAllowance.id
+      (a) => a.id === reviewingAllowance.id,
     );
     if (currentIndex > 0) {
       setReviewingAllowance(allowances[currentIndex - 1]);
@@ -304,7 +309,6 @@ export default function PeriodDetailPage({
                 isLoading={isInvoicesLoading}
                 onReview={setReviewingInvoice}
                 onExtractAI={isLocked ? undefined : handleExtractInvoice}
-                onEdit={isLocked ? undefined : setEditingInvoice}
                 onDelete={isLocked ? undefined : setInvoiceToDelete}
                 showClientColumn={false}
               />
@@ -381,16 +385,6 @@ export default function PeriodDetailPage({
         onNext={handleReviewNext}
         onPrevious={handleReviewPrevious}
         isLocked={isLocked}
-      />
-
-      <InvoiceEditDialog
-        invoice={editingInvoice}
-        open={!!editingInvoice}
-        onOpenChange={(open) => !open && setEditingInvoice(null)}
-        clientId={clientId}
-        currentPeriod={rocPeriod}
-        currentPeriodId={period.id}
-        onSuccess={fetchInvoices}
       />
 
       <InvoiceDeleteDialog

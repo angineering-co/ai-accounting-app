@@ -37,7 +37,6 @@ interface InvoiceTableProps {
   isLoading: boolean;
   onReview?: (invoice: Invoice) => void;
   onExtractAI?: (invoiceId: string) => void;
-  onEdit?: (invoice: Invoice) => void;
   onDelete?: (invoice: Invoice) => void;
   showClientColumn?: boolean;
 }
@@ -47,7 +46,6 @@ export function InvoiceTable({
   isLoading,
   onReview,
   onExtractAI,
-  onEdit,
   onDelete,
   showClientColumn = true,
 }: InvoiceTableProps) {
@@ -171,7 +169,7 @@ export function InvoiceTable({
             <TableHead className="w-[120px] text-right">稅額</TableHead>
             <TableHead className="w-[120px]">發票日期</TableHead>
             <TableHead className="w-[100px]">狀態</TableHead>
-            {(onExtractAI || onEdit || onDelete) && (
+            {(onExtractAI || onDelete) && (
               <TableHead className="w-[88px] text-right">操作</TableHead>
             )}
           </TableRow>
@@ -182,10 +180,10 @@ export function InvoiceTable({
               <TableCell
                 colSpan={
                   showClientColumn
-                    ? onExtractAI || onEdit || onDelete
+                    ? onExtractAI || onDelete
                       ? 9
                       : 8
-                    : onExtractAI || onEdit || onDelete
+                    : onExtractAI || onDelete
                       ? 8
                       : 7
                 }
@@ -199,10 +197,10 @@ export function InvoiceTable({
               <TableCell
                 colSpan={
                   showClientColumn
-                    ? onExtractAI || onEdit || onDelete
+                    ? onExtractAI || onDelete
                       ? 9
                       : 8
-                    : onExtractAI || onEdit || onDelete
+                    : onExtractAI || onDelete
                       ? 8
                       : 7
                 }
@@ -265,7 +263,7 @@ export function InvoiceTable({
                 <TableCell className="w-[100px]">
                   {getStatusBadge(invoice.status || "uploaded")}
                 </TableCell>
-                {(onExtractAI || onEdit || onDelete) && (
+                {(onExtractAI || onDelete) && (
                   <TableCell className="w-[88px] text-right">
                     <div className="flex items-center justify-end gap-1">
                       {onExtractAI &&
@@ -347,16 +345,6 @@ export function InvoiceTable({
                                 </DropdownMenuItem>
                               );
                             })()}
-                          {onEdit && (
-                            <DropdownMenuItem
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                onEdit(invoice);
-                              }}
-                            >
-                              編輯帳務資料
-                            </DropdownMenuItem>
-                          )}
                           {onDelete && (
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"

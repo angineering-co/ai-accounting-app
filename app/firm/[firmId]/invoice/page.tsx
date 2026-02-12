@@ -266,16 +266,6 @@ export default function InvoicePage({
     }
   };
 
-  const openEditModal = (invoice: Invoice) => {
-    setEditingInvoice(invoice);
-    updateForm.reset({
-      client_id: invoice.client_id || null,
-      in_or_out: invoice.in_or_out,
-      status: invoice.status,
-      period: invoice.year_month ? RocPeriod.fromYYYMM(invoice.year_month) : RocPeriod.now(),
-    });
-  };
-
   const filteredInvoices = invoices.filter((invoice) => {
     const statusMatch = statusFilter === "all" || invoice.status === statusFilter;
     const typeMatch = typeFilter === "all" || invoice.in_or_out === typeFilter;
@@ -359,7 +349,6 @@ export default function InvoicePage({
         isLoading={isLoading}
         onReview={setReviewingInvoice}
         onExtractAI={handleExtractInvoice}
-        onEdit={openEditModal}
         onDelete={setInvoiceToDelete}
       />
 

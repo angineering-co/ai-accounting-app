@@ -47,8 +47,10 @@ export async function updateSession(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const user = data?.claims;
 
+  const publicRoutes = ["/", "/terms", "/privacy", "/company"];
+
   if (
-    request.nextUrl.pathname !== "/" &&
+    !publicRoutes.includes(request.nextUrl.pathname) &&
     !user &&
     !request.nextUrl.pathname.startsWith("/login") &&
     !request.nextUrl.pathname.startsWith("/auth")

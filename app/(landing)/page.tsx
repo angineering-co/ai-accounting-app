@@ -1,9 +1,68 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Smartphone, ShieldCheck, Zap } from "lucide-react";
 
 import { CurrentYear } from "@/components/current-year";
+
+export const metadata: Metadata = {
+  title: "SnapBooks.ai (速博) | 台灣第一家 AI 記帳事務所",
+  description:
+    "SnapBooks.ai (速博智慧有限公司) 協助一人公司與小型團隊，拍照上傳單據與 AI 整理流程，更快完成記帳與報稅。",
+  keywords: ["snapbooks", "snapbooks.ai", "速博", "AI 記帳事務所", "台灣", "記帳", "報稅"],
+  alternates: {
+    canonical: "https://snapbooks.ai",
+  },
+  openGraph: {
+    title: "SnapBooks.ai (速博) | 台灣第一家 AI 記帳事務所",
+    description: "拍照上傳單據與 AI 整理流程，更快完成記帳與報稅。專為台灣企業打造！",
+    url: "https://snapbooks.ai",
+    siteName: "SnapBooks.ai",
+    type: "website",
+    images: [
+      {
+        url: "https://snapbooks.ai/opengraph-image.png",
+        width: 1200,
+        height: 630,
+        alt: "SnapBooks.ai",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "SnapBooks.ai (速博) | 台灣第一家 AI 記帳事務所",
+    description: "拍照上傳單據與 AI 整理流程，更快完成記帳與報稅。",
+    images: ["https://snapbooks.ai/twitter-image.png"],
+  },
+};
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": ["Organization", "ProfessionalService"],
+  name: "SnapBooks.ai",
+  alternateName: ["速博", "速博智慧有限公司", "SnapBooks"],
+  url: "https://snapbooks.ai",
+  logo: "https://snapbooks.ai/snapbooks.svg",
+  description: "SnapBooks.ai (速博) 是一家專為台灣企業打造的 AI 記帳事務所，結合自動化技術與會計師實務經驗。",
+  address: {
+    "@type": "PostalAddress",
+    streetAddress: "五權路1-67號11樓之5",
+    addressLocality: "西區",
+    addressRegion: "台中市",
+    addressCountry: "TW",
+  },
+  founder: [
+    {
+      "@type": "Person",
+      name: "黃勝平 Joe",
+    },
+    {
+      "@type": "Person",
+      name: "王致昂 Ang",
+    },
+  ],
+};
 
 export default function Home() {
   const earlyAdopterFormUrl = process.env.NEXT_PUBLIC_EARLY_ADOPTER_FORM_URL;
@@ -12,13 +71,17 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-white selection:bg-emerald-100 selection:text-emerald-900 font-sans text-slate-900">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       {/* Sticky Navigation */}
       <header className="sticky top-0 z-50 w-full border-b border-slate-100/50 bg-white/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between px-5">
           <Link href="/" aria-label="SnapBooks.ai">
             <Image
               src="/snapbooks.svg"
-              alt="SnapBooks.ai"
+              alt="SnapBooks.ai 速博 Logo"
               width={182}
               height={60}
               className="h-10 w-auto"
@@ -63,7 +126,7 @@ export default function Home() {
               報稅就是那麼簡單
             </h1>
             <p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-slate-600 md:text-xl">
-              SnapBooks.ai 是一家 AI 記帳事務所！
+              SnapBooks.ai (速博) 是 AI 記帳事務所！
               <br />
               由專業會計師把關，你專注在產品和成長，帳務與報稅就交給我們。
             </p>
@@ -134,9 +197,9 @@ export default function Home() {
                   />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-bold text-slate-900">
+                  <h2 className="text-2xl font-bold text-slate-900">
                     黃勝平 Joe
-                  </h3>
+                  </h2>
                   <p className="mt-1 font-semibold text-emerald-600">
                     共同創辦人暨稅務主理人
                   </p>
@@ -182,9 +245,9 @@ export default function Home() {
                   />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-bold text-slate-900">
+                  <h2 className="text-2xl font-bold text-slate-900">
                     王致昂 Ang
-                  </h3>
+                  </h2>
                   <p className="mt-1 font-semibold text-emerald-600">
                     共同創辦人暨技術負責人
                   </p>
@@ -351,9 +414,9 @@ export default function Home() {
                 <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-xl font-bold text-emerald-600 shadow-sm">
                   1
                 </div>
-                <h4 className="mb-2 text-xl font-bold text-slate-900">
+                <h3 className="mb-2 text-xl font-bold text-slate-900">
                   填寫表單
-                </h4>
+                </h3>
                 <p className="text-slate-600 leading-relaxed">
                   留下您的公司基本資料。
                 </p>
@@ -362,9 +425,9 @@ export default function Home() {
                 <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-xl font-bold text-emerald-600 shadow-sm">
                   2
                 </div>
-                <h4 className="mb-2 text-xl font-bold text-slate-900">
+                <h3 className="mb-2 text-xl font-bold text-slate-900">
                   專業評估
-                </h4>
+                </h3>
                 <p className="text-slate-600 leading-relaxed">
                   我們將透過 Line/Email 確認您是否適用此優惠方案。
                 </p>
@@ -373,9 +436,9 @@ export default function Home() {
                 <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-xl font-bold text-emerald-600 shadow-sm">
                   3
                 </div>
-                <h4 className="mb-2 text-xl font-bold text-slate-900">
+                <h3 className="mb-2 text-xl font-bold text-slate-900">
                   線上簽約
-                </h4>
+                </h3>
                 <p className="text-slate-600 leading-relaxed">
                   完成數位簽署與建檔。
                 </p>
@@ -384,9 +447,9 @@ export default function Home() {
                 <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-xl font-bold text-emerald-600 shadow-sm">
                   4
                 </div>
-                <h4 className="mb-2 text-xl font-bold text-slate-900">
+                <h3 className="mb-2 text-xl font-bold text-slate-900">
                   輕鬆記帳
-                </h4>
+                </h3>
                 <p className="text-slate-600 leading-relaxed">
                   開始享受「隨手拍、自動載」的全新報稅體驗！
                 </p>
@@ -414,7 +477,7 @@ export default function Home() {
           <div className="flex flex-col items-center md:items-start gap-4">
             <Image
               src="/snapbooks.svg"
-              alt="SnapBooks.ai"
+              alt="SnapBooks.ai 速博 Logo"
               width={182}
               height={60}
               className="h-10 w-auto"

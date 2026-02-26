@@ -123,13 +123,24 @@ export default function Home() {
 
           <div className="grid gap-16 md:grid-cols-2">
             <div className="flex flex-col gap-4">
-              <div>
-                <h3 className="text-2xl font-bold text-slate-900">
-                  黃勝平 Joe
-                </h3>
-                <p className="mt-1 font-semibold text-emerald-600">
-                  共同創辦人暨稅務主理人
-                </p>
+              <div className="flex items-center gap-5">
+                <div className="h-20 w-20 shrink-0 overflow-hidden rounded-full shadow-sm ring-2 ring-emerald-50">
+                  <Image
+                    src="/joe.jpg"
+                    alt="黃勝平 Joe"
+                    width={80}
+                    height={80}
+                    className="h-full w-full object-cover object-top scale-100"
+                  />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-slate-900">
+                    黃勝平 Joe
+                  </h3>
+                  <p className="mt-1 font-semibold text-emerald-600">
+                    共同創辦人暨稅務主理人
+                  </p>
+                </div>
               </div>
               <ul className="mt-4 space-y-4 text-slate-600">
                 <li className="flex gap-3">
@@ -160,13 +171,24 @@ export default function Home() {
             </div>
 
             <div className="flex flex-col gap-4">
-              <div>
-                <h3 className="text-2xl font-bold text-slate-900">
-                  王致昂 Ang
-                </h3>
-                <p className="mt-1 font-semibold text-emerald-600">
-                  共同創辦人暨技術負責人
-                </p>
+              <div className="flex items-center gap-5">
+                <div className="h-20 w-20 shrink-0 overflow-hidden rounded-full shadow-sm ring-2 ring-emerald-50">
+                  <Image
+                    src="/ang.png"
+                    alt="王致昂 Ang"
+                    width={80}
+                    height={80}
+                    className="h-full w-full object-cover object-[center_5%] scale-100"
+                  />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-slate-900">
+                    王致昂 Ang
+                  </h3>
+                  <p className="mt-1 font-semibold text-emerald-600">
+                    共同創辦人暨技術負責人
+                  </p>
+                </div>
               </div>
               <ul className="mt-4 space-y-4 text-slate-600">
                 <li className="flex gap-3">
@@ -307,8 +329,7 @@ export default function Home() {
 
               <div className="space-y-3 rounded-2xl bg-slate-50 p-6 text-sm leading-relaxed text-slate-500">
                 <p>
-                  ※ 本方案專為「年營業額 3,000
-                  萬以下」之中小企業/一人公司設計。
+                  ※ 本方案專為「年營業額 3,000 萬以下」之中小企業/一人公司設計。
                 </p>
                 <p>※ 紙本發票若超過 50 張，每 50 張額外酌收 NT$ 400 處理費。</p>
               </div>

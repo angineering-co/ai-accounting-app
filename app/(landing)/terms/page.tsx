@@ -1,3 +1,5 @@
+import { Info } from "lucide-react";
+
 export default function TermsPage() {
   return (
     <div className="min-h-screen bg-slate-50 selection:bg-emerald-100 selection:text-emerald-900 font-sans text-slate-900 px-5 py-24 md:py-32">
@@ -52,21 +54,8 @@ export default function TermsPage() {
                 張將額外酌收 NT$ 400 處理費。
               </p>
               <div className="rounded-xl border border-amber-100 bg-amber-50 p-6 text-amber-900">
-                <p className="font-bold mb-2 flex items-center gap-2">
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
+                <p className="mb-2 flex items-center gap-2 font-bold">
+                  <Info className="h-5 w-5" />
                   價格調整權利
                 </p>
                 <p className="text-base">

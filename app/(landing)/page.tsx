@@ -26,10 +26,16 @@ export default function Home() {
           </Link>
           <div className="flex items-center gap-4 md:gap-6">
             <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600">
-              <Link href="#features" className="hover:text-slate-900 transition-colors">
+              <Link
+                href="#features"
+                className="hover:text-slate-900 transition-colors"
+              >
                 服務介紹
               </Link>
-              <Link href="#pricing" className="hover:text-slate-900 transition-colors">
+              <Link
+                href="#pricing"
+                className="hover:text-slate-900 transition-colors"
+              >
                 價格
               </Link>
             </nav>
@@ -62,6 +68,9 @@ export default function Home() {
               由專業會計師把關，你專注在產品和成長，帳務與報稅就交給我們。
             </p>
             <div className="mt-12 flex flex-col items-center justify-center gap-6">
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/60 bg-emerald-50/80 px-4 py-2 text-sm font-medium text-emerald-800 backdrop-blur-sm shadow-sm">
+                💡 創業友善價 $1,200 / 月 ｜ 專業會計師 100% 審核把關
+              </div>
               <Button
                 asChild
                 size="lg"
@@ -80,10 +89,7 @@ export default function Home() {
             <div className="mt-16 flex justify-center">
               <div className="inline-flex items-center gap-2.5 rounded-full border border-slate-200 bg-white/60 px-5 py-2.5 text-sm font-medium text-slate-700 backdrop-blur-md shadow-sm">
                 <ShieldCheck className="h-5 w-5 text-emerald-600" />
-                <span>
-                  勤信聯合會計師事務所 數位新品牌 ｜ 適用年營業額 3,000
-                  萬以下之中小企業
-                </span>
+                <span>適用年營業額 3,000 萬以下之中小企業</span>
               </div>
             </div>
           </div>
@@ -207,11 +213,10 @@ export default function Home() {
                   <Smartphone className="h-10 w-10" />
                 </div>
                 <h3 className="mb-4 text-xl font-bold text-slate-900">
-                  拍照就可報稅，AI 自動整理
+                  拍照就可報稅，AI 自動辨識
                 </h3>
                 <p className="text-slate-600 leading-relaxed">
-                  告別月底整理紙本的惡夢。紙本發票隨手拍，雲端電子發票無限量自動匯入。AI
-                  精準辨識，省去人工建檔的錯誤與時間。
+                  告別月底整理紙本的惡夢。紙本發票隨手拍，雲端電子發票無限量自動匯入。
                 </p>
               </div>
 
@@ -220,11 +225,10 @@ export default function Home() {
                   <ShieldCheck className="h-10 w-10" />
                 </div>
                 <h3 className="mb-4 text-xl font-bold text-slate-900">
-                  AI 輔助整理，專業人員覆核
+                  AI 輔助，專業人員覆核
                 </h3>
                 <p className="text-slate-600 leading-relaxed">
-                  AI
-                  負責高效處理海量數據，但所有的稅務申報與最終把關，皆由擁有十年實務經驗的「事務所」專業團隊親自覆核，確保絕對合規。
+                  所有的稅務申報與最終把關，皆由擁有十年實務經驗的「事務所專業團隊」親自覆核，確保絕對合規。
                 </p>
               </div>
 
@@ -233,10 +237,10 @@ export default function Home() {
                   <Zap className="h-10 w-10" />
                 </div>
                 <h3 className="mb-4 text-xl font-bold text-slate-900">
-                  高效數位溝通，進度隨時掌握
+                  高效數位溝通，隨時掌握進度
                 </h3>
                 <p className="text-slate-600 leading-relaxed">
-                  全面導入 Line 與 Email 非同步客服，溝通精準、紀錄完整。
+                  全面導入 Line 與 Email 客服，溝通精準、紀錄完整。
                 </p>
               </div>
             </div>
@@ -304,9 +308,9 @@ export default function Home() {
               <div className="space-y-3 rounded-2xl bg-slate-50 p-6 text-sm leading-relaxed text-slate-500">
                 <p>
                   ※ 本方案專為「年營業額 3,000
-                  萬以下（適用擴大書審）」之中小企業/一人公司設計。
+                  萬以下」之中小企業/一人公司設計。
                 </p>
-                <p>※ 紙本發票若超過 50 張，每 50 張僅需酌收 $400 處理費。</p>
+                <p>※ 紙本發票若超過 50 張，每 50 張額外酌收 NT$ 400 處理費。</p>
               </div>
             </div>
           </div>
@@ -395,7 +399,9 @@ export default function Home() {
               className="h-10 w-auto"
             />
             <div className="text-sm text-slate-500 text-center md:text-left leading-relaxed">
-              <p className="font-medium text-slate-700">SnapBooks.ai 速博智慧有限公司｜速博智慧記帳事務所</p>
+              <p className="font-medium text-slate-700">
+                SnapBooks.ai 速博智慧有限公司｜速博智慧記帳事務所
+              </p>
               <p>地址：台中市西區五權路1-67號11樓之5</p>
               <p>電子信箱：joe700619@chixin.com.tw</p>
             </div>

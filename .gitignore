@@ -45,3 +45,6 @@ next-env.d.ts
 
 # npm
 .npm-cache
+
+# skills
+reports/

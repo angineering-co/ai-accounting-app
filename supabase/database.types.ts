@@ -310,6 +310,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          client_id: string | null
           created_at: string | null
           firm_id: string | null
           id: string
@@ -317,6 +318,7 @@ export type Database = {
           role: string | null
         }
         Insert: {
+          client_id?: string | null
           created_at?: string | null
           firm_id?: string | null
           id: string
@@ -324,6 +326,7 @@ export type Database = {
           role?: string | null
         }
         Update: {
+          client_id?: string | null
           created_at?: string | null
           firm_id?: string | null
           id?: string
@@ -331,6 +334,13 @@ export type Database = {
           role?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "profiles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "profiles_firm_id_fkey"
             columns: ["firm_id"]
@@ -390,6 +400,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_auth_user_client_id: { Args: never; Returns: string }
       get_auth_user_firm_id: { Args: never; Returns: string }
     }
     Enums: {

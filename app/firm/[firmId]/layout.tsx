@@ -1,4 +1,5 @@
 import { FirmSidebar } from "@/components/firm-sidebar";
+import { PortalSidebar } from "@/components/portal-sidebar";
 import { 
   SidebarInset, 
   SidebarTrigger 
@@ -28,6 +29,19 @@ async function FirmName({ params }: { params: Promise<{ firmId: string }> }) {
   );
 }
 
+async function SidebarByRole() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data: profile } = user?.id
+    ? await supabase.from("profiles").select("role").eq("id", user.id).single()
+    : { data: null };
+
+  return profile?.role === "client" ? <PortalSidebar /> : <FirmSidebar />;
+}
+
 export default function FirmLayout({
   children,
   params,
@@ -38,7 +52,7 @@ export default function FirmLayout({
   return (
     <>
       <Suspense fallback={<div className="w-[--sidebar-width] bg-sidebar border-r h-screen" />}>
-        <FirmSidebar />
+        <SidebarByRole />
       </Suspense>
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">

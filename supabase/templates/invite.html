@@ -1,0 +1,11 @@
+<h2>You've been invited</h2>
+
+<p>You have been invited to access your client portal.</p>
+<p>Click the link below to set your password and finish account setup:</p>
+<p>
+  <a
+    href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite&next=/auth/update-password"
+  >
+    Accept invite
+  </a>
+</p>

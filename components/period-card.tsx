@@ -12,9 +12,10 @@ interface PeriodCardProps {
   period: TaxFilingPeriod;
   firmId: string;
   clientId: string;
+  managePath?: string;
 }
 
-export function PeriodCard({ period, firmId, clientId }: PeriodCardProps) {
+export function PeriodCard({ period, firmId, clientId, managePath }: PeriodCardProps) {
   const rocPeriod = RocPeriod.fromYYYMM(period.year_month);
 
   // These should ideally come from the DB/Period entity
@@ -62,7 +63,10 @@ export function PeriodCard({ period, firmId, clientId }: PeriodCardProps) {
           <p className="text-xs text-muted-foreground">{count} 張發票</p>
           <Button asChild size="sm" variant="ghost" className="gap-2">
             <Link
-              href={`/firm/${firmId}/client/${clientId}/period/${period.year_month}`}
+              href={
+                managePath ??
+                `/firm/${firmId}/client/${clientId}/period/${period.year_month}`
+              }
             >
               管理發票 <ArrowRight className="h-4 w-4" />
             </Link>

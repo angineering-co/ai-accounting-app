@@ -1,6 +1,25 @@
 import { z } from "zod";
 import { ACCOUNT_LIST } from "@/lib/data/accounts";
 
+// ===== Profile / Access Schemas =====
+export const profileSchema = z.object({
+  id: z.string().uuid(),
+  firm_id: z.string().uuid().nullable().optional(),
+  client_id: z.string().uuid().nullable().optional(),
+  name: z.string().nullable().optional(),
+  role: z.enum(["admin", "staff", "super_admin", "client"]).nullable().optional(),
+  created_at: z.coerce.date().optional(),
+});
+
+export const inviteClientUserSchema = z.object({
+  clientId: z.string().uuid(),
+  email: z.string().email(),
+  name: z.string().min(1).optional(),
+});
+
+export type Profile = z.infer<typeof profileSchema>;
+export type InviteClientUserInput = z.infer<typeof inviteClientUserSchema>;
+
 // ===== Client Schemas =====
 export const clientSchema = z.object({
   id: z.string().uuid(),

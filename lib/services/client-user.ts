@@ -153,24 +153,26 @@ export async function getClientUsers(clientId: string): Promise<ClientUserSummar
   }
 
   const admin = createAdminClient();
-  const { data: listData, error: listError } = await admin.auth.admin.listUsers({
-    page: 1,
-    perPage: 1000,
-  });
 
-  if (listError) {
-    throw listError;
-  }
+  const usersWithEmails = await Promise.all(
+    clientProfiles.map(async (profileRow) => {
+      const { data: authUser, error } = await admin.auth.admin.getUserById(
+        profileRow.id,
+      );
+      if (error) {
+        console.error(
+          `Failed to fetch auth user for profile ${profileRow.id}:`,
+          error,
+        );
+      }
+      return {
+        id: profileRow.id,
+        name: profileRow.name,
+        created_at: profileRow.created_at,
+        email: authUser?.user?.email ?? null,
+      };
+    }),
+  );
 
-  const emailById = new Map<string, string | null>();
-  for (const authUser of listData.users) {
-    emailById.set(authUser.id, authUser.email ?? null);
-  }
-
-  return clientProfiles.map((profileRow) => ({
-    id: profileRow.id,
-    name: profileRow.name,
-    created_at: profileRow.created_at,
-    email: emailById.get(profileRow.id) ?? null,
-  }));
+  return usersWithEmails;
 }

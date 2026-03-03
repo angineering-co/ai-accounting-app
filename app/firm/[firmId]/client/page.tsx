@@ -101,6 +101,7 @@ export default function ClientPage({
       const { data, error } = await supabase
         .from("profiles")
         .select("client_id")
+        .eq("firm_id", firmId)
         .not("client_id", "is", null);
 
       if (error) throw error;
@@ -111,7 +112,7 @@ export default function ClientPage({
         map.set(row.client_id, (map.get(row.client_id) ?? 0) + 1);
       }
       return map;
-    }
+    },
   );
 
   useEffect(() => {

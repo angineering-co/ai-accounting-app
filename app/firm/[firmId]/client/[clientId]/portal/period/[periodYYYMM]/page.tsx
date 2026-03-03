@@ -61,12 +61,18 @@ function DocumentUploadSection({
     },
   });
 
+  const {
+    uploadedFiles,
+    setFiles: setUploadFiles,
+    setUploadedFiles: setUploadedFilesList,
+  } = uploadProps;
+
   const handleUploadComplete = useCallback(async () => {
-    if (isProcessingUpload || uploadProps.uploadedFiles.length === 0) return;
+    if (isProcessingUpload || uploadedFiles.length === 0) return;
     setIsProcessingUpload(true);
     try {
       await Promise.all(
-        uploadProps.uploadedFiles.map(async (uploadedFile) => {
+        uploadedFiles.map(async (uploadedFile) => {
           if (type === "invoice") {
             await createInvoice({
               firm_id: firmId,
@@ -93,8 +99,8 @@ function DocumentUploadSection({
 
       toast.success(`${title}上傳成功`);
       await onUploaded();
-      uploadProps.setFiles([]);
-      uploadProps.setUploadedFiles([]);
+      setUploadFiles([]);
+      setUploadedFilesList([]);
       setUploadFolderId(crypto.randomUUID());
     } catch (error) {
       console.error(error);
@@ -112,7 +118,9 @@ function DocumentUploadSection({
     periodYYYMM,
     title,
     type,
-    uploadProps,
+    uploadedFiles,
+    setUploadFiles,
+    setUploadedFilesList,
   ]);
 
   useEffect(() => {

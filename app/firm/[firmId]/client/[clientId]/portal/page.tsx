@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useState } from "react";
 import useSWR from "swr";
 import { Loader2 } from "lucide-react";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
@@ -19,8 +19,6 @@ export default function PortalDashboardPage({
   const { firmId, clientId } = use(params);
   const supabase = createSupabaseClient();
   const [isEnsuringPeriod, setIsEnsuringPeriod] = useState(false);
-
-  const currentPeriod = useMemo(() => RocPeriod.now().toString(), []);
 
   const { data: client, isLoading: isClientLoading } = useSWR(
     ["portal-client", clientId],
@@ -43,6 +41,7 @@ export default function PortalDashboardPage({
   } = useSWR(["portal-periods", clientId], () => getTaxPeriods(clientId));
 
   useEffect(() => {
+    const currentPeriod = RocPeriod.now().toString();
     const ensureCurrentPeriod = async () => {
       setIsEnsuringPeriod(true);
       try {
@@ -60,7 +59,7 @@ export default function PortalDashboardPage({
     };
 
     ensureCurrentPeriod();
-  }, [clientId, currentPeriod, mutatePeriods]);
+  }, [clientId, mutatePeriods]);
 
   if (isClientLoading || isPeriodsLoading || isEnsuringPeriod) {
     return (

@@ -40,6 +40,7 @@ import {
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ResponsiveDialogContent } from "@/components/ui/responsive-dialog";
+import { Badge } from "@/components/ui/badge";
 
 export default function ClientPage({
   params,
@@ -93,6 +94,25 @@ export default function ClientPage({
     isLoading,
     mutate: fetchClients,
   } = useSWR(["clients", firmId], fetcher);
+
+  const { data: clientPortalMap = new Map<string, number>() } = useSWR(
+    ["client-portal-access", firmId],
+    async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("client_id")
+        .not("client_id", "is", null);
+
+      if (error) throw error;
+
+      const map = new Map<string, number>();
+      for (const row of data || []) {
+        if (!row.client_id) continue;
+        map.set(row.client_id, (map.get(row.client_id) ?? 0) + 1);
+      }
+      return map;
+    }
+  );
 
   useEffect(() => {
     if (error) {
@@ -264,13 +284,18 @@ export default function ClientPage({
               clients.map((client) => (
                 <TableRow key={client.id}>
                   <TableCell className="font-medium">
-                    <Link 
-                      href={`/firm/${firmId}/client/${client.id}`}
-                      className="hover:underline flex items-center gap-1 text-primary"
-                    >
-                      {client.name}
-                      <ExternalLink className="h-3 w-3" />
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <Link 
+                        href={`/firm/${firmId}/client/${client.id}`}
+                        className="hover:underline flex items-center gap-1 text-primary"
+                      >
+                        {client.name}
+                        <ExternalLink className="h-3 w-3" />
+                      </Link>
+                      {(clientPortalMap.get(client.id) ?? 0) > 0 && (
+                        <Badge variant="secondary">Portal 已啟用</Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>{client.tax_id}</TableCell>
                   <TableCell>{client.contact_person || "-"}</TableCell>

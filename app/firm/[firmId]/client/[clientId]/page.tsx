@@ -6,12 +6,19 @@ import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, ArrowLeft } from "lucide-react";
+import { Loader2, ArrowLeft, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { clientSchema } from "@/lib/domain/models";
 import { PeriodCard } from "@/components/period-card";
 import { NewPeriodDialog } from "@/components/new-period-dialog";
 import { getTaxPeriods } from "@/lib/services/tax-period";
+import {
+  getClientUsers,
+  revokeClientUserAccess,
+} from "@/lib/services/client-user";
+import { InviteClientDialog } from "@/components/invite-client-dialog";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 
 export default function ClientDetailPage({
   params,
@@ -42,6 +49,23 @@ export default function ClientDetailPage({
     isLoading: isPeriodsLoading,
     mutate: fetchPeriods,
   } = useSWR(["client-periods", clientId], () => getTaxPeriods(clientId));
+
+  const {
+    data: portalUsers = [],
+    isLoading: isPortalUsersLoading,
+    mutate: fetchPortalUsers,
+  } = useSWR(["client-portal-users", clientId], () => getClientUsers(clientId));
+
+  const handleRevokeAccess = async (userId: string) => {
+    try {
+      await revokeClientUserAccess(userId);
+      toast.success("已撤銷入口網站帳號");
+      fetchPortalUsers();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "撤銷失敗");
+    }
+  };
 
   if (isClientLoading)
     return (
@@ -104,37 +128,87 @@ export default function ClientDetailPage({
         </TabsContent>
 
         <TabsContent value="basic" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>基本資訊</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  統一編號
-                </p>
-                <p>{client.tax_id}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  稅籍編號
-                </p>
-                <p>{client.tax_payer_id}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  負責人
-                </p>
-                <p>{client.contact_person || "-"}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  產業
-                </p>
-                <p>{client.industry || "-"}</p>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>基本資訊</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    統一編號
+                  </p>
+                  <p>{client.tax_id}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    稅籍編號
+                  </p>
+                  <p>{client.tax_payer_id}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    負責人
+                  </p>
+                  <p>{client.contact_person || "-"}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    產業
+                  </p>
+                  <p>{client.industry || "-"}</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardTitle className="flex items-center gap-2">
+                  <ShieldCheck className="h-5 w-5" />
+                  入口網站存取
+                </CardTitle>
+                <InviteClientDialog
+                  clientId={clientId}
+                  defaultName={client.contact_person || client.name}
+                  onInvited={fetchPortalUsers}
+                />
+              </CardHeader>
+              <CardContent>
+                {isPortalUsersLoading ? (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : portalUsers.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    尚未建立入口網站帳號。
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {portalUsers.map((user) => (
+                      <div
+                        key={user.id}
+                        className="flex items-center justify-between rounded-md border p-3"
+                      >
+                        <div className="space-y-1">
+                          <p className="font-medium">{user.name || "未命名使用者"}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {user.email || "無 Email"}
+                          </p>
+                          <Badge variant="secondary">啟用中</Badge>
+                        </div>
+                        <Button
+                          variant="outline"
+                          onClick={() => handleRevokeAccess(user.id)}
+                        >
+                          撤銷存取
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

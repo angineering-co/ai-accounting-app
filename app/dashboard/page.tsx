@@ -17,11 +17,15 @@ async function Redirector() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("firm_id")
+    .select("firm_id, role, client_id")
     .eq("id", claimsData.claims.sub)
     .single();
 
   const firmId = profile?.firm_id;
+
+  if (profile?.role === "client" && firmId && profile.client_id) {
+    redirect(`/firm/${firmId}/client/${profile.client_id}/portal`);
+  }
 
   if (firmId) {
     redirect(`/firm/${firmId}/dashboard`);

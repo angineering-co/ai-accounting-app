@@ -61,6 +61,29 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role, firm_id, client_id")
+      .eq("id", user.sub)
+      .single();
+
+    if (profile?.role === "client" && profile.firm_id && profile.client_id) {
+      const expectedPortalPath = `/firm/${profile.firm_id}/client/${profile.client_id}/portal`;
+      const pathname = request.nextUrl.pathname;
+      const isPortalPath = pathname === expectedPortalPath || pathname.startsWith(`${expectedPortalPath}/`);
+
+      if (
+        pathname.startsWith("/firm/") &&
+        !isPortalPath
+      ) {
+        const url = request.nextUrl.clone();
+        url.pathname = expectedPortalPath;
+        return NextResponse.redirect(url);
+      }
+    }
+  }
+
   // IMPORTANT: You *must* return the supabaseResponse object as it is.
   // If you're creating a new response object with NextResponse.next() make sure to:
   // 1. Pass the request in it, like so:

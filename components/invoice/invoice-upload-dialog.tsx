@@ -86,9 +86,6 @@ export function InvoiceUploadDialog({
   onSuccess,
   onAllowanceSuccess,
 }: InvoiceUploadDialogProps) {
-  const [uploadFolderId, setUploadFolderId] = useState<string>(() =>
-    crypto.randomUUID(),
-  );
   const [isProcessingUpload, setIsProcessingUpload] = useState(false);
 
   const uploadForm = useForm<UploadFormInput>({
@@ -111,7 +108,7 @@ export function InvoiceUploadDialog({
 
   const uploadProps = useSupabaseUpload({
     bucketName: "invoices",
-    path: `${firmId}/${uploadFolderId}`,
+    path: `${firmId}/${period.toString()}/${clientId}`,
     allowedMimeTypes: ["image/*", "application/pdf"],
     maxFiles: 10,
     maxFileSize: 50 * 1024 * 1024,
@@ -163,7 +160,6 @@ export function InvoiceUploadDialog({
       });
       uploadProps.setFiles([]);
       uploadProps.setUploadedFiles([]);
-      setUploadFolderId(crypto.randomUUID());
 
       if (documentMeta.type === "allowance") {
         onAllowanceSuccess();

@@ -66,7 +66,6 @@ export default function InvoicePage({
   const [isDeleting, setIsDeleting] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [uploadFolderId, setUploadFolderId] = useState<string>(() => crypto.randomUUID());
   const [isProcessingUpload, setIsProcessingUpload] = useState(false);
   const [reviewingInvoice, setReviewingInvoice] = useState<Invoice | null>(null);
 
@@ -91,16 +90,20 @@ export default function InvoicePage({
     },
   });
 
-  // Dropzone for file uploads
+  // Dropzone for file uploads - path uses form values for period and client
+  const watchedPeriod = uploadForm.watch("period");
+  const watchedClientId = uploadForm.watch("client_id");
+  const uploadPath = `${firmId}/${watchedPeriod?.toString() ?? "unknown"}/${watchedClientId ?? "unassigned"}`;
+
   const uploadProps = useSupabaseUpload({
     bucketName: "invoices",
-    path: `${firmId}/${uploadFolderId}`,
+    path: uploadPath,
     allowedMimeTypes: ["image/*", "application/pdf"],
     maxFiles: 10,
     maxFileSize: 50 * 1024 * 1024, // 50MB
     getStorageKey: (file) => {
-      const ext = file.name.split('.').pop();
-      return `${crypto.randomUUID()}${ext ? `.${ext}` : ''}`;
+      const ext = file.name.split(".").pop();
+      return `${crypto.randomUUID()}${ext ? `.${ext}` : ""}`;
     },
   });
 
@@ -167,8 +170,6 @@ export default function InvoicePage({
       uploadForm.reset();
       uploadProps.setFiles([]);
       uploadProps.setUploadedFiles([]);
-      // Generate new folder ID for next upload
-      setUploadFolderId(crypto.randomUUID());
       fetchInvoices();
     } catch (error) {
       console.error("Error creating invoice records:", error);
@@ -206,7 +207,6 @@ export default function InvoicePage({
     });
     uploadProps.setFiles([]);
     uploadProps.setErrors([]);
-    setUploadFolderId(crypto.randomUUID());
     setIsUploadModalOpen(true);
   };
 

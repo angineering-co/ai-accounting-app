@@ -50,7 +50,7 @@ export function InvoiceImportDialog({
 
   const importUploadProps = useSupabaseUpload({
     bucketName: "electronic-invoices",
-    path: `${firmId}/${importPeriod.toString()}`,
+    path: `${firmId}/${importPeriod.toString()}/${clientId}`,
     allowedMimeTypes: [
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "application/vnd.ms-excel",
@@ -58,12 +58,10 @@ export function InvoiceImportDialog({
     maxFiles: 4, // Allow up to 4 files (in/out invoices + in/out allowances)
     maxFileSize: 5 * 1024 * 1024,
     getStorageKey: (file) => {
-      // Sanitize filename to ensure valid storage key
+      // Sanitize filename to ensure valid storage key and avoid conflicts
       const cleanName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-      const timestamp = Date.now();
-      return `${timestamp}_${cleanName}`;
+      return `${crypto.randomUUID()}_${cleanName}`;
     },
-    upsert: true, // Allow overwriting if same file uploaded again
   });
 
   const {

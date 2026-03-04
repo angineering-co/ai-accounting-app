@@ -41,7 +41,7 @@ async function requireFirmManager() {
 }
 
 function getInviteRedirectTo(origin: string) {
-  return `${origin}/auth/confirm?next=/auth/update-password`;
+  return `${origin}/auth/confirm`;
 }
 
 function getAppOrigin(headerOrigin: string | null) {

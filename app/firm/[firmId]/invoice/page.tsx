@@ -1,35 +1,52 @@
 "use client";
 
-import { useEffect, useState, use, useCallback } from "react";
+import { useEffect, useState, use } from "react";
 import useSWR from "swr";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { Database } from "@/supabase/database.types";
-import { Button } from "@/components/ui/button";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogDescription, 
-  DialogFooter, 
-  DialogHeader, 
-  DialogTitle 
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Upload, Loader2 } from "lucide-react";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { Dropzone, DropzoneContent, DropzoneEmptyState } from "@/components/dropzone";
-import { useSupabaseUpload } from "@/hooks/use-supabase-upload";
 import { ResponsiveDialogContent } from "@/components/ui/responsive-dialog";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { createInvoice, updateInvoice, deleteInvoice, extractInvoiceDataAction } from "@/lib/services/invoice";
-import { updateInvoiceSchema, type Invoice as DomainInvoice, invoiceSchema } from "@/lib/domain/models";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  updateInvoice,
+  deleteInvoice,
+  extractInvoiceDataAction,
+} from "@/lib/services/invoice";
+import {
+  updateInvoiceSchema,
+  invoiceSchema,
+  type Invoice as DomainInvoice,
+} from "@/lib/domain/models";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import { InvoiceReviewDialog } from "@/components/invoice-review-dialog";
 import { InvoiceTable } from "@/components/invoice-table";
-
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { PeriodSelector } from "@/components/period-selector";
 
@@ -38,14 +55,6 @@ type Invoice = DomainInvoice & {
 };
 
 type Client = Database["public"]["Tables"]["clients"]["Row"];
-
-const uploadFormSchema = z.object({
-  client_id: z.string().uuid().nullable().optional(),
-  in_or_out: z.enum(["in", "out"]),
-  period: z.instanceof(RocPeriod),
-});
-
-type UploadFormInput = z.infer<typeof uploadFormSchema>;
 
 const updateFormSchema = updateInvoiceSchema.extend({
   period: z.instanceof(RocPeriod),
@@ -60,26 +69,13 @@ export default function InvoicePage({
 }) {
   const { firmId } = use(params);
   const supabase = createSupabaseClient();
-  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [isProcessingUpload, setIsProcessingUpload] = useState(false);
   const [reviewingInvoice, setReviewingInvoice] = useState<Invoice | null>(null);
 
-  // Upload form
-  const uploadForm = useForm<UploadFormInput>({
-    resolver: zodResolver(uploadFormSchema),
-    defaultValues: {
-      client_id: null,
-      in_or_out: "in",
-      period: RocPeriod.now(),
-    },
-  });
-
-  // Update form
   const updateForm = useForm<UpdateFormInput>({
     resolver: zodResolver(updateFormSchema),
     defaultValues: {
@@ -87,23 +83,6 @@ export default function InvoicePage({
       in_or_out: "in",
       status: "uploaded",
       period: RocPeriod.now(),
-    },
-  });
-
-  // Dropzone for file uploads - path uses form values for period and client
-  const watchedPeriod = uploadForm.watch("period");
-  const watchedClientId = uploadForm.watch("client_id");
-  const uploadPath = `${firmId}/${watchedPeriod?.toString() ?? "unknown"}/${watchedClientId ?? "unassigned"}`;
-
-  const uploadProps = useSupabaseUpload({
-    bucketName: "invoices",
-    path: uploadPath,
-    allowedMimeTypes: ["image/*", "application/pdf"],
-    maxFiles: 10,
-    maxFileSize: 50 * 1024 * 1024, // 50MB
-    getStorageKey: (file) => {
-      const ext = file.name.split(".").pop();
-      return `${crypto.randomUUID()}${ext ? `.${ext}` : ""}`;
     },
   });
 
@@ -131,7 +110,6 @@ export default function InvoicePage({
     mutate: fetchInvoices,
   } = useSWR<Invoice[]>(["invoices", firmId], fetcher);
 
-  // Fetch clients for dropdown
   const clientsFetcher = async () => {
     const { data, error } = await supabase
       .from("clients")
@@ -143,72 +121,6 @@ export default function InvoicePage({
   };
 
   const { data: clients = [] } = useSWR<Client[]>(["clients", firmId], clientsFetcher);
-
-  const handleUploadComplete = useCallback(async () => {
-    if (isProcessingUpload) return; // Prevent duplicate processing
-    
-    setIsProcessingUpload(true);
-    const formData = uploadForm.getValues();
-    
-    try {
-      // Create invoice records for each uploaded file
-      const promises = uploadProps.uploadedFiles.map(async (uploadedFile) => {
-        await createInvoice({
-          firm_id: firmId,
-          client_id: formData.client_id || null,
-          storage_path: uploadedFile.path,
-          filename: uploadedFile.name,
-          in_or_out: formData.in_or_out,
-          year_month: formData.period.toString(),
-        });
-      });
-
-      await Promise.all(promises);
-
-      toast.success(`成功上傳 ${uploadProps.uploadedFiles.length} 張發票。`);
-      setIsUploadModalOpen(false);
-      uploadForm.reset();
-      uploadProps.setFiles([]);
-      uploadProps.setUploadedFiles([]);
-      fetchInvoices();
-    } catch (error) {
-      console.error("Error creating invoice records:", error);
-      toast.error("建立發票記錄失敗。");
-    } finally {
-      setIsProcessingUpload(false);
-    }
-  }, [
-    firmId,
-    uploadForm,
-    fetchInvoices,
-    isProcessingUpload,
-    uploadProps
-  ]);
-
-  useEffect(() => {
-    if (error) {
-      console.error("Error fetching invoices:", error);
-      toast.error("取得發票資料失敗。");
-    }
-  }, [error]);
-
-  // Reset upload on successful upload
-  useEffect(() => {
-    if (uploadProps.isSuccess && !isProcessingUpload) {
-      handleUploadComplete();
-    }
-  }, [uploadProps.isSuccess, isProcessingUpload, handleUploadComplete]);
-
-  const openUploadModal = () => {
-    uploadForm.reset({
-      client_id: null,
-      in_or_out: "in",
-      period: RocPeriod.now(),
-    });
-    uploadProps.setFiles([]);
-    uploadProps.setErrors([]);
-    setIsUploadModalOpen(true);
-  };
 
   const handleEditInvoice = async (values: UpdateFormInput) => {
     if (!editingInvoice) return;
@@ -234,7 +146,6 @@ export default function InvoicePage({
     }
   };
 
-  // AI Invoice Extraction
   const handleExtractInvoice = async (invoiceId: string) => {
     try {
       toast.info("AI 正在處理中...");
@@ -245,7 +156,7 @@ export default function InvoicePage({
       console.error("Error extracting invoice data:", error);
       const errorMessage = error instanceof Error ? error.message : "AI 提取失敗";
       toast.error(errorMessage);
-      fetchInvoices(); // Refresh to show updated status (likely "failed")
+      fetchInvoices();
     }
   };
 
@@ -265,6 +176,13 @@ export default function InvoicePage({
       setIsDeleting(false);
     }
   };
+
+  useEffect(() => {
+    if (error) {
+      console.error("Error fetching invoices:", error);
+      toast.error("取得發票資料失敗。");
+    }
+  }, [error]);
 
   const filteredInvoices = invoices.filter((invoice) => {
     const statusMatch = statusFilter === "all" || invoice.status === statusFilter;
@@ -294,14 +212,9 @@ export default function InvoicePage({
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">發票管理</h1>
-          <p className="text-muted-foreground">上傳和管理您的發票資料。</p>
-        </div>
-        <Button onClick={openUploadModal}>
-          <Upload className="mr-2 h-4 w-4" /> 上傳發票
-        </Button>
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">發票管理</h1>
+        <p className="text-muted-foreground">管理客戶的發票資料。</p>
       </div>
 
       {/* Filters */}
@@ -352,111 +265,6 @@ export default function InvoicePage({
         onDelete={setInvoiceToDelete}
       />
 
-      {/* Upload Modal */}
-      <Dialog 
-        open={isUploadModalOpen} 
-        onOpenChange={setIsUploadModalOpen}
-      >
-        <ResponsiveDialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle>上傳發票</DialogTitle>
-            <DialogDescription>
-              選擇發票檔案並設定相關資訊。支援 PDF 和圖片格式。
-            </DialogDescription>
-          </DialogHeader>
-          <Form {...uploadForm}>
-            <form className="flex flex-col gap-4 py-4">
-              <FormField
-                control={uploadForm.control}
-                name="client_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>客戶（選填）</FormLabel>
-                    <Select
-                      value={field.value || "none"}
-                      onValueChange={(value) => field.onChange(value === "none" ? null : value)}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="選擇客戶" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="none">未指定</SelectItem>
-                        {clients.map((client) => (
-                          <SelectItem key={client.id} value={client.id}>
-                            {client.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={uploadForm.control}
-                name="period"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>所屬期別</FormLabel>
-                    <FormControl>
-                      <PeriodSelector
-                        value={field.value}
-                        onChange={field.onChange}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={uploadForm.control}
-                name="in_or_out"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>發票類型</FormLabel>
-                    <Select
-                      value={field.value}
-                      onValueChange={field.onChange}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="in">進項發票</SelectItem>
-                        <SelectItem value="out">銷項發票</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div className="space-y-2">
-                <Label>檔案</Label>
-                <Dropzone {...uploadProps}>
-                  <DropzoneEmptyState />
-                  <DropzoneContent />
-                </Dropzone>
-              </div>
-            </form>
-          </Form>
-          <DialogFooter>
-            <Button
-              variant="ghost"
-              onClick={() => setIsUploadModalOpen(false)}
-            >
-              取消
-            </Button>
-          </DialogFooter>
-        </ResponsiveDialogContent>
-      </Dialog>
-
       {/* Edit Modal */}
       <Dialog
         open={!!editingInvoice}
@@ -500,7 +308,9 @@ export default function InvoicePage({
                       <FormLabel>客戶</FormLabel>
                       <Select
                         value={field.value || "none"}
-                        onValueChange={(value) => field.onChange(value === "none" ? null : value)}
+                        onValueChange={(value) =>
+                          field.onChange(value === "none" ? null : value)
+                        }
                       >
                         <FormControl>
                           <SelectTrigger>

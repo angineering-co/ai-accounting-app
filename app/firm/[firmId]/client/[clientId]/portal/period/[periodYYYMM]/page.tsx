@@ -46,12 +46,11 @@ function DocumentUploadSection({
   isLocked,
   onUploaded,
 }: DocumentSectionProps) {
-  const [uploadFolderId, setUploadFolderId] = useState<string>(() => crypto.randomUUID());
   const [isProcessingUpload, setIsProcessingUpload] = useState(false);
 
   const uploadProps = useSupabaseUpload({
     bucketName: "invoices",
-    path: `${firmId}/${uploadFolderId}`,
+    path: `${firmId}/${periodYYYMM}/${clientId}`,
     allowedMimeTypes: ["image/*", "application/pdf"],
     maxFiles: 10,
     maxFileSize: 50 * 1024 * 1024,
@@ -101,7 +100,6 @@ function DocumentUploadSection({
       await onUploaded();
       setUploadFiles([]);
       setUploadedFilesList([]);
-      setUploadFolderId(crypto.randomUUID());
     } catch (error) {
       console.error(error);
       toast.error(`${title}上傳失敗`);

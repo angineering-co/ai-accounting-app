@@ -378,7 +378,7 @@ Period 11401-02
 **Upload flow per section:**
 
 1. Client drops files into the section's Dropzone
-2. Files upload to Supabase Storage under `{firm_id}/{uuid}/{filename}`
+2. Files upload to Supabase Storage under `{firm_id}/{YYYmm}/{client_id}/{filename}` (no overwrite on conflict)
 3. Server action creates invoice/allowance record with:
   - `firm_id` and `client_id` from user profile (auto-populated)
   - `in_or_out` from the section context

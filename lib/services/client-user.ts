@@ -1,6 +1,5 @@
 "use server";
 
-import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { inviteClientUserSchema } from "@/lib/domain/models";
@@ -40,23 +39,22 @@ async function requireFirmManager() {
   return { supabase, user, profile };
 }
 
-function getInviteRedirectTo(origin: string) {
-  return `${origin}/auth/confirm`;
-}
+/**
+ * This function is used to get the redirect URL for the invite email.
+ * https://supabase.com/docs/guides/auth/redirect-urls#vercel-preview-urls
+ * @returns The redirect URL for the invite email.
+ */
+function getInviteRedirectTo() {
+  let url =
+    process?.env?.NEXT_PUBLIC_SITE_URL ?? // Set this to your site URL in production env.
+    process?.env?.NEXT_PUBLIC_VERCEL_URL ?? // Automatically set by Vercel.
+    'http://127.0.0.1:3000'
 
-function getAppOrigin(headerOrigin: string | null) {
-  const fromEnv = process.env.NEXT_PUBLIC_SITE_URL;
-  const preferred = fromEnv ?? headerOrigin ?? "http://127.0.0.1:3000";
+  // Make sure to include `https://` when not localhost.
+  url = url.startsWith('http') ? url : `https://${url}`
 
-  if (preferred.startsWith("http://localhost:")) {
-    return preferred.replace("http://localhost:", "http://127.0.0.1:");
-  }
-
-  if (preferred.startsWith("https://localhost:")) {
-    return preferred.replace("https://localhost:", "https://127.0.0.1:");
-  }
-
-  return preferred;
+  // Note that this redirect URL must be added to the allowed redirect URLs in the Supabase project settings.
+  return `${url}/auth/confirm`;
 }
 
 export async function inviteClientUser(clientId: string, email: string, name?: string) {
@@ -91,9 +89,6 @@ export async function inviteClientUser(clientId: string, email: string, name?: s
     throw new Error("This client already has a portal user");
   }
 
-  const headerStore = await headers();
-  const origin = getAppOrigin(headerStore.get("origin"));
-
   const admin = createAdminClient();
   const { data, error } = await admin.auth.admin.inviteUserByEmail(validated.email, {
     data: {
@@ -102,7 +97,7 @@ export async function inviteClientUser(clientId: string, email: string, name?: s
       firm_id: clientRecord.firm_id,
       client_id: clientRecord.id,
     },
-    redirectTo: getInviteRedirectTo(origin),
+    redirectTo: getInviteRedirectTo(),
   });
 
   if (error) {

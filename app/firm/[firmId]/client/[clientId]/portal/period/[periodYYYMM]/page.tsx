@@ -7,7 +7,13 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { RocPeriod } from "@/lib/domain/roc-period";
-import { clientSchema, invoiceSchema, allowanceSchema, type Invoice, type Allowance } from "@/lib/domain/models";
+import {
+  clientSchema,
+  invoiceSchema,
+  allowanceSchema,
+  type Invoice,
+  type Allowance,
+} from "@/lib/domain/models";
 import { getTaxPeriodByYYYMM } from "@/lib/services/tax-period";
 import { createInvoice } from "@/lib/services/invoice";
 import { createAllowance } from "@/lib/services/allowance";
@@ -20,8 +26,13 @@ import { AllowanceDeleteDialog } from "@/components/allowance-delete-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
-import { Dropzone, DropzoneContent, DropzoneEmptyState } from "@/components/dropzone";
+import {
+  Dropzone,
+  DropzoneContent,
+  DropzoneEmptyState,
+} from "@/components/dropzone";
 
 type DocumentSectionProps = {
   title: string;
@@ -134,7 +145,9 @@ function DocumentUploadSection({
       </CardHeader>
       <CardContent>
         {isLocked ? (
-          <p className="text-sm text-muted-foreground">此期別已鎖定，無法上傳新檔案。</p>
+          <p className="text-sm text-muted-foreground">
+            此期別已鎖定，無法上傳新檔案。
+          </p>
         ) : (
           <div className="space-y-2">
             <Label>檔案上傳（僅支援 PDF / 圖片）</Label>
@@ -159,7 +172,9 @@ export default function PortalPeriodDetailPage({
   const router = useRouter();
   const rocPeriod = RocPeriod.fromYYYMM(periodYYYMM);
   const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
-  const [allowanceToDelete, setAllowanceToDelete] = useState<Allowance | null>(null);
+  const [allowanceToDelete, setAllowanceToDelete] = useState<Allowance | null>(
+    null,
+  );
 
   const {
     data: period,
@@ -186,31 +201,37 @@ export default function PortalPeriodDetailPage({
     data: invoices = [],
     isLoading: isInvoicesLoading,
     mutate: mutateInvoices,
-  } = useSWR(period ? ["portal-period-invoices", period.id] : null, async () => {
-    if (!period) return [];
-    const { data, error } = await supabase
-      .from("invoices")
-      .select("*")
-      .eq("tax_filing_period_id", period.id)
-      .order("created_at", { ascending: false });
-    if (error) throw error;
-    return invoiceSchema.array().parse(data || []);
-  });
+  } = useSWR(
+    period ? ["portal-period-invoices", period.id] : null,
+    async () => {
+      if (!period) return [];
+      const { data, error } = await supabase
+        .from("invoices")
+        .select("*")
+        .eq("tax_filing_period_id", period.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return invoiceSchema.array().parse(data || []);
+    },
+  );
 
   const {
     data: allowances = [],
     isLoading: isAllowancesLoading,
     mutate: mutateAllowances,
-  } = useSWR(period ? ["portal-period-allowances", period.id] : null, async () => {
-    if (!period) return [];
-    const { data, error } = await supabase
-      .from("allowances")
-      .select("*")
-      .eq("tax_filing_period_id", period.id)
-      .order("created_at", { ascending: false });
-    if (error) throw error;
-    return allowanceSchema.array().parse(data || []);
-  });
+  } = useSWR(
+    period ? ["portal-period-allowances", period.id] : null,
+    async () => {
+      if (!period) return [];
+      const { data, error } = await supabase
+        .from("allowances")
+        .select("*")
+        .eq("tax_filing_period_id", period.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return allowanceSchema.array().parse(data || []);
+    },
+  );
 
   if (isPeriodLoading || isClientLoading) {
     return (
@@ -252,91 +273,125 @@ export default function PortalPeriodDetailPage({
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>本期上傳摘要</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          進項發票: {inInvoices.length} 張 | 銷項發票: {outInvoices.length} 張 | 進項折讓: {inAllowances.length} 張 |
-          銷項折讓: {outAllowances.length} 張
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList className="grid h-auto w-full grid-cols-4">
+          <TabsTrigger value="overview">總覽</TabsTrigger>
+          <TabsTrigger value="input">進項</TabsTrigger>
+          <TabsTrigger value="output">銷項</TabsTrigger>
+          <TabsTrigger value="ranges">字軌</TabsTrigger>
+        </TabsList>
 
-      <DocumentUploadSection
-        title="進項發票"
-        firmId={firmId}
-        clientId={clientId}
-        periodId={period.id}
-        periodYYYMM={periodYYYMM}
-        type="invoice"
-        inOrOut="in"
-        isLocked={isLocked}
-        onUploaded={mutateInvoices}
-      />
-      <InvoiceTable
-        invoices={inInvoices}
-        isLoading={isInvoicesLoading}
-        showClientColumn={false}
-        onDelete={isLocked ? undefined : setInvoiceToDelete}
-      />
+        <TabsContent value="overview" className="mt-6 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>本期上傳摘要</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+              <p>進項發票：{inInvoices.length} 張</p>
+              <p>銷項發票：{outInvoices.length} 張</p>
+              <p>進項折讓：{inAllowances.length} 張</p>
+              <p>銷項折讓：{outAllowances.length} 張</p>
+            </CardContent>
+          </Card>
 
-      <DocumentUploadSection
-        title="銷項發票"
-        firmId={firmId}
-        clientId={clientId}
-        periodId={period.id}
-        periodYYYMM={periodYYYMM}
-        type="invoice"
-        inOrOut="out"
-        isLocked={isLocked}
-        onUploaded={mutateInvoices}
-      />
-      <InvoiceTable
-        invoices={outInvoices}
-        isLoading={isInvoicesLoading}
-        showClientColumn={false}
-        onDelete={isLocked ? undefined : setInvoiceToDelete}
-      />
+          <Card>
+            <CardHeader>
+              <CardTitle>操作指引</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
+              <p>1. 在「進項」與「銷項」分頁上傳本期文件並確認資料。</p>
+              <p>2. 若有購買紙本發票，請至「字軌」分頁輸入起訖號。</p>
+              {isLocked ? (
+                <p className="font-medium text-foreground">
+                  此期別已鎖定，目前僅可檢視既有資料。
+                </p>
+              ) : null}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-      <DocumentUploadSection
-        title="進項折讓"
-        firmId={firmId}
-        clientId={clientId}
-        periodId={period.id}
-        periodYYYMM={periodYYYMM}
-        type="allowance"
-        inOrOut="in"
-        isLocked={isLocked}
-        onUploaded={mutateAllowances}
-      />
-      <AllowanceTable
-        allowances={inAllowances}
-        isLoading={isAllowancesLoading}
-        onDelete={isLocked ? undefined : setAllowanceToDelete}
-      />
+        <TabsContent value="input" className="mt-6 space-y-6">
+          <DocumentUploadSection
+            title="進項發票"
+            firmId={firmId}
+            clientId={clientId}
+            periodId={period.id}
+            periodYYYMM={periodYYYMM}
+            type="invoice"
+            inOrOut="in"
+            isLocked={isLocked}
+            onUploaded={mutateInvoices}
+          />
+          <InvoiceTable
+            invoices={inInvoices}
+            isLoading={isInvoicesLoading}
+            showClientColumn={false}
+            onDelete={isLocked ? undefined : setInvoiceToDelete}
+          />
 
-      <DocumentUploadSection
-        title="銷項折讓"
-        firmId={firmId}
-        clientId={clientId}
-        periodId={period.id}
-        periodYYYMM={periodYYYMM}
-        type="allowance"
-        inOrOut="out"
-        isLocked={isLocked}
-        onUploaded={mutateAllowances}
-      />
-      <AllowanceTable
-        allowances={outAllowances}
-        isLoading={isAllowancesLoading}
-        onDelete={isLocked ? undefined : setAllowanceToDelete}
-      />
+          <DocumentUploadSection
+            title="進項折讓"
+            firmId={firmId}
+            clientId={clientId}
+            periodId={period.id}
+            periodYYYMM={periodYYYMM}
+            type="allowance"
+            inOrOut="in"
+            isLocked={isLocked}
+            onUploaded={mutateAllowances}
+          />
+          <AllowanceTable
+            allowances={inAllowances}
+            isLoading={isAllowancesLoading}
+            onDelete={isLocked ? undefined : setAllowanceToDelete}
+          />
+        </TabsContent>
 
-      <RangeManagement
-        clientId={clientId}
-        period={rocPeriod}
-        isLocked={isLocked}
-      />
+        <TabsContent value="output" className="mt-6 space-y-6">
+          <DocumentUploadSection
+            title="銷項發票"
+            firmId={firmId}
+            clientId={clientId}
+            periodId={period.id}
+            periodYYYMM={periodYYYMM}
+            type="invoice"
+            inOrOut="out"
+            isLocked={isLocked}
+            onUploaded={mutateInvoices}
+          />
+          <InvoiceTable
+            invoices={outInvoices}
+            isLoading={isInvoicesLoading}
+            showClientColumn={false}
+            onDelete={isLocked ? undefined : setInvoiceToDelete}
+          />
+
+          <DocumentUploadSection
+            title="銷項折讓"
+            firmId={firmId}
+            clientId={clientId}
+            periodId={period.id}
+            periodYYYMM={periodYYYMM}
+            type="allowance"
+            inOrOut="out"
+            isLocked={isLocked}
+            onUploaded={mutateAllowances}
+          />
+          <AllowanceTable
+            allowances={outAllowances}
+            isLoading={isAllowancesLoading}
+            onDelete={isLocked ? undefined : setAllowanceToDelete}
+          />
+        </TabsContent>
+
+        <TabsContent value="ranges" className="mt-6">
+          <RangeManagement
+            clientId={clientId}
+            period={rocPeriod}
+            isLocked={isLocked}
+          />
+        </TabsContent>
+      </Tabs>
 
       <InvoiceDeleteDialog
         invoice={invoiceToDelete}

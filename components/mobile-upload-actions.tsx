@@ -2,7 +2,10 @@
 
 import { useCallback, useId, useRef } from "react";
 import { Camera, Images } from "lucide-react";
-import type { UseSupabaseUploadReturn } from "@/hooks/use-supabase-upload";
+import {
+  getUploadFileId,
+  type UseSupabaseUploadReturn,
+} from "@/hooks/use-supabase-upload";
 import { Button } from "@/components/ui/button";
 import type { FileError } from "react-dropzone";
 
@@ -12,9 +15,6 @@ type MobileUploadActionsProps = Pick<
   UseSupabaseUploadReturn,
   "files" | "setFiles" | "allowedMimeTypes" | "maxFileSize" | "maxFiles"
 >;
-
-const getFileFingerprint = (file: File) =>
-  `${file.name}-${file.size}-${file.lastModified}-${file.type}`;
 
 const isMimeTypeAllowed = (fileType: string, allowedMimeTypes: string[]) => {
   if (allowedMimeTypes.length === 0) return true;
@@ -73,12 +73,12 @@ export function MobileUploadActions({
 
       setFiles((prevFiles) => {
         const existingFingerprints = new Set(
-          prevFiles.map((file) => getFileFingerprint(file)),
+          prevFiles.map((file) => getUploadFileId(file)),
         );
         const nextFiles = [...prevFiles];
 
         for (const file of selectedFiles) {
-          const fingerprint = getFileFingerprint(file);
+          const fingerprint = getUploadFileId(file);
           if (existingFingerprints.has(fingerprint)) continue;
 
           existingFingerprints.add(fingerprint);

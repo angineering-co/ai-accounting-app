@@ -28,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
+import { MobileUploadActions } from "@/components/mobile-upload-actions";
 import {
   Dropzone,
   DropzoneContent,
@@ -152,7 +153,16 @@ function DocumentUploadSection({
           <div className="space-y-2">
             <Label>檔案上傳（僅支援 PDF / 圖片）</Label>
             <Dropzone {...uploadProps}>
-              <DropzoneEmptyState />
+              <div className="md:hidden">
+                <MobileUploadActions
+                  files={uploadProps.files}
+                  setFiles={uploadProps.setFiles}
+                  allowedMimeTypes={uploadProps.allowedMimeTypes}
+                  maxFileSize={uploadProps.maxFileSize}
+                  maxFiles={uploadProps.maxFiles}
+                />
+              </div>
+              <DropzoneEmptyState className="hidden md:flex" />
               <DropzoneContent />
             </Dropzone>
           </div>

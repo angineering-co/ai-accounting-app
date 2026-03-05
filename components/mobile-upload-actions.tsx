@@ -13,6 +13,9 @@ type MobileUploadActionsProps = Pick<
   "files" | "setFiles" | "allowedMimeTypes" | "maxFileSize" | "maxFiles"
 >;
 
+const getFileFingerprint = (file: File) =>
+  `${file.name}-${file.size}-${file.lastModified}-${file.type}`;
+
 const isMimeTypeAllowed = (fileType: string, allowedMimeTypes: string[]) => {
   if (allowedMimeTypes.length === 0) return true;
 
@@ -69,13 +72,16 @@ export function MobileUploadActions({
       if (selectedFiles.length === 0) return;
 
       setFiles((prevFiles) => {
-        const existingNames = new Set(prevFiles.map((file) => file.name));
+        const existingFingerprints = new Set(
+          prevFiles.map((file) => getFileFingerprint(file)),
+        );
         const nextFiles = [...prevFiles];
 
         for (const file of selectedFiles) {
-          if (existingNames.has(file.name)) continue;
+          const fingerprint = getFileFingerprint(file);
+          if (existingFingerprints.has(fingerprint)) continue;
 
-          existingNames.add(file.name);
+          existingFingerprints.add(fingerprint);
           nextFiles.push(toUploadFile(file, allowedMimeTypes, maxFileSize));
         }
 
@@ -160,6 +166,7 @@ export function MobileUploadActions({
         className="pointer-events-none absolute h-px w-px opacity-0"
         accept={cameraAcceptedTypes}
         capture="environment"
+        multiple={maxFiles !== 1}
         onChange={(event) => {
           handleInputFiles(event.currentTarget.files, event.currentTarget);
         }}

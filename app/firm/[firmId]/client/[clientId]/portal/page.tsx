@@ -2,7 +2,7 @@
 
 import { use, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { Loader2 } from "lucide-react";
+import { Info, Loader2 } from "lucide-react";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/card";
 import { clientSchema } from "@/lib/domain/models";
@@ -14,6 +14,12 @@ import {
 } from "@/lib/services/tax-period";
 import { PeriodCard } from "@/components/period-card";
 import { toast } from "sonner";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export default function PortalDashboardPage({
   params,
@@ -118,8 +124,25 @@ export default function PortalDashboardPage({
           {client.name}（統編: {client.tax_id}）
         </p>
         <p className="text-sm text-muted-foreground mt-1">
-          目前優先處理期別：{currentUnclosedPeriod.format()} 
-          <br />（每期於次一單月 15日（含）前截止，週六、週日順延至次一工作日）
+          目前優先處理期別：{currentUnclosedPeriod.format()}
+          <TooltipProvider>
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="查看申報截止說明"
+                  className="inline-flex items-center text-muted-foreground/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm align-middle ml-1"
+                >
+                  <Info className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>
+                  每期於次一單月 15日（含）前截止，週六、週日順延至次一工作日
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </p>
       </div>
 
@@ -132,7 +155,7 @@ export default function PortalDashboardPage({
               <div className="space-y-1">
                 <h2 className="text-xl font-semibold">本期優先處理</h2>
                 <p className="text-sm text-muted-foreground">
-                  建議先完成本期憑證上傳，避免接近截止日期時集中處理。
+                  建議先完成本期憑證上傳，避免接近截止日期。
                 </p>
               </div>
               <PeriodCard

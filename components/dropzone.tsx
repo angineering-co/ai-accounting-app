@@ -1,7 +1,7 @@
 'use client'
 
 import { cn } from '@/lib/utils'
-import { type UseSupabaseUploadReturn } from '@/hooks/use-supabase-upload'
+import { getUploadFileId, type UseSupabaseUploadReturn } from '@/hooks/use-supabase-upload'
 import { Button } from '@/components/ui/button'
 import { CheckCircle, File, Loader2, Upload, X } from 'lucide-react'
 import { createContext, type PropsWithChildren, useCallback, useContext } from 'react'
@@ -78,8 +78,8 @@ const DropzoneContent = ({ className }: { className?: string }) => {
   const exceedMaxFiles = files.length > maxFiles
 
   const handleRemoveFile = useCallback(
-    (fileName: string) => {
-      setFiles(files.filter((file) => file.name !== fileName))
+    (fileId: string) => {
+      setFiles(files.filter((file) => getUploadFileId(file) !== fileId))
     },
     [files, setFiles]
   )
@@ -98,8 +98,9 @@ const DropzoneContent = ({ className }: { className?: string }) => {
   return (
     <div className={cn('flex flex-col', className)}>
       {files.map((file, idx) => {
-        const fileError = errors.find((e) => e.name === file.name)
-        const isSuccessfullyUploaded = !!successes.find((e) => e === file.name)
+        const fileId = getUploadFileId(file)
+        const fileError = errors.find((e) => e.fileId === fileId)
+        const isSuccessfullyUploaded = !!successes.find((e) => e === fileId)
 
         return (
           <div
@@ -153,7 +154,7 @@ const DropzoneContent = ({ className }: { className?: string }) => {
                 size="icon"
                 variant="link"
                 className="shrink-0 justify-self-end text-muted-foreground hover:text-foreground"
-                onClick={() => handleRemoveFile(file.name)}
+                onClick={() => handleRemoveFile(fileId)}
               >
                 <X />
               </Button>

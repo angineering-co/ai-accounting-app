@@ -4,6 +4,11 @@ import { type FileError, type FileRejection, useDropzone } from 'react-dropzone'
 
 const supabase = createClient()
 
+// Note that this function is customized for our use case instead of from https://supabase.com/ui/docs/nextjs/dropzone
+// We use it to support the ability to upload different files with the same name (often occurs on camera uploads from mobile devices)
+export const getUploadFileId = (file: Pick<File, 'name' | 'size' | 'lastModified' | 'type'>) =>
+  `${file.name}-${file.size}-${file.lastModified}-${file.type}`
+
 interface FileWithPreview extends File {
   preview?: string
   errors: readonly FileError[]
@@ -71,7 +76,7 @@ const useSupabaseUpload = (options: UseSupabaseUploadOptions) => {
 
   const [files, setFiles] = useState<FileWithPreview[]>([])
   const [loading, setLoading] = useState<boolean>(false)
-  const [errors, setErrors] = useState<{ name: string; message: string }[]>([])
+  const [errors, setErrors] = useState<{ fileId: string; name: string; message: string }[]>([])
   const [successes, setSuccesses] = useState<string[]>([])
   const [uploadedFiles, setUploadedFiles] = useState<{ name: string; path: string }[]>([])
 
@@ -85,7 +90,7 @@ const useSupabaseUpload = (options: UseSupabaseUploadOptions) => {
   const onDrop = useCallback(
     (acceptedFiles: File[], fileRejections: FileRejection[]) => {
       const validFiles = acceptedFiles
-        .filter((file) => !files.find((x) => x.name === file.name))
+        .filter((file) => !files.find((x) => getUploadFileId(x) === getUploadFileId(file)))
         .map((file) => {
           ;(file as FileWithPreview).preview = URL.createObjectURL(file)
           ;(file as FileWithPreview).errors = []
@@ -118,7 +123,7 @@ const useSupabaseUpload = (options: UseSupabaseUploadOptions) => {
     setLoading(true)
 
     // Only upload files that are not already in the successes list
-    const filesToUpload = files.filter((f) => !successes.includes(f.name));
+    const filesToUpload = files.filter((f) => !successes.includes(getUploadFileId(f)));
 
     const responses = await Promise.all(
       filesToUpload.map(async (file) => {
@@ -131,21 +136,22 @@ const useSupabaseUpload = (options: UseSupabaseUploadOptions) => {
             cacheControl: cacheControl.toString(),
             upsert,
           })
+        const fileId = getUploadFileId(file)
         if (error) {
-          return { name: file.name, path: storageKey, message: error.message }
+          return { fileId, name: file.name, path: storageKey, message: error.message }
         } else {
-          return { name: file.name, path: storageKey, message: undefined }
+          return { fileId, name: file.name, path: storageKey, message: undefined }
         }
       })
     )
 
     const responseErrors = responses.filter((x) => x.message !== undefined)
     // if there were errors previously, this function tried to upload the files again so we should clear/overwrite the existing errors.
-    setErrors(responseErrors.map(x => ({ name: x.name, message: x.message! })))
+    setErrors(responseErrors.map(x => ({ fileId: x.fileId, name: x.name, message: x.message! })))
 
     const responseSuccesses = responses.filter((x) => x.message === undefined)
     const newSuccesses = Array.from(
-      new Set([...successes, ...responseSuccesses.map((x) => x.name)])
+      new Set([...successes, ...responseSuccesses.map((x) => x.fileId)])
     )
     setSuccesses(newSuccesses)
 

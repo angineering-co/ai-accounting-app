@@ -14,7 +14,8 @@ interface PeriodCardProps {
   firmId: string;
   clientId: string;
   managePath?: string;
-  isHighlighted?: boolean;
+  variant?: "default" | "primary";
+  actionLabel?: string;
 }
 
 export function PeriodCard({
@@ -22,30 +23,30 @@ export function PeriodCard({
   firmId,
   clientId,
   managePath,
-  isHighlighted = false,
+  variant = "default",
+  actionLabel = "管理發票",
 }: PeriodCardProps) {
   const rocPeriod = RocPeriod.fromYYYMM(period.year_month);
 
-  // These should ideally come from the DB/Period entity
-  // For now we rely on what's passed in the TaxFilingPeriod type
-  // If the backend isn't populating them yet, they will be 0.
-  const sales = 0; // Placeholder until integrated with real data
-  const tax = 0; // Placeholder until integrated with real data
-  const count = 0; // Placeholder until integrated with real data
+  // TODO: Implement this
+  // const sales = 0; // Placeholder until integrated with real data
+  // const tax = 0; // Placeholder until integrated with real data
+  // const count = 0; // Placeholder until integrated with real data
 
   return (
     <Card
       className={cn(
         "transition-shadow hover:shadow-md",
-        isHighlighted && "border-primary/60 bg-primary/5 shadow-sm",
+        variant === "primary" && "border-primary shadow-md md:shadow-lg",
       )}
     >
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-lg font-medium">
+        <CardTitle
+          className={cn("text-lg font-medium", variant === "primary" && "text-xl md:text-2xl")}
+        >
           {rocPeriod.format()}
         </CardTitle>
         <div className="flex items-center gap-2">
-          {isHighlighted ? <Badge variant="default">本期優先</Badge> : null}
           <Badge variant={period.status === "locked" ? "secondary" : "default"}>
             {period.status === "locked" ? (
               <span className="flex items-center gap-1">
@@ -60,31 +61,36 @@ export function PeriodCard({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 gap-4 my-4">
-          <div>
+        <div className={cn("grid grid-cols-2 gap-4 my-4", variant === "primary" && "md:my-6")}>
+          {/* <div>
             <p className="text-sm font-medium text-muted-foreground">銷售額</p>
-            <p className="text-xl font-bold font-mono">
+            <p className={cn("text-xl font-bold font-mono", variant === "primary" && "md:text-2xl")}>
               ${sales.toLocaleString()}
             </p>
           </div>
           <div>
             <p className="text-sm font-medium text-muted-foreground">稅額</p>
-            <p className="text-xl font-bold font-mono">
+            <p className={cn("text-xl font-bold font-mono", variant === "primary" && "md:text-2xl")}>
               ${tax.toLocaleString()}
             </p>
-          </div>
+          </div> */}
         </div>
 
         <div className="flex items-center justify-between mt-4">
-          <p className="text-xs text-muted-foreground">{count} 張發票</p>
-          <Button asChild size="sm" variant="ghost" className="gap-2">
+          {/* <p className="text-xs text-muted-foreground">{count} 張發票</p> */}
+          <Button
+            asChild
+            size={variant === "primary" ? "default" : "sm"}
+            variant={variant === "primary" ? "default" : "ghost"}
+            className="gap-2"
+          >
             <Link
               href={
                 managePath ??
                 `/firm/${firmId}/client/${clientId}/period/${period.year_month}`
               }
             >
-              管理發票 <ArrowRight className="h-4 w-4" />
+              {actionLabel} <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>
         </div>

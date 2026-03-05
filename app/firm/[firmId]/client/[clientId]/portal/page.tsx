@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { Loader2 } from "lucide-react";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
@@ -19,6 +19,8 @@ export default function PortalDashboardPage({
   const { firmId, clientId } = use(params);
   const supabase = createSupabaseClient();
   const [isEnsuringPeriod, setIsEnsuringPeriod] = useState(false);
+  const currentUnclosedPeriod = RocPeriod.getCurrentUnclosedPeriod();
+  const currentUnclosedYearMonth = currentUnclosedPeriod.toString();
 
   const { data: client, isLoading: isClientLoading } = useSWR(
     ["portal-client", clientId],
@@ -41,13 +43,12 @@ export default function PortalDashboardPage({
   } = useSWR(["portal-periods", clientId], () => getTaxPeriods(clientId));
 
   useEffect(() => {
-    const currentPeriod = RocPeriod.now().toString();
     const ensureCurrentPeriod = async () => {
       setIsEnsuringPeriod(true);
       try {
-        const existing = await getTaxPeriodByYYYMM(clientId, currentPeriod);
+        const existing = await getTaxPeriodByYYYMM(clientId, currentUnclosedYearMonth);
         if (!existing) {
-          await createTaxPeriod(clientId, currentPeriod);
+          await createTaxPeriod(clientId, currentUnclosedYearMonth);
           await mutatePeriods();
         }
       } catch (error) {
@@ -59,7 +60,22 @@ export default function PortalDashboardPage({
     };
 
     ensureCurrentPeriod();
-  }, [clientId, mutatePeriods]);
+  }, [clientId, currentUnclosedYearMonth, mutatePeriods]);
+
+  const rankedPeriods = useMemo(() => {
+    return [...periods].sort((a, b) => {
+      const aIsCurrentUnclosed =
+        a.status === "open" && a.year_month === currentUnclosedYearMonth;
+      const bIsCurrentUnclosed =
+        b.status === "open" && b.year_month === currentUnclosedYearMonth;
+
+      if (aIsCurrentUnclosed !== bIsCurrentUnclosed) {
+        return aIsCurrentUnclosed ? -1 : 1;
+      }
+
+      return b.year_month.localeCompare(a.year_month);
+    });
+  }, [currentUnclosedYearMonth, periods]);
 
   if (isClientLoading || isPeriodsLoading || isEnsuringPeriod) {
     return (
@@ -80,19 +96,25 @@ export default function PortalDashboardPage({
         <p className="text-muted-foreground mt-1">
           {client.name}（統編: {client.tax_id}）
         </p>
+        <p className="text-sm text-muted-foreground mt-1">
+          目前優先處理期別：{currentUnclosedPeriod.format()}（每期於次一單月 15 日截止）
+        </p>
       </div>
 
       {periods.length === 0 ? (
         <Card className="h-40 animate-pulse bg-muted" />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {periods.map((period) => (
+          {rankedPeriods.map((period) => (
             <PeriodCard
               key={period.id}
               period={period}
               firmId={firmId}
               clientId={clientId}
               managePath={`/firm/${firmId}/client/${clientId}/portal/period/${period.year_month}`}
+              isHighlighted={
+                period.status === "open" && period.year_month === currentUnclosedYearMonth
+              }
             />
           ))}
         </div>

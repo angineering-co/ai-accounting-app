@@ -83,6 +83,72 @@ export class RocPeriod {
   }
 
   /**
+   * Current unclosed period based on filing cutoff:
+   * every period closes on the 15th of the next odd month.
+   *
+   * Examples:
+   * - Jan-Feb period closes on Mar 15
+   * - Nov-Dec period closes on Jan 15 (next year)
+   */
+  static getCurrentUnclosedPeriod(referenceDate: Date = new Date()): RocPeriod {
+    const currentPeriod = RocPeriod.fromDate(referenceDate);
+    const previousPeriod = currentPeriod.previousPeriod();
+    const referenceDateOnly = RocPeriod.toDateOnly(referenceDate);
+    const previousCutoffDateOnly = RocPeriod.toDateOnly(previousPeriod.cutoffDate);
+
+    if (referenceDateOnly.getTime() <= previousCutoffDateOnly.getTime()) {
+      return previousPeriod;
+    }
+
+    return currentPeriod;
+  }
+
+  /**
+   * Cutoff date (inclusive) for this period:
+   * the 15th of the next odd month.
+   */
+  get cutoffDate(): Date {
+    const cutoffMonth = this.startMonth === 11 ? 1 : this.startMonth + 2;
+    const cutoffYear =
+      this.startMonth === 11 ? this.gregorianYear + 1 : this.gregorianYear;
+    const cutoffDate = new Date(cutoffYear, cutoffMonth - 1, 15);
+    return RocPeriod.adjustWeekendCutoffToMonday(cutoffDate);
+  }
+
+  /**
+   * Previous bi-monthly period.
+   */
+  previousPeriod(): RocPeriod {
+    if (this.startMonth === 1) {
+      return new RocPeriod(this.rocYear - 1, 11);
+    }
+    return new RocPeriod(this.rocYear, this.startMonth - 2);
+  }
+
+  private static adjustWeekendCutoffToMonday(cutoffDate: Date): Date {
+    const dayOfWeek = cutoffDate.getDay();
+    if (dayOfWeek === 6) {
+      return new Date(
+        cutoffDate.getFullYear(),
+        cutoffDate.getMonth(),
+        cutoffDate.getDate() + 2
+      );
+    }
+    if (dayOfWeek === 0) {
+      return new Date(
+        cutoffDate.getFullYear(),
+        cutoffDate.getMonth(),
+        cutoffDate.getDate() + 1
+      );
+    }
+    return cutoffDate;
+  }
+
+  private static toDateOnly(date: Date): Date {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  }
+
+  /**
    * Get all 6 periods for a given ROC year.
    */
   static getPeriodsForYear(rocYear: number): RocPeriod[] {

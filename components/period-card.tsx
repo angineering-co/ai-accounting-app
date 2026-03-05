@@ -7,15 +7,23 @@ import { ArrowRight, Lock, Unlock } from "lucide-react";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import Link from "next/link";
 import { type TaxFilingPeriod } from "@/lib/domain/models";
+import { cn } from "@/lib/utils";
 
 interface PeriodCardProps {
   period: TaxFilingPeriod;
   firmId: string;
   clientId: string;
   managePath?: string;
+  isHighlighted?: boolean;
 }
 
-export function PeriodCard({ period, firmId, clientId, managePath }: PeriodCardProps) {
+export function PeriodCard({
+  period,
+  firmId,
+  clientId,
+  managePath,
+  isHighlighted = false,
+}: PeriodCardProps) {
   const rocPeriod = RocPeriod.fromYYYMM(period.year_month);
 
   // These should ideally come from the DB/Period entity
@@ -26,22 +34,30 @@ export function PeriodCard({ period, firmId, clientId, managePath }: PeriodCardP
   const count = 0; // Placeholder until integrated with real data
 
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card
+      className={cn(
+        "transition-shadow hover:shadow-md",
+        isHighlighted && "border-primary/60 bg-primary/5 shadow-sm",
+      )}
+    >
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-lg font-medium">
           {rocPeriod.format()}
         </CardTitle>
-        <Badge variant={period.status === "locked" ? "secondary" : "default"}>
-          {period.status === "locked" ? (
-            <span className="flex items-center gap-1">
-              <Lock className="h-3 w-3" /> 已鎖定
-            </span>
-          ) : (
-            <span className="flex items-center gap-1">
-              <Unlock className="h-3 w-3" /> 進行中
-            </span>
-          )}
-        </Badge>
+        <div className="flex items-center gap-2">
+          {isHighlighted ? <Badge variant="default">本期優先</Badge> : null}
+          <Badge variant={period.status === "locked" ? "secondary" : "default"}>
+            {period.status === "locked" ? (
+              <span className="flex items-center gap-1">
+                <Lock className="h-3 w-3" /> 已鎖定
+              </span>
+            ) : (
+              <span className="flex items-center gap-1">
+                <Unlock className="h-3 w-3" /> 進行中
+              </span>
+            )}
+          </Badge>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 gap-4 my-4">

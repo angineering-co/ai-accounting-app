@@ -7,6 +7,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { Separator } from "@/components/ui/separator";
 import { Suspense } from "react";
+import { HydrationSafe } from "@/components/hydration-safe";
 
 /**
  * Fetches and displays the firm name.
@@ -52,7 +53,9 @@ export default function FirmLayout({
   return (
     <>
       <Suspense fallback={<div className="w-[--sidebar-width] bg-sidebar border-r h-screen" />}>
-        <SidebarByRole />
+        <HydrationSafe fallback={<div className="w-[--sidebar-width] bg-sidebar border-r h-screen" />}>
+          <SidebarByRole />
+        </HydrationSafe>
       </Suspense>
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">

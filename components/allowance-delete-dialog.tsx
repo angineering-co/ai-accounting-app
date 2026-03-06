@@ -13,10 +13,9 @@ import {
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { deleteAllowance } from "@/lib/services/allowance";
-import { type Allowance } from "@/lib/domain/models";
 
 interface AllowanceDeleteDialogProps {
-  allowance: Allowance | null;
+  allowance: { id: string; name: string } | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
@@ -46,7 +45,7 @@ export function AllowanceDeleteDialog({
     }
   };
 
-  const label = allowance?.allowance_serial_code || allowance?.filename || "-";
+  const label = allowance?.name || "-";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

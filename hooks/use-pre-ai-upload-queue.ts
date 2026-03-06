@@ -14,6 +14,7 @@ type QueueRow = Database["public"]["Tables"]["invoices"]["Row"] &
   Database["public"]["Tables"]["allowances"]["Row"];
 
 const PRE_AI_STATUSES = ["uploaded", "processing"] as const;
+const supabase = createSupabaseClient();
 
 const IMAGE_EXTENSIONS = new Set([
   "jpg",
@@ -57,7 +58,6 @@ export function usePreAiUploadQueue({
   type,
   pageSize = 12,
 }: UsePreAiUploadQueueOptions) {
-  const supabase = createSupabaseClient();
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
 
   const tableName = getTableName(type) as UploadQueueTableName;
@@ -149,7 +149,7 @@ export function usePreAiUploadQueue({
     return () => {
       mounted = false;
     };
-  }, [queueRows, previewUrls, supabase]);
+  }, [queueRows, previewUrls]);
 
   const items = useMemo(
     () =>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,7 +58,47 @@ interface RangeManagementProps {
   isLocked?: boolean;
 }
 
-export function RangeManagement({ clientId, period, isLocked = false }: RangeManagementProps) {
+const handwrittenInvoiceTypes = new Set(["手開三聯式", "手開二聯式"]);
+const cashierInvoiceTypes = new Set(["三聯式收銀機", "二聯式收銀機"]);
+const invoiceSerialPattern = /^([A-Za-z]{2})(\d{8})$/;
+
+const getAutoEndNumber = (invoiceType: string, startNumber: string) => {
+  if (
+    !handwrittenInvoiceTypes.has(invoiceType) &&
+    !cashierInvoiceTypes.has(invoiceType)
+  ) {
+    return null;
+  }
+
+  const startMatch = invoiceSerialPattern.exec(startNumber);
+  if (!startMatch) {
+    return null;
+  }
+
+  const numericPart = Number.parseInt(startMatch[2], 10);
+  const suffix = numericPart % 100;
+  if (
+    handwrittenInvoiceTypes.has(invoiceType) &&
+    suffix !== 0 &&
+    suffix !== 50
+  ) {
+    return null;
+  }
+
+  const endOffset = handwrittenInvoiceTypes.has(invoiceType) ? 49 : 249;
+  const endNumericPart = numericPart + endOffset;
+  if (endNumericPart > 99_999_999) {
+    return null;
+  }
+
+  return `${startMatch[1]}${endNumericPart.toString().padStart(8, "0")}`;
+};
+
+export function RangeManagement({
+  clientId,
+  period,
+  isLocked = false,
+}: RangeManagementProps) {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
@@ -67,7 +107,7 @@ export function RangeManagement({ clientId, period, isLocked = false }: RangeMan
     mutate,
     isLoading,
   } = useSWR(["invoice-ranges", clientId, period.toString()], () =>
-    getInvoiceRanges(clientId, period.toString())
+    getInvoiceRanges(clientId, period.toString()),
   );
 
   const form = useForm<CreateInvoiceRangeInput>({
@@ -80,6 +120,31 @@ export function RangeManagement({ clientId, period, isLocked = false }: RangeMan
       end_number: "",
     },
   });
+
+  const selectedInvoiceType = form.watch("invoice_type");
+  const startNumber = form.watch("start_number");
+  const isHandwrittenInvoiceType =
+    handwrittenInvoiceTypes.has(selectedInvoiceType);
+  const isAutoCalculatedInvoiceType =
+    isHandwrittenInvoiceType || cashierInvoiceTypes.has(selectedInvoiceType);
+
+  useEffect(() => {
+    if (!isAutoCalculatedInvoiceType) {
+      return;
+    }
+
+    const autoEndNumber = getAutoEndNumber(selectedInvoiceType, startNumber);
+    if (!autoEndNumber) {
+      return;
+    }
+
+    if (form.getValues("end_number") !== autoEndNumber) {
+      form.setValue("end_number", autoEndNumber, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+  }, [form, isAutoCalculatedInvoiceType, selectedInvoiceType, startNumber]);
 
   const onSubmit = async (values: CreateInvoiceRangeInput) => {
     try {
@@ -184,6 +249,16 @@ export function RangeManagement({ clientId, period, isLocked = false }: RangeMan
                       <FormControl>
                         <Input placeholder="例如: RT33662450" {...field} />
                       </FormControl>
+                      {isHandwrittenInvoiceType && (
+                        <p className="text-xs text-muted-foreground">
+                          手開發票起始號末兩碼需為 00 或 50，一本50張。
+                        </p>
+                      )}
+                      {cashierInvoiceTypes.has(selectedInvoiceType) && (
+                        <p className="text-xs text-muted-foreground">
+                          收銀機發票一卷250張。
+                        </p>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )}
@@ -195,7 +270,11 @@ export function RangeManagement({ clientId, period, isLocked = false }: RangeMan
                     <FormItem>
                       <FormLabel>結束號碼 (10 碼)</FormLabel>
                       <FormControl>
-                        <Input placeholder="例如: RT33662499" {...field} />
+                        <Input
+                          placeholder="例如: RT33662499"
+                          {...field}
+                          readOnly={isAutoCalculatedInvoiceType}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

@@ -29,6 +29,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { MobileUploadActions } from "@/components/mobile-upload-actions";
+import { UploadQueueList } from "@/components/upload-queue-list";
+import { usePreAiUploadQueue } from "@/hooks/use-pre-ai-upload-queue";
 import {
   Dropzone,
   DropzoneContent,
@@ -59,6 +61,19 @@ function DocumentUploadSection({
   onUploaded,
 }: DocumentSectionProps) {
   const [isProcessingUpload, setIsProcessingUpload] = useState(false);
+  const {
+    items: queueItems,
+    hasMore,
+    pageSize,
+    isLoading: isQueueLoading,
+    isLoadingMore: isQueueLoadingMore,
+    fetchNextPage,
+    refresh: refreshQueue,
+  } = usePreAiUploadQueue({
+    periodId,
+    inOrOut,
+    type,
+  });
 
   const uploadProps = useSupabaseUpload({
     bucketName: "invoices",
@@ -110,6 +125,7 @@ function DocumentUploadSection({
 
       toast.success(`${title}上傳成功`);
       await onUploaded();
+      await refreshQueue();
       setUploadFiles([]);
       setUploadedFilesList([]);
     } catch (error) {
@@ -131,6 +147,7 @@ function DocumentUploadSection({
     uploadedFiles,
     setUploadFiles,
     setUploadedFilesList,
+    refreshQueue,
   ]);
 
   useEffect(() => {
@@ -140,7 +157,8 @@ function DocumentUploadSection({
   }, [uploadProps.isSuccess, isProcessingUpload, handleUploadComplete]);
 
   return (
-    <Card>
+    <>
+      <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
       </CardHeader>
@@ -168,7 +186,18 @@ function DocumentUploadSection({
           </div>
         )}
       </CardContent>
-    </Card>
+      </Card>
+      <div className="md:hidden">
+        <UploadQueueList
+          items={queueItems}
+          isLoading={isQueueLoading}
+          isLoadingMore={isQueueLoadingMore}
+          hasMore={hasMore}
+          pageSize={pageSize}
+          onLoadMore={fetchNextPage}
+        />
+      </div>
+    </>
   );
 }
 
@@ -332,12 +361,14 @@ export default function PortalPeriodDetailPage({
             isLocked={isLocked}
             onUploaded={mutateInvoices}
           />
-          <InvoiceTable
-            invoices={inInvoices}
-            isLoading={isInvoicesLoading}
-            showClientColumn={false}
-            onDelete={isLocked ? undefined : setInvoiceToDelete}
-          />
+          <div className="hidden md:block">
+            <InvoiceTable
+              invoices={inInvoices}
+              isLoading={isInvoicesLoading}
+              showClientColumn={false}
+              onDelete={isLocked ? undefined : setInvoiceToDelete}
+            />
+          </div>
 
           <DocumentUploadSection
             title="進項折讓"
@@ -350,11 +381,13 @@ export default function PortalPeriodDetailPage({
             isLocked={isLocked}
             onUploaded={mutateAllowances}
           />
-          <AllowanceTable
-            allowances={inAllowances}
-            isLoading={isAllowancesLoading}
-            onDelete={isLocked ? undefined : setAllowanceToDelete}
-          />
+          <div className="hidden md:block">
+            <AllowanceTable
+              allowances={inAllowances}
+              isLoading={isAllowancesLoading}
+              onDelete={isLocked ? undefined : setAllowanceToDelete}
+            />
+          </div>
         </TabsContent>
 
         <TabsContent value="output" className="mt-6 space-y-6">
@@ -369,12 +402,14 @@ export default function PortalPeriodDetailPage({
             isLocked={isLocked}
             onUploaded={mutateInvoices}
           />
-          <InvoiceTable
-            invoices={outInvoices}
-            isLoading={isInvoicesLoading}
-            showClientColumn={false}
-            onDelete={isLocked ? undefined : setInvoiceToDelete}
-          />
+          <div className="hidden md:block">
+            <InvoiceTable
+              invoices={outInvoices}
+              isLoading={isInvoicesLoading}
+              showClientColumn={false}
+              onDelete={isLocked ? undefined : setInvoiceToDelete}
+            />
+          </div>
 
           <DocumentUploadSection
             title="銷項折讓"
@@ -387,11 +422,13 @@ export default function PortalPeriodDetailPage({
             isLocked={isLocked}
             onUploaded={mutateAllowances}
           />
-          <AllowanceTable
-            allowances={outAllowances}
-            isLoading={isAllowancesLoading}
-            onDelete={isLocked ? undefined : setAllowanceToDelete}
-          />
+          <div className="hidden md:block">
+            <AllowanceTable
+              allowances={outAllowances}
+              isLoading={isAllowancesLoading}
+              onDelete={isLocked ? undefined : setAllowanceToDelete}
+            />
+          </div>
         </TabsContent>
 
         <TabsContent value="ranges" className="mt-6">

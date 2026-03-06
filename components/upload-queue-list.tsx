@@ -3,7 +3,6 @@
 import { Loader2, Trash2 } from "lucide-react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -24,17 +23,6 @@ type UploadQueueListProps = {
   onLoadMore: () => void;
   onDelete?: (item: Pick<PreAiQueueItem, "id" | "filename">) => void;
 };
-
-const formatStatusLabel = (status: PreAiQueueItem["status"]) =>
-  status === "uploaded" ? "待辨識" : "辨識中";
-
-const formatDate = (value: string) =>
-  new Intl.DateTimeFormat("zh-TW", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
 
 export function UploadQueueList({
   title = "已上傳檔案",
@@ -132,14 +120,6 @@ export function UploadQueueList({
               </div>
               <div className="space-y-1">
                 <p className="truncate font-medium">{item.filename}</p>
-                <div className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:justify-between">
-                  <Badge variant="secondary" className="text-[10px]">
-                    {formatStatusLabel(item.status)}
-                  </Badge>
-                  <span className="text-[10px] text-muted-foreground">
-                    {formatDate(item.createdAt)}
-                  </span>
-                </div>
                 {onDelete ? (
                   <Button
                     type="button"

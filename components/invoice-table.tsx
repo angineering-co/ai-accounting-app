@@ -17,19 +17,41 @@ import {
   MoreHorizontal,
   Sparkles,
   AlertTriangle,
+  FileText,
 } from "lucide-react";
 import { type Invoice } from "@/lib/domain/models";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import Image from "next/image";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 
 type JoinedInvoice = Invoice & {
   client?: { id: string; name: string } | null;
+};
+
+const IMAGE_EXTENSIONS = new Set([
+  "jpg",
+  "jpeg",
+  "png",
+  "gif",
+  "webp",
+  "bmp",
+  "heic",
+  "heif",
+]);
+
+const supabase = createSupabaseClient();
+
+const isImageFilename = (filename: string | null | undefined) => {
+  if (!filename) return false;
+  const ext = filename.split(".").pop()?.toLowerCase();
+  return ext ? IMAGE_EXTENSIONS.has(ext) : false;
 };
 
 interface InvoiceTableProps {
@@ -53,6 +75,7 @@ export function InvoiceTable({
   const [processingInvoiceIds, setProcessingInvoiceIds] = useState<Set<string>>(
     new Set(),
   );
+  const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
 
   // Sync processing state with actual invoice statuses
   // This effect runs when invoices data refreshes (after SWR fetches new data from parent)
@@ -81,6 +104,55 @@ export function InvoiceTable({
       return next;
     });
   }, [invoices]);
+
+  useEffect(() => {
+    const missingPreviewInvoices = invoices.filter(
+      (invoice) =>
+        !!invoice.storage_path &&
+        isImageFilename(invoice.filename) &&
+        !previewUrls[invoice.id],
+    );
+
+    if (missingPreviewInvoices.length === 0) {
+      return;
+    }
+
+    let mounted = true;
+
+    const loadPreviews = async () => {
+      const results = await Promise.all(
+        missingPreviewInvoices.map(async (invoice) => {
+          const { data, error } = await supabase.storage
+            .from("invoices")
+            .createSignedUrl(invoice.storage_path, 60 * 30);
+
+          if (error || !data?.signedUrl) {
+            return { id: invoice.id, url: null as string | null };
+          }
+
+          return { id: invoice.id, url: data.signedUrl };
+        }),
+      );
+
+      if (!mounted) return;
+
+      setPreviewUrls((prev) => {
+        const next = { ...prev };
+        for (const result of results) {
+          if (result.url) {
+            next[result.id] = result.url;
+          }
+        }
+        return next;
+      });
+    };
+
+    void loadPreviews();
+
+    return () => {
+      mounted = false;
+    };
+  }, [invoices, previewUrls]);
 
   const getTypeIndicator = (inOrOut: Invoice["in_or_out"]) => {
     const label = inOrOut === "in" ? "進項發票" : "銷項發票";
@@ -150,7 +222,7 @@ export function InvoiceTable({
   };
 
   const formatAmount = (amount: number | undefined) => {
-    if (amount === undefined || amount === null) return "-";
+    if (amount === undefined || amount === null) return "尚未擷取";
     return amount.toLocaleString("zh-TW");
   };
 
@@ -159,16 +231,16 @@ export function InvoiceTable({
       <Table className="table-fixed">
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[180px]">發票字軌</TableHead>
+            <TableHead className="w-[88px]">縮圖</TableHead>
+            <TableHead className="w-[180px]">文件識別</TableHead>
             {showClientColumn && (
               <TableHead className="w-[180px]">客戶</TableHead>
             )}
-            <TableHead className="w-[120px]">類型</TableHead>
-            <TableHead className="w-[140px]">發票類型</TableHead>
+            <TableHead className="w-[180px]">交易資訊</TableHead>
             <TableHead className="w-[120px] text-right">金額</TableHead>
             <TableHead className="w-[120px] text-right">稅額</TableHead>
-            <TableHead className="w-[120px]">發票日期</TableHead>
-            <TableHead className="w-[100px]">狀態</TableHead>
+            <TableHead className="w-[120px]">日期</TableHead>
+            <TableHead className="w-[140px]">狀態</TableHead>
             {(onExtractAI || onDelete) && (
               <TableHead className="w-[88px] text-right">操作</TableHead>
             )}
@@ -181,11 +253,11 @@ export function InvoiceTable({
                 colSpan={
                   showClientColumn
                     ? onExtractAI || onDelete
+                      ? 10
+                      : 9
+                    : onExtractAI || onDelete
                       ? 9
                       : 8
-                    : onExtractAI || onDelete
-                      ? 8
-                      : 7
                 }
                 className="h-24 text-center"
               >
@@ -198,11 +270,11 @@ export function InvoiceTable({
                 colSpan={
                   showClientColumn
                     ? onExtractAI || onDelete
+                      ? 10
+                      : 9
+                    : onExtractAI || onDelete
                       ? 9
                       : 8
-                    : onExtractAI || onDelete
-                      ? 8
-                      : 7
                 }
                 className="h-24 text-center text-muted-foreground"
               >
@@ -216,13 +288,33 @@ export function InvoiceTable({
                 className={onReview ? "cursor-pointer hover:bg-muted/50" : ""}
                 onClick={() => onReview?.(invoice)}
               >
+                <TableCell className="w-[88px]">
+                  <div className="flex h-12 w-16 items-center justify-center overflow-hidden rounded border bg-muted/20">
+                    {previewUrls[invoice.id] ? (
+                      <Image
+                        src={previewUrls[invoice.id]}
+                        alt={invoice.filename}
+                        className="h-full w-full object-cover"
+                        width={64}
+                        height={48}
+                        loading="lazy"
+                        unoptimized
+                      />
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <FileText className="h-3.5 w-3.5" />
+                        檔案
+                      </span>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell className="w-[180px] font-mono tabular-nums">
                   {invoice.invoice_serial_code ? (
                     invoice.invoice_serial_code
                   ) : (
                     <span className="inline-flex items-center gap-1 text-amber-600">
                       <AlertTriangle className="h-4 w-4" />
-                      TBD
+                      待辨識
                     </span>
                   )}
                 </TableCell>
@@ -242,14 +334,16 @@ export function InvoiceTable({
                     )}
                   </TableCell>
                 )}
-                <TableCell className="w-[120px]">
-                  {getTypeIndicator(invoice.in_or_out)}
-                </TableCell>
                 <TableCell
-                  className="w-[140px] truncate"
-                  title={invoice.extracted_data?.invoiceType || "-"}
+                  className="w-[180px]"
+                  title={invoice.extracted_data?.invoiceType || "尚未擷取"}
                 >
-                  {invoice.extracted_data?.invoiceType || "-"}
+                  <div className="space-y-1">
+                    <div>{getTypeIndicator(invoice.in_or_out)}</div>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {invoice.extracted_data?.invoiceType || "尚未擷取"}
+                    </p>
+                  </div>
                 </TableCell>
                 <TableCell className="w-[120px] text-right tabular-nums">
                   {formatAmount(invoice.extracted_data?.totalSales)}
@@ -258,10 +352,12 @@ export function InvoiceTable({
                   {formatAmount(invoice.extracted_data?.tax)}
                 </TableCell>
                 <TableCell className="w-[120px]">
-                  {invoice.extracted_data?.date || "-"}
+                  {invoice.extracted_data?.date || "尚未擷取"}
                 </TableCell>
-                <TableCell className="w-[100px]">
-                  {getStatusBadge(invoice.status || "uploaded")}
+                <TableCell className="w-[140px]">
+                  <div className="space-y-1">
+                    {getStatusBadge(invoice.status || "uploaded")}
+                  </div>
                 </TableCell>
                 {(onExtractAI || onDelete) && (
                   <TableCell className="w-[88px] text-right">

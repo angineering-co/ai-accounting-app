@@ -11,7 +11,13 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, AlertTriangle, Sparkles, MoreHorizontal } from "lucide-react";
+import {
+  Loader2,
+  AlertTriangle,
+  Sparkles,
+  MoreHorizontal,
+  FileText,
+} from "lucide-react";
 import { type Allowance } from "@/lib/domain/models";
 import {
   Tooltip,
@@ -25,6 +31,27 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { createClient as createSupabaseClient } from "@/lib/supabase/client";
+import Image from "next/image";
+
+const IMAGE_EXTENSIONS = new Set([
+  "jpg",
+  "jpeg",
+  "png",
+  "gif",
+  "webp",
+  "bmp",
+  "heic",
+  "heif",
+]);
+
+const supabase = createSupabaseClient();
+
+const isImageFilename = (filename: string | null | undefined) => {
+  if (!filename) return false;
+  const ext = filename.split(".").pop()?.toLowerCase();
+  return ext ? IMAGE_EXTENSIONS.has(ext) : false;
+};
 
 interface AllowanceTableProps {
   allowances: Allowance[];
@@ -44,6 +71,7 @@ export function AllowanceTable({
   const [processingAllowanceIds, setProcessingAllowanceIds] = useState<
     Set<string>
   >(new Set());
+  const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setProcessingAllowanceIds((prev) => {
@@ -64,6 +92,59 @@ export function AllowanceTable({
       return next;
     });
   }, [allowances]);
+
+  useEffect(() => {
+    const missingPreviewAllowances = allowances.filter(
+      (allowance) =>
+        !!allowance.storage_path &&
+        isImageFilename(allowance.filename) &&
+        !previewUrls[allowance.id],
+    );
+
+    if (missingPreviewAllowances.length === 0) {
+      return;
+    }
+
+    let mounted = true;
+
+    const loadPreviews = async () => {
+      const results = await Promise.all(
+        missingPreviewAllowances.map(async (allowance) => {
+          if (!allowance.storage_path) {
+            return { id: allowance.id, url: null as string | null };
+          }
+
+          const { data, error } = await supabase.storage
+            .from("invoices")
+            .createSignedUrl(allowance.storage_path, 60 * 30);
+
+          if (error || !data?.signedUrl) {
+            return { id: allowance.id, url: null as string | null };
+          }
+
+          return { id: allowance.id, url: data.signedUrl };
+        }),
+      );
+
+      if (!mounted) return;
+
+      setPreviewUrls((prev) => {
+        const next = { ...prev };
+        for (const result of results) {
+          if (result.url) {
+            next[result.id] = result.url;
+          }
+        }
+        return next;
+      });
+    };
+
+    void loadPreviews();
+
+    return () => {
+      mounted = false;
+    };
+  }, [allowances, previewUrls]);
 
   const getTypeIndicator = (inOrOut: Allowance["in_or_out"]) => {
     const label = inOrOut === "in" ? "進項折讓" : "銷項折讓";
@@ -137,7 +218,7 @@ export function AllowanceTable({
   };
 
   const formatAmount = (amount: number | undefined) => {
-    if (amount === undefined || amount === null) return "-";
+    if (amount === undefined || amount === null) return "尚未擷取";
     return amount.toLocaleString("zh-TW");
   };
 
@@ -147,13 +228,13 @@ export function AllowanceTable({
         <Table className="table-fixed">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[180px]">原發票號碼</TableHead>
-              <TableHead className="w-[120px]">類型</TableHead>
-              <TableHead className="w-[140px]">發票類型</TableHead>
+              <TableHead className="w-[88px]">縮圖</TableHead>
+              <TableHead className="w-[180px]">文件識別</TableHead>
+              <TableHead className="w-[180px]">交易資訊</TableHead>
               <TableHead className="w-[120px] text-right">折讓金額</TableHead>
               <TableHead className="w-[120px] text-right">折讓稅額</TableHead>
-              <TableHead className="w-[120px]">折讓日期</TableHead>
-              <TableHead className="w-[100px]">狀態</TableHead>
+              <TableHead className="w-[120px]">日期</TableHead>
+              <TableHead className="w-[140px]">狀態</TableHead>
               {(onExtractAI || onDelete) && (
                 <TableHead className="w-[88px] text-right">操作</TableHead>
               )}
@@ -193,6 +274,26 @@ export function AllowanceTable({
                     }
                     onClick={() => onReview?.(allowance)}
                   >
+                    <TableCell className="w-[88px]">
+                      <div className="flex h-12 w-16 items-center justify-center overflow-hidden rounded border bg-muted/20">
+                        {previewUrls[allowance.id] ? (
+                          <Image
+                            src={previewUrls[allowance.id]}
+                            alt={allowance.filename ?? "折讓憑證"}
+                            className="h-full w-full object-cover"
+                            width={64}
+                            height={48}
+                            loading="lazy"
+                            unoptimized
+                          />
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                            <FileText className="h-3.5 w-3.5" />
+                            檔案
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="w-[180px] font-mono tabular-nums">
                       {allowance.original_invoice_serial_code ? (
                         <span className="inline-flex items-center gap-1">
@@ -211,18 +312,20 @@ export function AllowanceTable({
                       ) : (
                         <span className="inline-flex items-center gap-1 text-amber-600">
                           <AlertTriangle className="h-4 w-4" />
-                          TBD
+                          待辨識
                         </span>
                       )}
                     </TableCell>
-                    <TableCell className="w-[120px]">
-                      {getTypeIndicator(allowance.in_or_out)}
-                    </TableCell>
                     <TableCell
-                      className="w-[140px] truncate"
-                      title={extractedData?.allowanceType || "-"}
+                      className="w-[180px]"
+                      title={extractedData?.allowanceType || "尚未擷取"}
                     >
-                      {extractedData?.allowanceType || "-"}
+                      <div className="space-y-1">
+                        <div>{getTypeIndicator(allowance.in_or_out)}</div>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {extractedData?.allowanceType || "尚未擷取"}
+                        </p>
+                      </div>
                     </TableCell>
                     <TableCell className="w-[120px] text-right tabular-nums">
                       {formatAmount(extractedData?.amount)}
@@ -231,10 +334,12 @@ export function AllowanceTable({
                       {formatAmount(extractedData?.taxAmount)}
                     </TableCell>
                     <TableCell className="w-[120px]">
-                      {extractedData?.date || "-"}
+                      {extractedData?.date || "尚未擷取"}
                     </TableCell>
-                    <TableCell className="w-[100px]">
-                      {getStatusBadge(allowance.status || "uploaded")}
+                    <TableCell className="w-[140px]">
+                      <div className="space-y-1">
+                        {getStatusBadge(allowance.status || "uploaded")}
+                      </div>
                     </TableCell>
                     {(onExtractAI || onDelete) && (
                       <TableCell className="w-[88px] text-right">

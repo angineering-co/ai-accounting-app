@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +22,7 @@ type UploadQueueListProps = {
   hasMore: boolean;
   pageSize: number;
   onLoadMore: () => void;
+  onDelete?: (item: Pick<PreAiQueueItem, "id" | "filename">) => void;
 };
 
 const formatStatusLabel = (status: PreAiQueueItem["status"]) =>
@@ -43,6 +44,7 @@ export function UploadQueueList({
   hasMore,
   pageSize,
   onLoadMore,
+  onDelete,
 }: UploadQueueListProps) {
   if (isLoading && items.length === 0) {
     return (
@@ -138,6 +140,20 @@ export function UploadQueueList({
                     {formatDate(item.createdAt)}
                   </span>
                 </div>
+                {onDelete ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="-ml-2 h-7 px-2 text-destructive hover:text-destructive"
+                    onClick={() =>
+                      onDelete({ id: item.id, filename: item.filename })
+                    }
+                  >
+                    <Trash2 className="mr-1 h-3.5 w-3.5" />
+                    刪除
+                  </Button>
+                ) : null}
               </div>
             </li>
           ))}

@@ -13,10 +13,9 @@ import {
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { deleteInvoice } from "@/lib/services/invoice";
-import { type Invoice } from "@/lib/domain/models";
 
 interface InvoiceDeleteDialogProps {
-  invoice: Invoice | null;
+  invoice: { id: string; name: string } | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
@@ -52,7 +51,7 @@ export function InvoiceDeleteDialog({
         <DialogHeader>
           <DialogTitle className="text-destructive">確認刪除</DialogTitle>
           <DialogDescription>
-            確定要刪除發票 「{invoice?.filename}」 嗎？
+            確定要刪除發票「{invoice?.name || "-"}」嗎？
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

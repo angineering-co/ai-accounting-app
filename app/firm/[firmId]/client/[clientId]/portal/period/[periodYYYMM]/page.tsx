@@ -11,8 +11,6 @@ import {
   clientSchema,
   invoiceSchema,
   allowanceSchema,
-  type Invoice,
-  type Allowance,
 } from "@/lib/domain/models";
 import { getTaxPeriodByYYYMM } from "@/lib/services/tax-period";
 import { createInvoice } from "@/lib/services/invoice";
@@ -49,6 +47,11 @@ type DocumentSectionProps = {
   onUploaded: () => Promise<unknown>;
 };
 
+type DeleteTarget = {
+  id: string;
+  name: string;
+};
+
 function DocumentUploadSection({
   title,
   firmId,
@@ -61,6 +64,8 @@ function DocumentUploadSection({
   onUploaded,
 }: DocumentSectionProps) {
   const [isProcessingUpload, setIsProcessingUpload] = useState(false);
+  const [queueItemToDelete, setQueueItemToDelete] =
+    useState<DeleteTarget | null>(null);
   const {
     items: queueItems,
     hasMore,
@@ -156,36 +161,41 @@ function DocumentUploadSection({
     }
   }, [uploadProps.isSuccess, isProcessingUpload, handleUploadComplete]);
 
+  const handleQueueDeleteSuccess = async () => {
+    await onUploaded();
+    await refreshQueue();
+  };
+
   return (
     <>
       <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {isLocked ? (
-          <p className="text-sm text-muted-foreground">
-            此期別已鎖定，無法上傳新檔案。
-          </p>
-        ) : (
-          <div className="space-y-2">
-            <Label>檔案上傳（僅支援 PDF / 圖片）</Label>
-            <Dropzone {...uploadProps}>
-              <div className="md:hidden">
-                <MobileUploadActions
-                  files={uploadProps.files}
-                  setFiles={uploadProps.setFiles}
-                  allowedMimeTypes={uploadProps.allowedMimeTypes}
-                  maxFileSize={uploadProps.maxFileSize}
-                  maxFiles={uploadProps.maxFiles}
-                />
-              </div>
-              <DropzoneEmptyState className="hidden md:flex" />
-              <DropzoneContent />
-            </Dropzone>
-          </div>
-        )}
-      </CardContent>
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLocked ? (
+            <p className="text-sm text-muted-foreground">
+              此期別已鎖定，無法上傳新檔案。
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <Label>檔案上傳（僅支援 PDF / 圖片）</Label>
+              <Dropzone {...uploadProps}>
+                <div className="md:hidden">
+                  <MobileUploadActions
+                    files={uploadProps.files}
+                    setFiles={uploadProps.setFiles}
+                    allowedMimeTypes={uploadProps.allowedMimeTypes}
+                    maxFileSize={uploadProps.maxFileSize}
+                    maxFiles={uploadProps.maxFiles}
+                  />
+                </div>
+                <DropzoneEmptyState className="hidden md:flex" />
+                <DropzoneContent />
+              </Dropzone>
+            </div>
+          )}
+        </CardContent>
       </Card>
       <div className="md:hidden">
         <UploadQueueList
@@ -195,8 +205,29 @@ function DocumentUploadSection({
           hasMore={hasMore}
           pageSize={pageSize}
           onLoadMore={fetchNextPage}
+          onDelete={
+            isLocked
+              ? undefined
+              : (item) =>
+                  setQueueItemToDelete({ id: item.id, name: item.filename })
+          }
         />
       </div>
+      {type === "invoice" ? (
+        <InvoiceDeleteDialog
+          invoice={queueItemToDelete}
+          open={!!queueItemToDelete}
+          onOpenChange={(open) => !open && setQueueItemToDelete(null)}
+          onSuccess={handleQueueDeleteSuccess}
+        />
+      ) : (
+        <AllowanceDeleteDialog
+          allowance={queueItemToDelete}
+          open={!!queueItemToDelete}
+          onOpenChange={(open) => !open && setQueueItemToDelete(null)}
+          onSuccess={handleQueueDeleteSuccess}
+        />
+      )}
     </>
   );
 }
@@ -210,10 +241,11 @@ export default function PortalPeriodDetailPage({
   const supabase = createSupabaseClient();
   const router = useRouter();
   const rocPeriod = RocPeriod.fromYYYMM(periodYYYMM);
-  const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
-  const [allowanceToDelete, setAllowanceToDelete] = useState<Allowance | null>(
+  const [invoiceToDelete, setInvoiceToDelete] = useState<DeleteTarget | null>(
     null,
   );
+  const [allowanceToDelete, setAllowanceToDelete] =
+    useState<DeleteTarget | null>(null);
 
   const {
     data: period,
@@ -366,7 +398,15 @@ export default function PortalPeriodDetailPage({
               invoices={inInvoices}
               isLoading={isInvoicesLoading}
               showClientColumn={false}
-              onDelete={isLocked ? undefined : setInvoiceToDelete}
+              onDelete={
+                isLocked
+                  ? undefined
+                  : (invoice) =>
+                      setInvoiceToDelete({
+                        id: invoice.id,
+                        name: invoice.filename,
+                      })
+              }
             />
           </div>
 
@@ -385,7 +425,18 @@ export default function PortalPeriodDetailPage({
             <AllowanceTable
               allowances={inAllowances}
               isLoading={isAllowancesLoading}
-              onDelete={isLocked ? undefined : setAllowanceToDelete}
+              onDelete={
+                isLocked
+                  ? undefined
+                  : (allowance) =>
+                      setAllowanceToDelete({
+                        id: allowance.id,
+                        name:
+                          allowance.allowance_serial_code ||
+                          allowance.filename ||
+                          "-",
+                      })
+              }
             />
           </div>
         </TabsContent>
@@ -407,7 +458,15 @@ export default function PortalPeriodDetailPage({
               invoices={outInvoices}
               isLoading={isInvoicesLoading}
               showClientColumn={false}
-              onDelete={isLocked ? undefined : setInvoiceToDelete}
+              onDelete={
+                isLocked
+                  ? undefined
+                  : (invoice) =>
+                      setInvoiceToDelete({
+                        id: invoice.id,
+                        name: invoice.filename,
+                      })
+              }
             />
           </div>
 
@@ -426,7 +485,18 @@ export default function PortalPeriodDetailPage({
             <AllowanceTable
               allowances={outAllowances}
               isLoading={isAllowancesLoading}
-              onDelete={isLocked ? undefined : setAllowanceToDelete}
+              onDelete={
+                isLocked
+                  ? undefined
+                  : (allowance) =>
+                      setAllowanceToDelete({
+                        id: allowance.id,
+                        name:
+                          allowance.allowance_serial_code ||
+                          allowance.filename ||
+                          "-",
+                      })
+              }
             />
           </div>
         </TabsContent>

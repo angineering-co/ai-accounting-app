@@ -36,6 +36,11 @@ import { AllowanceReviewDialog } from "@/components/allowance-review-dialog";
 import { AllowanceDeleteDialog } from "@/components/allowance-delete-dialog";
 import { extractAllowanceDataAction } from "@/lib/services/allowance";
 
+type DeleteTarget = {
+  id: string;
+  name: string;
+};
+
 export default function PeriodDetailPage({
   params,
 }: {
@@ -52,10 +57,11 @@ export default function PeriodDetailPage({
   );
   const [reviewingAllowance, setReviewingAllowance] =
     useState<Allowance | null>(null);
-  const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
-  const [allowanceToDelete, setAllowanceToDelete] = useState<Allowance | null>(
+  const [invoiceToDelete, setInvoiceToDelete] = useState<DeleteTarget | null>(
     null,
   );
+  const [allowanceToDelete, setAllowanceToDelete] =
+    useState<DeleteTarget | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
 
   // Import Electronic Invoice State
@@ -309,7 +315,15 @@ export default function PeriodDetailPage({
                 isLoading={isInvoicesLoading}
                 onReview={setReviewingInvoice}
                 onExtractAI={isLocked ? undefined : handleExtractInvoice}
-                onDelete={isLocked ? undefined : setInvoiceToDelete}
+                onDelete={
+                  isLocked
+                    ? undefined
+                    : (invoice) =>
+                        setInvoiceToDelete({
+                          id: invoice.id,
+                          name: invoice.filename,
+                        })
+                }
                 showClientColumn={false}
               />
             </CardContent>
@@ -328,7 +342,18 @@ export default function PeriodDetailPage({
                 isLoading={isAllowancesLoading}
                 onReview={setReviewingAllowance}
                 onExtractAI={isLocked ? undefined : handleExtractAllowance}
-                onDelete={isLocked ? undefined : setAllowanceToDelete}
+                onDelete={
+                  isLocked
+                    ? undefined
+                    : (allowance) =>
+                        setAllowanceToDelete({
+                          id: allowance.id,
+                          name:
+                            allowance.allowance_serial_code ||
+                            allowance.filename ||
+                            "-",
+                        })
+                }
               />
             </CardContent>
           </Card>

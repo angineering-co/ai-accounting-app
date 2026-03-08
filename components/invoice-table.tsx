@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Table,
   TableBody,
@@ -30,6 +30,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
+
+const SIGNED_URL_EXPIRATION_SECONDS = 60 * 30;
 
 type JoinedInvoice = Invoice & {
   client?: { id: string; name: string } | null;
@@ -76,6 +78,11 @@ export function InvoiceTable({
     new Set(),
   );
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
+  const previewUrlsRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    previewUrlsRef.current = previewUrls;
+  }, [previewUrls]);
 
   // Sync processing state with actual invoice statuses
   // This effect runs when invoices data refreshes (after SWR fetches new data from parent)
@@ -110,7 +117,7 @@ export function InvoiceTable({
       (invoice) =>
         !!invoice.storage_path &&
         isImageFilename(invoice.filename) &&
-        !previewUrls[invoice.id],
+        !previewUrlsRef.current[invoice.id],
     );
 
     if (missingPreviewInvoices.length === 0) {
@@ -124,7 +131,7 @@ export function InvoiceTable({
         missingPreviewInvoices.map(async (invoice) => {
           const { data, error } = await supabase.storage
             .from("invoices")
-            .createSignedUrl(invoice.storage_path, 60 * 30);
+            .createSignedUrl(invoice.storage_path, SIGNED_URL_EXPIRATION_SECONDS);
 
           if (error || !data?.signedUrl) {
             return { id: invoice.id, url: null as string | null };
@@ -138,12 +145,14 @@ export function InvoiceTable({
 
       setPreviewUrls((prev) => {
         const next = { ...prev };
+        let changed = false;
         for (const result of results) {
-          if (result.url) {
+          if (result.url && !next[result.id]) {
             next[result.id] = result.url;
+            changed = true;
           }
         }
-        return next;
+        return changed ? next : prev;
       });
     };
 
@@ -152,7 +161,7 @@ export function InvoiceTable({
     return () => {
       mounted = false;
     };
-  }, [invoices, previewUrls]);
+  }, [invoices]);
 
   const getTypeIndicator = (inOrOut: Invoice["in_or_out"]) => {
     const label = inOrOut === "in" ? "進項發票" : "銷項發票";
@@ -253,11 +262,11 @@ export function InvoiceTable({
                 colSpan={
                   showClientColumn
                     ? onExtractAI || onDelete
-                      ? 10
-                      : 9
-                    : onExtractAI || onDelete
                       ? 9
                       : 8
+                    : onExtractAI || onDelete
+                      ? 8
+                      : 7
                 }
                 className="h-24 text-center"
               >
@@ -270,11 +279,11 @@ export function InvoiceTable({
                 colSpan={
                   showClientColumn
                     ? onExtractAI || onDelete
-                      ? 10
-                      : 9
-                    : onExtractAI || onDelete
                       ? 9
                       : 8
+                    : onExtractAI || onDelete
+                      ? 8
+                      : 7
                 }
                 className="h-24 text-center text-muted-foreground"
               >

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Table,
   TableBody,
@@ -33,6 +33,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import Image from "next/image";
+
+const SIGNED_URL_EXPIRATION_SECONDS = 60 * 30;
 
 const IMAGE_EXTENSIONS = new Set([
   "jpg",
@@ -72,6 +74,11 @@ export function AllowanceTable({
     Set<string>
   >(new Set());
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
+  const previewUrlsRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    previewUrlsRef.current = previewUrls;
+  }, [previewUrls]);
 
   useEffect(() => {
     setProcessingAllowanceIds((prev) => {
@@ -98,13 +105,14 @@ export function AllowanceTable({
       (allowance) =>
         !!allowance.storage_path &&
         isImageFilename(allowance.filename) &&
-        !previewUrls[allowance.id],
+        !previewUrlsRef.current[allowance.id],
     );
 
     if (missingPreviewAllowances.length === 0) {
       return;
     }
 
+    // Guard async completion so we don't update state after unmount/re-run.
     let mounted = true;
 
     const loadPreviews = async () => {
@@ -116,7 +124,7 @@ export function AllowanceTable({
 
           const { data, error } = await supabase.storage
             .from("invoices")
-            .createSignedUrl(allowance.storage_path, 60 * 30);
+            .createSignedUrl(allowance.storage_path, SIGNED_URL_EXPIRATION_SECONDS);
 
           if (error || !data?.signedUrl) {
             return { id: allowance.id, url: null as string | null };
@@ -126,16 +134,19 @@ export function AllowanceTable({
         }),
       );
 
+      // Skip state update if this effect has already been cleaned up.
       if (!mounted) return;
 
       setPreviewUrls((prev) => {
         const next = { ...prev };
+        let changed = false;
         for (const result of results) {
-          if (result.url) {
+          if (result.url && !next[result.id]) {
             next[result.id] = result.url;
+            changed = true;
           }
         }
-        return next;
+        return changed ? next : prev;
       });
     };
 
@@ -144,7 +155,7 @@ export function AllowanceTable({
     return () => {
       mounted = false;
     };
-  }, [allowances, previewUrls]);
+  }, [allowances]);
 
   const getTypeIndicator = (inOrOut: Allowance["in_or_out"]) => {
     const label = inOrOut === "in" ? "進項折讓" : "銷項折讓";

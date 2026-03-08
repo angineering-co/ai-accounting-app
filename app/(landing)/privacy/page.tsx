@@ -118,7 +118,7 @@ export default function PrivacyPage() {
                 <div className="space-y-1 text-base">
                   <p>
                     <span className="text-slate-500">聯絡信箱：</span>
-                    joe700619@chixin.com.tw
+                    snapbooks.ai@gmail.com
                   </p>
                   <p>
                     <span className="text-slate-500">通訊地址：</span>

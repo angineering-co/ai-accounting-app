@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
+import { LandingPricingSection } from "@/components/landing-pricing-section";
 import { CheckCircle2, Smartphone, ShieldCheck, Zap } from "lucide-react";
 
 import { CurrentYear } from "@/components/current-year";
@@ -10,13 +11,22 @@ export const metadata: Metadata = {
   title: "SnapBooks.ai (速博) | 台灣第一家 AI 記帳事務所",
   description:
     "SnapBooks.ai (速博智慧有限公司) 協助一人公司與小型團隊，拍照上傳單據與 AI 整理流程，更快完成記帳與報稅。",
-  keywords: ["snapbooks", "snapbooks.ai", "速博", "AI 記帳事務所", "台灣", "記帳", "報稅"],
+  keywords: [
+    "snapbooks",
+    "snapbooks.ai",
+    "速博",
+    "AI 記帳事務所",
+    "台灣",
+    "記帳",
+    "報稅",
+  ],
   alternates: {
     canonical: "https://snapbooks.ai",
   },
   openGraph: {
     title: "SnapBooks.ai (速博) | 台灣第一家 AI 記帳事務所",
-    description: "拍照上傳單據與 AI 整理流程，更快完成記帳與報稅。專為台灣企業打造！",
+    description:
+      "拍照上傳單據與 AI 整理流程，更快完成記帳與報稅。專為台灣企業打造！",
     url: "https://snapbooks.ai",
     siteName: "SnapBooks.ai",
     type: "website",
@@ -44,7 +54,8 @@ const jsonLd = {
   alternateName: ["速博", "速博智慧有限公司", "SnapBooks"],
   url: "https://snapbooks.ai",
   logo: "https://snapbooks.ai/snapbooks.svg",
-  description: "SnapBooks.ai (速博) 是一家專為台灣企業打造的 AI 記帳事務所，結合自動化技術與會計師實務經驗。",
+  description:
+    "SnapBooks.ai (速博) 是一家專為台灣企業打造的 AI 記帳事務所，結合自動化技術與會計師實務經驗。",
   address: {
     "@type": "PostalAddress",
     streetAddress: "五權路1-67號11樓之5",
@@ -333,72 +344,7 @@ export default function Home() {
         </section>
 
         {/* Section 4: Pricing */}
-        <section id="pricing" className="mx-auto max-w-5xl px-5 py-24 md:py-32">
-          <div className="mx-auto mb-16 max-w-2xl text-center">
-            <h2 className="mb-6 text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
-              顛覆業界的透明定價
-            </h2>
-            <p className="text-lg text-slate-600 leading-relaxed">
-              因為 AI 大幅提升了內部效率，我們得以將省下的成本回饋給您。
-            </p>
-          </div>
-
-          <div className="mx-auto max-w-md overflow-hidden rounded-[2.5rem] bg-white ring-1 ring-slate-200 shadow-2xl shadow-slate-200/50 transition-all hover:-translate-y-1 hover:shadow-emerald-100">
-            <div className="p-10 md:p-12">
-              <div className="mb-4 flex items-baseline gap-2">
-                <span className="text-5xl font-extrabold tracking-tight text-slate-900">
-                  NT$ 1,200
-                </span>
-                <span className="text-lg font-medium text-slate-500">/ 月</span>
-              </div>
-              <p className="mb-10 text-sm font-medium leading-relaxed text-slate-500">
-                收費方式：一年收取 13 個月費用
-                <br />
-                （第 13 個月為年度營所稅結算申報費用）
-              </p>
-
-              <ul className="mb-10 space-y-5">
-                <li className="flex gap-3 text-slate-700">
-                  <CheckCircle2 className="h-6 w-6 shrink-0 text-emerald-500" />
-                  <span className="font-medium">
-                    無限量 電子發票/雲端載具自動下載申報
-                  </span>
-                </li>
-                <li className="flex gap-3 text-slate-700">
-                  <CheckCircle2 className="h-6 w-6 shrink-0 text-emerald-500" />
-                  <span className="font-medium">
-                    每月 50 張以內紙本憑證（拍照上傳處理）
-                  </span>
-                </li>
-                <li className="flex gap-3 text-slate-700">
-                  <CheckCircle2 className="h-6 w-6 shrink-0 text-emerald-500" />
-                  <span className="font-medium">營業稅每期申報</span>
-                </li>
-                <li className="flex gap-3 text-slate-700">
-                  <CheckCircle2 className="h-6 w-6 shrink-0 text-emerald-500" />
-                  <span className="font-medium">
-                    年度營利事業所得稅結算申報
-                  </span>
-                </li>
-                <li className="flex gap-3 text-slate-700">
-                  <CheckCircle2 className="h-6 w-6 shrink-0 text-emerald-500" />
-                  <span className="font-medium">各類所得扣繳申報</span>
-                </li>
-                <li className="flex gap-3 text-slate-700">
-                  <CheckCircle2 className="h-6 w-6 shrink-0 text-emerald-500" />
-                  <span className="font-medium">Line & Email 專屬數位客服</span>
-                </li>
-              </ul>
-
-              <div className="space-y-3 rounded-2xl bg-slate-50 p-6 text-sm leading-relaxed text-slate-500">
-                <p>
-                  ※ 本方案專為「年營業額 3,000 萬以下」之中小企業/一人公司設計。
-                </p>
-                <p>※ 紙本發票若超過 50 張，每 50 張額外酌收 NT$ 400 處理費。</p>
-              </div>
-            </div>
-          </div>
-        </section>
+        <LandingPricingSection />
 
         {/* Section 5: How to start & CTA */}
         <section className="bg-slate-50 py-24 md:py-32">
@@ -487,7 +433,7 @@ export default function Home() {
                 SnapBooks.ai 速博智慧有限公司｜速博智慧記帳事務所
               </p>
               <p>地址：台中市西區五權路1-67號11樓之5</p>
-              <p>電子信箱：joe700619@chixin.com.tw</p>
+              <p>電子信箱：snapbooks.ai@gmail.com</p>
             </div>
           </div>
 

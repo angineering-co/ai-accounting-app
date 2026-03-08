@@ -117,7 +117,7 @@ export default function CompanyPage() {
               速博智慧有限公司｜速博智慧記帳事務所
             </p>
             <p>地址：台中市西區五權路1-67號11樓之5</p>
-            <p>電子信箱：joe700619@chixin.com.tw</p>
+            <p>電子信箱：snapbooks.ai@gmail.com</p>
           </div>
         </section>
       </div>

@@ -33,6 +33,8 @@ const isPdfFilename = (filename: string | null | undefined) => {
   return filename?.toLowerCase().endsWith(".pdf") ?? false;
 };
 
+const supabase = createClient();
+
 interface FilePreviewDialogProps {
   filename?: string | null;
   storagePath?: string | null;
@@ -48,7 +50,6 @@ export function FilePreviewDialog({
   isOpen,
   onOpenChange,
 }: FilePreviewDialogProps) {
-  const supabase = createClient();
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const isImage = isImageFilename(filename);
@@ -89,6 +90,8 @@ export function FilePreviewDialog({
     return () => {
       cancelled = true;
     };
+    // Keep dependency list shape stable across Fast Refresh updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, storagePath, bucketName, isInlinePreviewSupported, supabase]);
 
   return (
@@ -126,6 +129,7 @@ export function FilePreviewDialog({
               src={previewUrl}
               title={filename ?? "File Preview"}
               className="h-full w-full bg-white"
+              sandbox="allow-scripts allow-same-origin"
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">

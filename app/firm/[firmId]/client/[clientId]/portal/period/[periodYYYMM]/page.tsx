@@ -2,8 +2,8 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 import useSWR from "swr";
-import { ArrowLeft, Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { ArrowLeft, FileText, Loader2, Receipt } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { RocPeriod } from "@/lib/domain/roc-period";
@@ -175,18 +175,20 @@ function DocumentUploadSection({
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle>{title}</CardTitle>
+      <Card className="border-slate-200/80 bg-white shadow-sm shadow-slate-200/60">
+        <CardHeader className="border-b border-slate-100/80">
+          <CardTitle className="text-slate-900">{title}</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           {isLocked ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
               此期別已鎖定，無法上傳新檔案。
             </p>
           ) : (
             <div className="space-y-2">
-              <Label>檔案上傳（僅支援 PDF / 圖片）</Label>
+              <Label className="text-slate-700">
+                檔案上傳（僅支援 PDF / 圖片）
+              </Label>
               <Dropzone {...uploadProps}>
                 <div className="md:hidden">
                   <MobileUploadActions
@@ -246,7 +248,6 @@ export default function PortalPeriodDetailPage({
 }) {
   const { firmId, clientId, periodYYYMM } = use(params);
   const supabase = createSupabaseClient();
-  const router = useRouter();
   const rocPeriod = RocPeriod.fromYYYMM(periodYYYMM);
   const [invoiceToDelete, setInvoiceToDelete] = useState<DeleteTarget | null>(
     null,
@@ -350,61 +351,144 @@ export default function PortalPeriodDetailPage({
   const outInvoices = invoices.filter((item) => item.in_or_out === "out");
   const inAllowances = allowances.filter((item) => item.in_or_out === "in");
   const outAllowances = allowances.filter((item) => item.in_or_out === "out");
+  const overviewItems = [
+    {
+      label: "進項發票",
+      value: inInvoices.length,
+      icon: FileText,
+    },
+    {
+      label: "銷項發票",
+      value: outInvoices.length,
+      icon: Receipt,
+    },
+    {
+      label: "進項折讓",
+      value: inAllowances.length,
+      icon: FileText,
+    },
+    {
+      label: "銷項折讓",
+      value: outAllowances.length,
+      icon: Receipt,
+    },
+  ];
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <Button variant="ghost" size="icon" onClick={() => router.back()}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
+    <div className="space-y-6 p-6">
+      <Button
+        asChild
+        variant="ghost"
+        className="w-fit rounded-full px-3 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+      >
+        <Link href={`/firm/${firmId}/client/${clientId}/portal`}>
+          <ArrowLeft className="h-4 w-4" />
+          返回申報期列表
+        </Link>
+      </Button>
+
+      <section className="relative overflow-hidden rounded-[28px] border border-slate-200/80 bg-gradient-to-br from-slate-50 via-white to-emerald-50/70 p-6 shadow-sm shadow-slate-200/70 md:p-8">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(16,185,129,0.12),_transparent_36%)]" />
+        <div className="relative">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-              {rocPeriod.format()}
-              <Badge variant={isLocked ? "secondary" : "default"}>
+            <h1 className="flex flex-col items-start gap-3 text-2xl font-bold leading-tight tracking-tight text-slate-900 sm:flex-row sm:flex-wrap sm:items-center sm:text-3xl">
+              <span className="whitespace-nowrap">{rocPeriod.format()}</span>
+              <Badge
+                variant="outline"
+                className={
+                  isLocked
+                    ? "w-fit shrink-0 rounded-full border-slate-200 bg-slate-100 px-3 py-1 text-slate-700"
+                    : "w-fit shrink-0 rounded-full border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700"
+                }
+              >
                 {isLocked ? "已鎖定" : "進行中"}
               </Badge>
             </h1>
-            <p className="text-muted-foreground mt-1">
+            <p className="mt-2 text-sm text-slate-600 md:text-base">
               {client.name}（統編: {client.tax_id}）
             </p>
           </div>
         </div>
-      </div>
+      </section>
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid h-auto w-full grid-cols-4">
-          <TabsTrigger value="overview">總覽</TabsTrigger>
-          <TabsTrigger value="input">進項</TabsTrigger>
-          <TabsTrigger value="output">銷項</TabsTrigger>
-          <TabsTrigger value="ranges">字軌</TabsTrigger>
+        <TabsList className="grid h-auto w-full grid-cols-4 rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1.5">
+          <TabsTrigger
+            value="overview"
+            className="rounded-xl text-slate-600 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/80"
+          >
+            總覽
+          </TabsTrigger>
+          <TabsTrigger
+            value="input"
+            className="rounded-xl text-slate-600 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/80"
+          >
+            進項
+          </TabsTrigger>
+          <TabsTrigger
+            value="output"
+            className="rounded-xl text-slate-600 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/80"
+          >
+            銷項
+          </TabsTrigger>
+          <TabsTrigger
+            value="ranges"
+            className="rounded-xl text-slate-600 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/80"
+          >
+            字軌
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-6 space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>本期上傳摘要</CardTitle>
+          <Card className="border-slate-200/80 bg-white shadow-sm shadow-slate-200/60">
+            <CardHeader className="border-b border-slate-100/80">
+              <CardTitle className="text-slate-900">本期上傳摘要</CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-              <p>進項發票：{inInvoices.length} 張</p>
-              <p>銷項發票：{outInvoices.length} 張</p>
-              <p>進項折讓：{inAllowances.length} 張</p>
-              <p>銷項折讓：{outAllowances.length} 張</p>
+            <CardContent className="grid gap-3 pt-6 sm:grid-cols-2 xl:grid-cols-4">
+              {overviewItems.map((item) => {
+                const Icon = item.icon;
+
+                return (
+                  <div
+                    key={item.label}
+                    className="rounded-2xl border border-emerald-100/80 bg-gradient-to-br from-white to-emerald-50/70 p-4 shadow-sm shadow-emerald-100/40"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm text-slate-500">{item.label}</p>
+                        <p className="mt-2 text-2xl font-semibold text-slate-900">
+                          {item.value}
+                          <span className="ml-1 text-sm font-medium text-slate-500">
+                            張
+                          </span>
+                        </p>
+                      </div>
+                      <div className="rounded-2xl bg-emerald-100 p-3 text-emerald-700">
+                        <Icon className="h-5 w-5" />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>操作指引</CardTitle>
+          <Card className="border-slate-200/80 bg-white shadow-sm shadow-slate-200/60">
+            <CardHeader className="border-b border-slate-100/80">
+              <CardTitle className="text-slate-900">操作指引</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
+            <CardContent className="space-y-3 pt-6 text-sm text-slate-600">
               <p>1. 在「進項」與「銷項」分頁上傳本期文件並確認資料。</p>
               <p>2. 若有購買紙本發票，請至「字軌」分頁輸入起訖號。</p>
               {isLocked ? (
-                <p className="font-medium text-foreground">
+                <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-medium text-slate-800">
                   此期別已鎖定，目前僅可檢視既有資料。
                 </p>
-              ) : null}
+              ) : (
+                <p className="rounded-2xl border border-emerald-200/70 bg-emerald-50/80 px-4 py-3 font-medium text-emerald-800">
+                  建議當期10號以前完成上傳！
+                </p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

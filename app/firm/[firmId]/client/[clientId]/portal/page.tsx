@@ -2,9 +2,10 @@
 
 import { use, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { Info, Loader2 } from "lucide-react";
+import { Camera, Info, Loader2, ShieldCheck, Sparkles } from "lucide-react";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { clientSchema } from "@/lib/domain/models";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import {
@@ -117,44 +118,74 @@ export default function PortalDashboardPage({
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">客戶入口網站</h1>
-        <p className="text-muted-foreground mt-1">
-          {client.name}（統編: {client.tax_id}）
-        </p>
-        <p className="text-sm text-muted-foreground mt-1">
-          目前優先處理期別：{currentUnclosedPeriod.format()}
-          <TooltipProvider>
-            <Tooltip delayDuration={0}>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="查看申報截止說明"
-                  className="inline-flex items-center text-muted-foreground/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm align-middle ml-1"
-                >
-                  <Info className="h-4 w-4" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>
-                  每期於次一單月 15日（含）前截止，週六、週日順延至次一工作日
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </p>
-      </div>
+    <div className="space-y-8 p-6">
+      <section className="relative overflow-hidden rounded-[28px] border border-slate-200/80 bg-gradient-to-br from-slate-50 via-white to-emerald-50/70 p-6 shadow-sm shadow-slate-200/70 md:p-8">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(16,185,129,0.12),_transparent_36%)]" />
+        <div className="relative space-y-5">
+          <div className="flex flex-wrap items-center gap-3">
+            <Badge className="rounded-full bg-emerald-600 px-3 py-1 text-white hover:bg-emerald-600">
+              更輕鬆報稅
+            </Badge>
+            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/70 bg-white/80 px-3 py-1 text-sm font-medium text-emerald-800 shadow-sm shadow-emerald-100/70">
+              <ShieldCheck className="h-4 w-4" />
+              專業團隊覆核
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <h1 className="text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
+              憑證上傳中心
+            </h1>
+            <p className="max-w-2xl text-sm leading-6 text-slate-600 md:text-base">
+              {client.name}（統編: {client.tax_id}）
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-3 text-sm">
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-4 py-2 text-slate-600 shadow-sm">
+              <Camera className="h-4 w-4 text-emerald-600" />
+              拍照上傳、輕鬆補件
+            </div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-4 py-2 text-slate-600 shadow-sm">
+              <Sparkles className="h-4 w-4 text-emerald-600" />
+              AI 辨識、會計師把關
+            </div>
+          </div>
+        </div>
+      </section>
 
       {periods.length === 0 ? (
-        <Card className="h-40 animate-pulse bg-muted" />
+        <Card className="h-40 animate-pulse border-slate-200 bg-slate-100/70" />
       ) : (
         <div className="space-y-8">
           {primaryPeriod ? (
             <section className="space-y-3">
               <div className="space-y-1">
-                <h2 className="text-xl font-semibold">本期優先處理</h2>
-                <p className="text-sm text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-semibold text-slate-900">
+                    本期優先處理
+                  </h2>
+                  <TooltipProvider>
+                    <Tooltip delayDuration={0}>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label="查看申報截止說明"
+                          className="inline-flex items-center rounded-sm text-slate-400 transition-colors hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                        >
+                          <Info className="h-4 w-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>
+                          每期於次一單月
+                          15日（含）前截止，週六、週日順延至次一工作日
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <p className="text-sm text-slate-600">
                   建議先完成本期憑證上傳，避免接近截止日期。
                 </p>
               </div>
@@ -172,8 +203,10 @@ export default function PortalDashboardPage({
           {secondaryPeriods.length > 0 ? (
             <section className="space-y-3">
               <div className="space-y-1">
-                <h2 className="text-lg font-semibold">其他期別</h2>
-                <p className="text-sm text-muted-foreground">
+                <h2 className="text-lg font-semibold text-slate-900">
+                  其他期別
+                </h2>
+                <p className="text-sm text-slate-600">
                   可隨時切換查看過往或未完成期別。
                 </p>
               </div>

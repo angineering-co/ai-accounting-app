@@ -36,18 +36,29 @@ export function PeriodCard({
   return (
     <Card
       className={cn(
-        "transition-shadow hover:shadow-md",
-        variant === "primary" && "border-primary shadow-md md:shadow-lg",
+        "overflow-hidden border-slate-200/80 bg-white shadow-sm shadow-slate-200/60 transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-200/70",
+        variant === "primary" &&
+          "border-emerald-200 bg-gradient-to-br from-white via-white to-emerald-50/70 shadow-md shadow-emerald-100/60 md:shadow-lg",
       )}
     >
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-slate-100/80 pb-4">
         <CardTitle
-          className={cn("text-lg font-medium", variant === "primary" && "text-xl md:text-2xl")}
+          className={cn(
+            "text-lg font-semibold text-slate-900",
+            variant === "primary" && "text-xl md:text-2xl",
+          )}
         >
           {rocPeriod.format()}
         </CardTitle>
         <div className="flex items-center gap-2">
-          <Badge variant={period.status === "locked" ? "secondary" : "default"}>
+          <Badge
+            variant="outline"
+            className={cn(
+              "rounded-full border-slate-200 bg-slate-50 px-3 py-1 text-slate-700",
+              period.status !== "locked" &&
+                "border-emerald-200 bg-emerald-50 text-emerald-700",
+            )}
+          >
             {period.status === "locked" ? (
               <span className="flex items-center gap-1">
                 <Lock className="h-3 w-3" /> 已鎖定
@@ -61,7 +72,12 @@ export function PeriodCard({
         </div>
       </CardHeader>
       <CardContent>
-        <div className={cn("grid grid-cols-2 gap-4 my-4", variant === "primary" && "md:my-6")}>
+        <div
+          className={cn(
+            "grid grid-cols-2 gap-4 my-4",
+            variant === "primary" && "md:my-6",
+          )}
+        >
           {/* <div>
             <p className="text-sm font-medium text-muted-foreground">銷售額</p>
             <p className={cn("text-xl font-bold font-mono", variant === "primary" && "md:text-2xl")}>
@@ -76,13 +92,18 @@ export function PeriodCard({
           </div> */}
         </div>
 
-        <div className="flex items-center justify-between mt-4">
+        <div className="mt-4 flex items-center justify-between">
           {/* <p className="text-xs text-muted-foreground">{count} 張發票</p> */}
           <Button
             asChild
             size={variant === "primary" ? "default" : "sm"}
-            variant={variant === "primary" ? "default" : "ghost"}
-            className="gap-2"
+            variant={variant === "primary" ? "default" : "outline"}
+            className={cn(
+              "gap-2 rounded-full",
+              variant === "primary"
+                ? "bg-emerald-600 text-white shadow-sm shadow-emerald-200 transition-colors hover:bg-emerald-500"
+                : "border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800",
+            )}
           >
             <Link
               href={

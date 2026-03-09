@@ -21,6 +21,7 @@ import { AllowanceTable } from "@/components/allowance-table";
 import { RangeManagement } from "@/components/range-management";
 import { InvoiceDeleteDialog } from "@/components/invoice/invoice-delete-dialog";
 import { AllowanceDeleteDialog } from "@/components/allowance-delete-dialog";
+import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,6 +51,12 @@ type DocumentSectionProps = {
 type DeleteTarget = {
   id: string;
   name: string;
+};
+
+type PreviewTarget = {
+  filename?: string | null;
+  storagePath?: string | null;
+  bucketName: "invoices" | "electronic-invoices";
 };
 
 function DocumentUploadSection({
@@ -246,6 +253,9 @@ export default function PortalPeriodDetailPage({
   );
   const [allowanceToDelete, setAllowanceToDelete] =
     useState<DeleteTarget | null>(null);
+  const [previewTarget, setPreviewTarget] = useState<PreviewTarget | null>(
+    null,
+  );
 
   const {
     data: period,
@@ -398,6 +408,16 @@ export default function PortalPeriodDetailPage({
               invoices={inInvoices}
               isLoading={isInvoicesLoading}
               showClientColumn={false}
+              onReview={(invoice) =>
+                setPreviewTarget({
+                  filename: invoice.filename,
+                  storagePath: invoice.storage_path,
+                  bucketName:
+                    invoice.extracted_data?.source === "import-excel"
+                      ? "electronic-invoices"
+                      : "invoices",
+                })
+              }
               onDelete={
                 isLocked
                   ? undefined
@@ -425,6 +445,16 @@ export default function PortalPeriodDetailPage({
             <AllowanceTable
               allowances={inAllowances}
               isLoading={isAllowancesLoading}
+              onReview={(allowance) =>
+                setPreviewTarget({
+                  filename: allowance.filename,
+                  storagePath: allowance.storage_path,
+                  bucketName:
+                    allowance.extracted_data?.source === "import-excel"
+                      ? "electronic-invoices"
+                      : "invoices",
+                })
+              }
               onDelete={
                 isLocked
                   ? undefined
@@ -458,6 +488,16 @@ export default function PortalPeriodDetailPage({
               invoices={outInvoices}
               isLoading={isInvoicesLoading}
               showClientColumn={false}
+              onReview={(invoice) =>
+                setPreviewTarget({
+                  filename: invoice.filename,
+                  storagePath: invoice.storage_path,
+                  bucketName:
+                    invoice.extracted_data?.source === "import-excel"
+                      ? "electronic-invoices"
+                      : "invoices",
+                })
+              }
               onDelete={
                 isLocked
                   ? undefined
@@ -485,6 +525,16 @@ export default function PortalPeriodDetailPage({
             <AllowanceTable
               allowances={outAllowances}
               isLoading={isAllowancesLoading}
+              onReview={(allowance) =>
+                setPreviewTarget({
+                  filename: allowance.filename,
+                  storagePath: allowance.storage_path,
+                  bucketName:
+                    allowance.extracted_data?.source === "import-excel"
+                      ? "electronic-invoices"
+                      : "invoices",
+                })
+              }
               onDelete={
                 isLocked
                   ? undefined
@@ -518,6 +568,14 @@ export default function PortalPeriodDetailPage({
           await mutatePeriod();
           await mutateInvoices();
         }}
+      />
+
+      <FilePreviewDialog
+        filename={previewTarget?.filename}
+        storagePath={previewTarget?.storagePath}
+        bucketName={previewTarget?.bucketName}
+        isOpen={!!previewTarget}
+        onOpenChange={(open) => !open && setPreviewTarget(null)}
       />
 
       <AllowanceDeleteDialog

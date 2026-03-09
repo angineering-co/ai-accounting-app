@@ -257,6 +257,24 @@ export default function PortalPeriodDetailPage({
     null,
   );
 
+  const handleReview = useCallback(
+    (item: {
+      filename?: string | null;
+      storage_path?: string | null;
+      extracted_data?: { source?: string | null } | null;
+    }) => {
+      setPreviewTarget({
+        filename: item.filename,
+        storagePath: item.storage_path,
+        bucketName:
+          item.extracted_data?.source === "import-excel"
+            ? "electronic-invoices"
+            : "invoices",
+      });
+    },
+    [],
+  );
+
   const {
     data: period,
     mutate: mutatePeriod,
@@ -408,16 +426,7 @@ export default function PortalPeriodDetailPage({
               invoices={inInvoices}
               isLoading={isInvoicesLoading}
               showClientColumn={false}
-              onReview={(invoice) =>
-                setPreviewTarget({
-                  filename: invoice.filename,
-                  storagePath: invoice.storage_path,
-                  bucketName:
-                    invoice.extracted_data?.source === "import-excel"
-                      ? "electronic-invoices"
-                      : "invoices",
-                })
-              }
+              onReview={handleReview}
               onDelete={
                 isLocked
                   ? undefined
@@ -445,16 +454,7 @@ export default function PortalPeriodDetailPage({
             <AllowanceTable
               allowances={inAllowances}
               isLoading={isAllowancesLoading}
-              onReview={(allowance) =>
-                setPreviewTarget({
-                  filename: allowance.filename,
-                  storagePath: allowance.storage_path,
-                  bucketName:
-                    allowance.extracted_data?.source === "import-excel"
-                      ? "electronic-invoices"
-                      : "invoices",
-                })
-              }
+              onReview={handleReview}
               onDelete={
                 isLocked
                   ? undefined
@@ -488,16 +488,7 @@ export default function PortalPeriodDetailPage({
               invoices={outInvoices}
               isLoading={isInvoicesLoading}
               showClientColumn={false}
-              onReview={(invoice) =>
-                setPreviewTarget({
-                  filename: invoice.filename,
-                  storagePath: invoice.storage_path,
-                  bucketName:
-                    invoice.extracted_data?.source === "import-excel"
-                      ? "electronic-invoices"
-                      : "invoices",
-                })
-              }
+              onReview={handleReview}
               onDelete={
                 isLocked
                   ? undefined
@@ -525,16 +516,7 @@ export default function PortalPeriodDetailPage({
             <AllowanceTable
               allowances={outAllowances}
               isLoading={isAllowancesLoading}
-              onReview={(allowance) =>
-                setPreviewTarget({
-                  filename: allowance.filename,
-                  storagePath: allowance.storage_path,
-                  bucketName:
-                    allowance.extracted_data?.source === "import-excel"
-                      ? "electronic-invoices"
-                      : "invoices",
-                })
-              }
+              onReview={handleReview}
               onDelete={
                 isLocked
                   ? undefined

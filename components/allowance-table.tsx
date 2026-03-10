@@ -31,10 +31,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { createClient as createSupabaseClient } from "@/lib/supabase/client";
+import { mapWithConcurrency } from "@/lib/async/map-with-concurrency";
+import { getSignedPreviewUrl } from "@/lib/supabase/signed-preview-url-cache";
 import Image from "next/image";
 
 const SIGNED_URL_EXPIRATION_SECONDS = 60 * 30;
+const PREVIEW_SIGNING_CONCURRENCY = 6;
 
 const IMAGE_EXTENSIONS = new Set([
   "jpg",
@@ -47,8 +49,6 @@ const IMAGE_EXTENSIONS = new Set([
   "heif",
 ]);
 
-const supabase = createSupabaseClient();
-
 const isImageFilename = (filename: string | null | undefined) => {
   if (!filename) return false;
   const ext = filename.split(".").pop()?.toLowerCase();
@@ -58,7 +58,7 @@ const isImageFilename = (filename: string | null | undefined) => {
 interface AllowanceTableProps {
   allowances: Allowance[];
   isLoading: boolean;
-  onReview?: (allowance: Allowance) => void;
+  onReview?: (allowance: Allowance, options?: { previewUrl?: string }) => void;
   onExtractAI?: (allowanceId: string) => void;
   onDelete?: (allowance: Allowance) => void;
 }
@@ -116,22 +116,26 @@ export function AllowanceTable({
     let mounted = true;
 
     const loadPreviews = async () => {
-      const results = await Promise.all(
-        missingPreviewAllowances.map(async (allowance) => {
+      const results = await mapWithConcurrency(
+        missingPreviewAllowances,
+        PREVIEW_SIGNING_CONCURRENCY,
+        async (allowance) => {
           if (!allowance.storage_path) {
             return { id: allowance.id, url: null as string | null };
           }
 
-          const { data, error } = await supabase.storage
-            .from("invoices")
-            .createSignedUrl(allowance.storage_path, SIGNED_URL_EXPIRATION_SECONDS);
+          const signedUrl = await getSignedPreviewUrl({
+            bucketName: "invoices",
+            storagePath: allowance.storage_path,
+            expiresInSeconds: SIGNED_URL_EXPIRATION_SECONDS,
+          });
 
-          if (error || !data?.signedUrl) {
+          if (!signedUrl) {
             return { id: allowance.id, url: null as string | null };
           }
 
-          return { id: allowance.id, url: data.signedUrl };
-        }),
+          return { id: allowance.id, url: signedUrl };
+        },
       );
 
       // Skip state update if this effect has already been cleaned up.
@@ -283,7 +287,11 @@ export function AllowanceTable({
                     className={
                       onReview ? "cursor-pointer hover:bg-muted/50" : ""
                     }
-                    onClick={() => onReview?.(allowance)}
+                    onClick={() =>
+                      onReview?.(allowance, {
+                        previewUrl: previewUrls[allowance.id],
+                      })
+                    }
                   >
                     <TableCell className="w-[88px]">
                       <div className="flex h-12 w-16 items-center justify-center overflow-hidden rounded border bg-muted/20">

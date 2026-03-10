@@ -57,6 +57,7 @@ type PreviewTarget = {
   filename?: string | null;
   storagePath?: string | null;
   bucketName: "invoices" | "electronic-invoices";
+  previewUrl?: string;
 };
 
 function DocumentUploadSection({
@@ -257,13 +258,14 @@ export default function PortalPeriodDetailPage({
   const [previewTarget, setPreviewTarget] = useState<PreviewTarget | null>(
     null,
   );
+  const [activeTab, setActiveTab] = useState("overview");
 
   const handleReview = useCallback(
     (item: {
       filename?: string | null;
       storage_path?: string | null;
       extracted_data?: { source?: string | null } | null;
-    }) => {
+    }, options?: { previewUrl?: string }) => {
       setPreviewTarget({
         filename: item.filename,
         storagePath: item.storage_path,
@@ -271,6 +273,7 @@ export default function PortalPeriodDetailPage({
           item.extracted_data?.source === "import-excel"
             ? "electronic-invoices"
             : "invoices",
+        previewUrl: options?.previewUrl,
       });
     },
     [],
@@ -411,7 +414,7 @@ export default function PortalPeriodDetailPage({
         </div>
       </section>
 
-      <Tabs defaultValue="overview" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid h-auto w-full grid-cols-4 rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1.5">
           <TabsTrigger
             value="overview"
@@ -493,7 +496,12 @@ export default function PortalPeriodDetailPage({
           </Card>
         </TabsContent>
 
-        <TabsContent value="input" className="mt-6 space-y-6">
+        {/* Keep heavy panels mounted to preserve preview cache/state, while hiding inactive content to avoid stacked panels. */}
+        <TabsContent
+          value="input"
+          className="mt-6 space-y-6 data-[state=inactive]:hidden"
+          forceMount
+        >
           <DocumentUploadSection
             title="進項發票"
             firmId={firmId}
@@ -555,7 +563,12 @@ export default function PortalPeriodDetailPage({
           </div>
         </TabsContent>
 
-        <TabsContent value="output" className="mt-6 space-y-6">
+        {/* Same pattern as input tab: mounted for performance, hidden when inactive for correct tab UX. */}
+        <TabsContent
+          value="output"
+          className="mt-6 space-y-6 data-[state=inactive]:hidden"
+          forceMount
+        >
           <DocumentUploadSection
             title="銷項發票"
             firmId={firmId}
@@ -640,6 +653,7 @@ export default function PortalPeriodDetailPage({
         filename={previewTarget?.filename}
         storagePath={previewTarget?.storagePath}
         bucketName={previewTarget?.bucketName}
+        initialPreviewUrl={previewTarget?.previewUrl}
         isOpen={!!previewTarget}
         onOpenChange={(open) => !open && setPreviewTarget(null)}
       />

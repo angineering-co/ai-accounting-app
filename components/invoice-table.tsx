@@ -29,9 +29,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { createClient as createSupabaseClient } from "@/lib/supabase/client";
+import { mapWithConcurrency } from "@/lib/async/map-with-concurrency";
+import { getSignedPreviewUrl } from "@/lib/supabase/signed-preview-url-cache";
 
 const SIGNED_URL_EXPIRATION_SECONDS = 60 * 30;
+const PREVIEW_SIGNING_CONCURRENCY = 6;
 
 type JoinedInvoice = Invoice & {
   client?: { id: string; name: string } | null;
@@ -48,8 +50,6 @@ const IMAGE_EXTENSIONS = new Set([
   "heif",
 ]);
 
-const supabase = createSupabaseClient();
-
 const isImageFilename = (filename: string | null | undefined) => {
   if (!filename) return false;
   const ext = filename.split(".").pop()?.toLowerCase();
@@ -59,7 +59,7 @@ const isImageFilename = (filename: string | null | undefined) => {
 interface InvoiceTableProps {
   invoices: JoinedInvoice[];
   isLoading: boolean;
-  onReview?: (invoice: Invoice) => void;
+  onReview?: (invoice: Invoice, options?: { previewUrl?: string }) => void;
   onExtractAI?: (invoiceId: string) => void;
   onDelete?: (invoice: Invoice) => void;
   showClientColumn?: boolean;
@@ -127,18 +127,22 @@ export function InvoiceTable({
     let mounted = true;
 
     const loadPreviews = async () => {
-      const results = await Promise.all(
-        missingPreviewInvoices.map(async (invoice) => {
-          const { data, error } = await supabase.storage
-            .from("invoices")
-            .createSignedUrl(invoice.storage_path, SIGNED_URL_EXPIRATION_SECONDS);
+      const results = await mapWithConcurrency(
+        missingPreviewInvoices,
+        PREVIEW_SIGNING_CONCURRENCY,
+        async (invoice) => {
+          const signedUrl = await getSignedPreviewUrl({
+            bucketName: "invoices",
+            storagePath: invoice.storage_path,
+            expiresInSeconds: SIGNED_URL_EXPIRATION_SECONDS,
+          });
 
-          if (error || !data?.signedUrl) {
+          if (!signedUrl) {
             return { id: invoice.id, url: null as string | null };
           }
 
-          return { id: invoice.id, url: data.signedUrl };
-        }),
+          return { id: invoice.id, url: signedUrl };
+        },
       );
 
       if (!mounted) return;
@@ -295,7 +299,9 @@ export function InvoiceTable({
               <TableRow
                 key={invoice.id}
                 className={onReview ? "cursor-pointer hover:bg-muted/50" : ""}
-                onClick={() => onReview?.(invoice)}
+                onClick={() =>
+                  onReview?.(invoice, { previewUrl: previewUrls[invoice.id] })
+                }
               >
                 <TableCell className="w-[88px]">
                   <div className="flex h-12 w-16 items-center justify-center overflow-hidden rounded border bg-muted/20">
@@ -420,7 +426,9 @@ export function InvoiceTable({
                             <DropdownMenuItem
                               onClick={(event) => {
                                 event.stopPropagation();
-                                onReview(invoice);
+                                onReview(invoice, {
+                                  previewUrl: previewUrls[invoice.id],
+                                });
                               }}
                             >
                               預覽與確認

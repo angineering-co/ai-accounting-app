@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Loader2 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { getSignedPreviewUrl } from "@/lib/supabase/signed-preview-url-cache";
 import {
   Dialog,
   DialogContent,
@@ -33,12 +33,11 @@ const isPdfFilename = (filename: string | null | undefined) => {
   return filename?.toLowerCase().endsWith(".pdf") ?? false;
 };
 
-const supabase = createClient();
-
 interface FilePreviewDialogProps {
   filename?: string | null;
   storagePath?: string | null;
   bucketName?: "invoices" | "electronic-invoices";
+  initialPreviewUrl?: string;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -47,6 +46,7 @@ export function FilePreviewDialog({
   filename,
   storagePath,
   bucketName = "invoices",
+  initialPreviewUrl,
   isOpen,
   onOpenChange,
 }: FilePreviewDialogProps) {
@@ -65,19 +65,25 @@ export function FilePreviewDialog({
         return;
       }
 
-      setIsLoading(true);
+      if (initialPreviewUrl) {
+        setPreviewUrl(initialPreviewUrl);
+      }
+
+      setIsLoading(!initialPreviewUrl);
       try {
-        const { data, error } = await supabase.storage
-          .from(bucketName)
-          .createSignedUrl(storagePath, 3600);
+        const signedUrl = await getSignedPreviewUrl({
+          bucketName,
+          storagePath,
+          expiresInSeconds: 3600,
+        });
 
         if (cancelled) return;
-        if (error || !data?.signedUrl) {
+        if (!signedUrl) {
           setPreviewUrl(null);
           return;
         }
 
-        setPreviewUrl(data.signedUrl);
+        setPreviewUrl(signedUrl);
       } finally {
         if (!cancelled) {
           setIsLoading(false);
@@ -90,9 +96,13 @@ export function FilePreviewDialog({
     return () => {
       cancelled = true;
     };
-    // Keep dependency list shape stable across Fast Refresh updates.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, storagePath, bucketName, isInlinePreviewSupported, supabase]);
+  }, [
+    isOpen,
+    storagePath,
+    bucketName,
+    isInlinePreviewSupported,
+    initialPreviewUrl,
+  ]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>

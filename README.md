@@ -1,109 +1,182 @@
-<a href="https://demo-nextjs-with-supabase.vercel.app/">
-  <img alt="Next.js and Supabase Starter Kit - the fastest way to build apps with Next.js and Supabase" src="https://demo-nextjs-with-supabase.vercel.app/opengraph-image.png">
-  <h1 align="center">Next.js and Supabase Starter Kit</h1>
-</a>
+# SnapBooks.ai (記帳事務所)
 
-<p align="center">
- The fastest way to build apps with Next.js and Supabase
-</p>
+AI-powered accounting SaaS for Taiwan-based accounting firms. Firms manage clients; clients upload invoices (統一發票) and allowances (折讓證明單) which are processed by the Gemini AI API to extract structured data for tax filing.
 
-<p align="center">
-  <a href="#features"><strong>Features</strong></a> ·
-  <a href="#demo"><strong>Demo</strong></a> ·
-  <a href="#deploy-to-vercel"><strong>Deploy to Vercel</strong></a> ·
-  <a href="#clone-and-run-locally"><strong>Clone and run locally</strong></a> ·
-  <a href="#feedback-and-issues"><strong>Feedback and issues</strong></a>
-  <a href="#more-supabase-examples"><strong>More Examples</strong></a>
-</p>
-<br/>
+## Prerequisites
 
-## Features
+- **Node.js** 18+ with npm
+- **Docker** (for local Supabase)
+- **Supabase CLI** (installed automatically via `npx supabase@latest`)
 
-- Works across the entire [Next.js](https://nextjs.org) stack
-  - App Router
-  - Pages Router
-  - Proxy
-  - Client
-  - Server
-  - It just works!
-- supabase-ssr. A package to configure Supabase Auth to use cookies
-- Password-based authentication block installed via the [Supabase UI Library](https://supabase.com/ui/docs/nextjs/password-based-auth)
-- Styling with [Tailwind CSS](https://tailwindcss.com)
-- Components with [shadcn/ui](https://ui.shadcn.com/)
-- Optional deployment with [Supabase Vercel Integration and Vercel deploy](#deploy-your-own)
-  - Environment variables automatically assigned to Vercel project
+## Local Development Setup
 
-## Demo
+### 1. Install dependencies
 
-You can view a fully working demo at [demo-nextjs-with-supabase.vercel.app](https://demo-nextjs-with-supabase.vercel.app/).
+```bash
+git clone <repo-url> && cd ai-accounting-app
+npm install
+```
 
-## Deploy to Vercel
+### 2. Start Supabase
 
-Vercel deployment will guide you through creating a Supabase account and project.
+```bash
+npm run supabase:start
+```
 
-After installation of the Supabase integration, all relevant environment variables will be assigned to the project so the deployment is fully functioning.
+This starts PostgreSQL, Auth, Storage, Studio, and Edge Runtime in Docker. Once ready, it prints your local API keys — you'll need these for the next step.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fvercel%2Fnext.js%2Ftree%2Fcanary%2Fexamples%2Fwith-supabase&project-name=nextjs-with-supabase&repository-name=nextjs-with-supabase&demo-title=nextjs-with-supabase&demo-description=This+starter+configures+Supabase+Auth+to+use+cookies%2C+making+the+user%27s+session+available+throughout+the+entire+Next.js+app+-+Client+Components%2C+Server+Components%2C+Route+Handlers%2C+Server+Actions+and+Middleware.&demo-url=https%3A%2F%2Fdemo-nextjs-with-supabase.vercel.app%2F&external-id=https%3A%2F%2Fgithub.com%2Fvercel%2Fnext.js%2Ftree%2Fcanary%2Fexamples%2Fwith-supabase&demo-image=https%3A%2F%2Fdemo-nextjs-with-supabase.vercel.app%2Fopengraph-image.png)
+- **Studio**: http://localhost:54323
+- **API**: http://localhost:54321
 
-The above will also clone the Starter kit to your GitHub, you can clone that locally and develop locally.
+### 3. Create `.env.local`
 
-If you wish to just develop locally and not deploy to Vercel, [follow the steps below](#clone-and-run-locally).
+Copy `.env.example` and fill in the values printed by `supabase start`:
 
-## Clone and run locally
+```env
+NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<publishable key from supabase start>
+SUPABASE_SERVICE_ROLE_KEY=<service_role JWT from supabase start>
+GEMINI_API_KEY=<your Google Gemini API key>
+```
 
-1. You'll first need a Supabase project which can be made [via the Supabase dashboard](https://database.new)
+### 4. Enable the message queue (one-time setup)
 
-2. Create a Next.js app using the Supabase Starter template npx command
+The bulk AI extraction feature uses pgmq. After Supabase starts, you must expose the queue API:
 
+1. Open **Supabase Studio** → http://localhost:54323
+2. Go to **Integrations** → **Queues**
+3. Click **"Expose Queues via PostgREST"**
+4. Edit `supabase/config.toml` — add `"pgmq_public"` to the schemas list:
+   ```toml
+   schemas = ["public", "graphql_public", "pgmq_public"]
+   ```
+5. Restart Supabase:
    ```bash
-   npx create-next-app --example with-supabase with-supabase-app
+   npm run supabase:stop && npm run supabase:start
    ```
 
+> **Note**: This step is required after every `supabase db reset` since it recreates the database from scratch.
+
+### 5. Serve the Edge Function (for bulk AI extraction)
+
+Create the Edge Function env file and start serving:
+
+```bash
+echo "GEMINI_API_KEY=<your key>" > supabase/functions/.env
+npx supabase functions serve extraction-worker --env-file supabase/functions/.env
+```
+
+The pg_cron job (configured in migrations) triggers this function every 10 seconds to process queued extraction jobs.
+
+### 6. Start the dev server
+
+```bash
+npm run dev
+```
+
+App runs at http://localhost:3000.
+
+## Environment Variables Reference
+
+| Variable | Used by | Required | Description |
+|----------|---------|----------|-------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Next.js | Yes | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Next.js | Yes | Supabase publishable (anon) key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Next.js (server) | Yes | Service role key for admin operations |
+| `GEMINI_API_KEY` | Next.js + Edge Fn | Yes | Google Gemini 2.5 Flash API key |
+| `DATABASE_URL` | Tests | For tests | PostgreSQL connection string |
+| `NEXT_PUBLIC_EARLY_ADOPTER_FORM_URL` | Next.js (client) | No | Google Forms URL for early adopter signup |
+| `RESEND_API_KEY` | Next.js (server) | No | Resend email API key |
+
+## Vault Secrets
+
+The migration `20260311090000_create_extraction_queue.sql` seeds two Vault secrets used by pg_cron to trigger the Edge Function:
+
+| Secret name | Local default | Description |
+|-------------|--------------|-------------|
+| `project_url` | `http://kong:8000` | Internal Docker URL for the Supabase API gateway |
+| `service_role_key` | Standard demo JWT | Service role JWT for authenticating the Edge Function call |
+
+These work out of the box for local development. For production, update them in the **Supabase Dashboard** → **Settings** → **Vault** with your real project URL and service role key.
+
+## Production Deployment
+
+### Vercel (Next.js)
+
+Set these environment variables in **Vercel** → **Project Settings** → **Environment Variables**:
+
+- `NEXT_PUBLIC_SUPABASE_URL` — your hosted Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` — your publishable key
+- `SUPABASE_SERVICE_ROLE_KEY` — your service role key
+- `GEMINI_API_KEY` — your Gemini API key
+
+### Supabase (Hosted)
+
+1. **Push migrations**: `npx supabase db push`
+2. **Enable queues**: Dashboard → **Integrations** → **Queues** → **Expose Queues via PostgREST**
+3. **Update Vault secrets**: Dashboard → **SQL Editor**, run:
+   ```sql
+   SELECT vault.update_secret(
+     (SELECT id FROM vault.secrets WHERE name = 'project_url'),
+     'https://<your-project-ref>.supabase.co'
+   );
+   SELECT vault.update_secret(
+     (SELECT id FROM vault.secrets WHERE name = 'service_role_key'),
+     '<your real service role key>'
+   );
+   ```
+4. **Deploy Edge Function**:
    ```bash
-   yarn create next-app --example with-supabase with-supabase-app
+   npx supabase functions deploy extraction-worker
+   npx supabase secrets set GEMINI_API_KEY=<your key>
    ```
 
-   ```bash
-   pnpm create next-app --example with-supabase with-supabase-app
-   ```
+## Available Scripts
 
-3. Use `cd` to change into the app's directory
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start Next.js dev server (localhost:3000) |
+| `npm run build` | Production build |
+| `npm run lint` | TypeScript type-check + ESLint |
+| `npm run type-check` | TypeScript check only |
+| `npm test` | Run tests in watch mode (Vitest) |
+| `npm run test:run` | Run tests once (CI mode) |
+| `npm run supabase:start` | Start local Supabase (Docker) |
+| `npm run supabase:stop` | Stop local Supabase |
+| `npm run supabase:status` | Check Supabase status |
 
-   ```bash
-   cd with-supabase-app
-   ```
+Run a single test file:
 
-4. Rename `.env.example` to `.env.local` and update the following:
+```bash
+npx vitest run lib/domain/roc-period.test.ts
+```
 
-  ```env
-  NEXT_PUBLIC_SUPABASE_URL=[INSERT SUPABASE PROJECT URL]
-  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=[INSERT SUPABASE PROJECT API PUBLISHABLE OR ANON KEY]
-  ```
-  > [!NOTE]
-  > This example uses `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, which refers to Supabase's new **publishable** key format.
-  > Both legacy **anon** keys and new **publishable** keys can be used with this variable name during the transition period. Supabase's dashboard may show `NEXT_PUBLIC_SUPABASE_ANON_KEY`; its value can be used in this example.
-  > See the [full announcement](https://github.com/orgs/supabase/discussions/29260) for more information.
+## Architecture Overview
 
-  Both `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` can be found in [your Supabase project's API settings](https://supabase.com/dashboard/project/_?showConnect=true)
+```
+Next.js App Router (app/)
+├── (landing)/          Public marketing pages
+├── auth/               Auth flows (login, sign-up, etc.)
+├── dashboard/          Post-login redirect / firm selection
+└── firm/[firmId]/      Main app shell
+    ├── client/[clientId]/period/[periodYYYMM]/  Tax filing period
+    ├── dashboard/      Firm dashboard
+    └── invoice/        Firm-level invoice management
 
-5. You can now run the Next.js local development server:
+lib/
+├── domain/             Zod schemas, types, ROC period utilities
+├── services/           Server Actions — Gemini AI, CRUD, reports
+├── supabase/           Client factories (server, client, admin)
+└── utils.ts            Shared helpers
 
-   ```bash
-   npm run dev
-   ```
+supabase/
+├── functions/extraction-worker/   Edge Function (Deno) — bulk AI extraction
+├── migrations/                    Database migrations
+└── config.toml                    Local Supabase configuration
+```
 
-   The starter kit should now be running on [localhost:3000](http://localhost:3000/).
+**Data flow**: Firm → Clients → Tax Filing Periods → Invoices/Allowances → AI Extraction (Gemini) → Reports (TET_U format)
 
-6. This template comes with the default shadcn/ui style initialized. If you instead want other ui.shadcn styles, delete `components.json` and [re-install shadcn/ui](https://ui.shadcn.com/docs/installation/next)
+**AI extraction flow**: Upload → pgmq queue → Edge Function (pg_cron triggered) → Gemini 2.5 Flash → extracted_data JSONB → staff review → confirmed
 
-> Check out [the docs for Local Development](https://supabase.com/docs/guides/getting-started/local-development) to also run Supabase locally.
-
-## Feedback and issues
-
-Please file feedback and issues over on the [Supabase GitHub org](https://github.com/supabase/supabase/issues/new/choose).
-
-## More Supabase examples
-
-- [Next.js Subscription Payments Starter](https://github.com/vercel/nextjs-subscription-payments)
-- [Cookie-based Auth and the Next.js 13 App Router (free course)](https://youtube.com/playlist?list=PL5S4mPUpp4OtMhpnp93EFSo42iQ40XjbF)
-- [Supabase Auth and the Next.js App Router](https://github.com/supabase/supabase/tree/master/examples/auth/nextjs)
+See `CLAUDE.md` for detailed architecture documentation.

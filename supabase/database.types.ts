@@ -7,7 +7,7 @@ export type Json =
   | Json[]
 
 export type Database = {
-  graphql_public: {
+  pgmq_public: {
     Tables: {
       [_ in never]: never
     }
@@ -15,14 +15,41 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
+      archive: {
+        Args: { message_id: number; queue_name: string }
+        Returns: boolean
+      }
+      delete: {
+        Args: { message_id: number; queue_name: string }
+        Returns: boolean
+      }
+      pop: {
+        Args: { queue_name: string }
+        Returns: unknown[]
+        SetofOptions: {
+          from: "*"
+          to: "message_record"
+          isOneToOne: false
+          isSetofReturn: true
         }
-        Returns: Json
+      }
+      read: {
+        Args: { n: number; queue_name: string; sleep_seconds: number }
+        Returns: unknown[]
+        SetofOptions: {
+          from: "*"
+          to: "message_record"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      send: {
+        Args: { message: Json; queue_name: string; sleep_seconds?: number }
+        Returns: number[]
+      }
+      send_batch: {
+        Args: { messages: Json[]; queue_name: string; sleep_seconds?: number }
+        Returns: number[]
       }
     }
     Enums: {
@@ -530,7 +557,7 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
+  pgmq_public: {
     Enums: {},
   },
   public: {

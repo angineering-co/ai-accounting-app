@@ -17,12 +17,15 @@ import { getAccountListString } from "@/lib/services/account";
 import { type Json, type TablesUpdate } from "@/supabase/database.types";
 import { type ExtractedInvoiceData } from "@/lib/domain/models";
 import { ensurePeriodEditable } from "@/lib/services/tax-period";
+import { getMimeType } from "@/lib/utils/mime-type";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 async function saveExtractedInvoiceData(
   invoiceId: string,
-  validatedData: ExtractedInvoiceData
+  validatedData: ExtractedInvoiceData,
+  supabaseClient?: SupabaseClient,
 ) {
-  const supabase = await createClient();
+  const supabase = supabaseClient ?? await createClient();
 
   // Update invoice with extracted data and set status to processed
   // Convert to plain object for Supabase JSONB column
@@ -228,15 +231,14 @@ export async function getInvoicesByClient(clientId: string) {
  * @param invoiceId - Invoice ID to extract data from
  * @returns Extracted invoice data
  */
-export async function extractInvoiceDataAction(invoiceId: string) {
-  const supabase = await createClient();
-
-  // Get current user
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Unauthorized");
-
+/**
+ * Core invoice extraction logic that accepts a pre-built Supabase client.
+ * Used by both the server action (user-scoped) and the Edge Function worker (service role).
+ */
+export async function extractInvoiceCore(
+  invoiceId: string,
+  supabase: SupabaseClient,
+) {
   // Fetch invoice record
   const { data: invoice, error: fetchError } = await supabase
     .from("invoices")
@@ -246,11 +248,6 @@ export async function extractInvoiceDataAction(invoiceId: string) {
 
   if (fetchError) throw fetchError;
   if (!invoice) throw new Error("Invoice not found");
-
-  // Check if period is locked (AI extraction modifies invoice data)
-  if (invoice.year_month && invoice.client_id) {
-    await ensurePeriodEditable(invoice.client_id, invoice.year_month);
-  }
 
   // Fetch client data if client_id exists
   let client = null;
@@ -307,7 +304,7 @@ export async function extractInvoiceDataAction(invoiceId: string) {
             ...extractedData,
             account: "4101 營業收入" as ExtractedInvoiceData['account'],
           };
-          return await saveExtractedInvoiceData(invoiceId, updatedData);
+          return await saveExtractedInvoiceData(invoiceId, updatedData, supabase);
         }
 
         // Run AI to determine account for input electronic invoices based on summary and client industry
@@ -322,7 +319,7 @@ export async function extractInvoiceDataAction(invoiceId: string) {
           account: determinedAccount as ExtractedInvoiceData['account'],
         };
 
-        return await saveExtractedInvoiceData(invoiceId, updatedData);
+        return await saveExtractedInvoiceData(invoiceId, updatedData, supabase);
       }
     }
 
@@ -344,55 +341,6 @@ export async function extractInvoiceDataAction(invoiceId: string) {
     // Convert Blob to ArrayBuffer
     const arrayBuffer = await fileData.arrayBuffer();
 
-    // Get MIME type - prefer Blob's type, fallback to extension-based detection
-    const getMimeType = (blob: Blob, filename: string): string => {
-      // First, try to use the Blob's content-type if available and valid
-      if (blob.type && blob.type !== "application/octet-stream") {
-        // Validate it's a supported type
-        const supportedTypes = [
-          "application/pdf",
-          "image/png",
-          "image/jpeg",
-          "image/gif",
-          "image/webp",
-        ];
-        if (supportedTypes.includes(blob.type)) {
-          return blob.type;
-        }
-      }
-
-      // Fallback to extension-based detection
-      const ext = filename.split(".").pop()?.toLowerCase();
-      const mimeTypes: Record<string, string> = {
-        pdf: "application/pdf",
-        png: "image/png",
-        jpg: "image/jpeg",
-        jpeg: "image/jpeg",
-        gif: "image/gif",
-        webp: "image/webp",
-      };
-
-      // Special handling for HEIC/HEIF - not supported by Gemini
-      if (ext === "heic" || ext === "heif") {
-        throw new Error(
-          `HEIC/HEIF format is not supported by Gemini API. ` +
-            `Please convert your image to JPEG or PNG format before uploading. ` +
-            `You can use online converters or image editing software to convert the file.`
-        );
-      }
-
-      const detectedType = mimeTypes[ext || ""];
-      if (!detectedType) {
-        throw new Error(
-          `Unsupported file format: ${ext || "unknown"}. ` +
-            `Supported formats: PDF, PNG, JPEG, GIF, WEBP. ` +
-            `For HEIC files, please convert to JPEG or PNG first.`
-        );
-      }
-
-      return detectedType;
-    };
-
     const mimeType = getMimeType(fileData, invoice.filename);
 
     // Convert in_or_out to Chinese format
@@ -410,7 +358,7 @@ export async function extractInvoiceDataAction(invoiceId: string) {
     // Validate extracted data against schema
     const validatedData = extractedInvoiceDataSchema.parse(extractedData);
 
-    return await saveExtractedInvoiceData(invoiceId, validatedData);
+    return await saveExtractedInvoiceData(invoiceId, validatedData, supabase);
   } catch (error) {
     // Update status to failed on error
     const errorMessage =
@@ -426,4 +374,34 @@ export async function extractInvoiceDataAction(invoiceId: string) {
     console.error("Error extracting invoice data:", error);
     throw new Error(`Failed to extract invoice data: ${errorMessage}`);
   }
+}
+
+/**
+ * Server action wrapper: authenticates user, checks period lock, then delegates to core.
+ */
+export async function extractInvoiceDataAction(invoiceId: string) {
+  const supabase = await createClient();
+
+  // Get current user
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  // Fetch invoice to check period lock
+  const { data: invoice, error: fetchError } = await supabase
+    .from("invoices")
+    .select("client_id, year_month")
+    .eq("id", invoiceId)
+    .single();
+
+  if (fetchError) throw fetchError;
+  if (!invoice) throw new Error("Invoice not found");
+
+  // Check if period is locked (AI extraction modifies invoice data)
+  if (invoice.year_month && invoice.client_id) {
+    await ensurePeriodEditable(invoice.client_id, invoice.year_month);
+  }
+
+  return await extractInvoiceCore(invoiceId, supabase);
 }

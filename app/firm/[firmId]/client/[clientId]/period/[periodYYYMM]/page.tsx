@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useState, useCallback } from "react";
 import useSWR from "swr";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ import { InvoiceDeleteDialog } from "@/components/invoice/invoice-delete-dialog"
 import { AllowanceReviewDialog } from "@/components/allowance-review-dialog";
 import { AllowanceDeleteDialog } from "@/components/allowance-delete-dialog";
 import { extractAllowanceDataAction } from "@/lib/services/allowance";
+import { BulkExtractionProgress } from "@/components/bulk-extraction-progress";
 
 type DeleteTarget = {
   id: string;
@@ -207,6 +208,13 @@ export default function PeriodDetailPage({
     }
   };
 
+  // TODO: handle the extremely large number of invoices and allowances (1000+)
+  // by using pagination and filtering
+  const handleBulkRefresh = useCallback(() => {
+    fetchInvoices();
+    fetchAllowances();
+  }, [fetchInvoices, fetchAllowances]);
+
   if (isPeriodLoading || isClientLoading) {
     return (
       <div className="p-6 flex justify-center">
@@ -284,7 +292,13 @@ export default function PeriodDetailPage({
 
         <TabsContent value="invoices" className="mt-6 space-y-6">
           {/* Action buttons */}
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between">
+            <BulkExtractionProgress
+              periodId={period.id}
+              isLocked={isLocked}
+              totalEntities={invoices.length + allowances.length}
+              onRefresh={handleBulkRefresh}
+            />
             <div className="flex gap-2">
               <Button
                 variant="outline"

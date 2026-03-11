@@ -12,6 +12,8 @@ import {
 import { type Json, type TablesUpdate } from "@/supabase/database.types";
 import { tryLinkOriginalInvoice } from "@/lib/services/invoice-import";
 import { extractAllowanceData, type ClientInfo } from "@/lib/services/gemini";
+import { getMimeType } from "@/lib/utils/mime-type";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * Create an allowance record
@@ -101,19 +103,13 @@ export async function updateAllowance(allowanceId: string, data: UpdateAllowance
 }
 
 /**
- * Extract allowance data using Gemini AI
- * @param allowanceId - Allowance ID to extract data from
- * @returns Extracted allowance data
+ * Core allowance extraction logic that accepts a pre-built Supabase client.
+ * Used by both the server action (user-scoped) and the Edge Function worker (service role).
  */
-export async function extractAllowanceDataAction(allowanceId: string) {
-  const supabase = await createClient();
-
-  // Get current user
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Unauthorized");
-
+export async function extractAllowanceCore(
+  allowanceId: string,
+  supabase: SupabaseClient,
+) {
   // Fetch allowance record
   const { data: allowance, error: fetchError } = await supabase
     .from("allowances")
@@ -181,51 +177,6 @@ export async function extractAllowanceDataAction(allowanceId: string) {
     // Convert Blob to ArrayBuffer
     const arrayBuffer = await fileData.arrayBuffer();
 
-    // Get MIME type - prefer Blob's type, fallback to extension-based detection
-    const getMimeType = (blob: Blob, filename: string): string => {
-      if (blob.type && blob.type !== "application/octet-stream") {
-        const supportedTypes = [
-          "application/pdf",
-          "image/png",
-          "image/jpeg",
-          "image/gif",
-          "image/webp",
-        ];
-        if (supportedTypes.includes(blob.type)) {
-          return blob.type;
-        }
-      }
-
-      const ext = filename.split(".").pop()?.toLowerCase();
-      const mimeTypes: Record<string, string> = {
-        pdf: "application/pdf",
-        png: "image/png",
-        jpg: "image/jpeg",
-        jpeg: "image/jpeg",
-        gif: "image/gif",
-        webp: "image/webp",
-      };
-
-      if (ext === "heic" || ext === "heif") {
-        throw new Error(
-          `HEIC/HEIF format is not supported by Gemini API. ` +
-            `Please convert your image to JPEG or PNG format before uploading. ` +
-            `You can use online converters or image editing software to convert the file.`
-        );
-      }
-
-      const detectedType = mimeTypes[ext || ""];
-      if (!detectedType) {
-        throw new Error(
-          `Unsupported file format: ${ext || "unknown"}. ` +
-            `Supported formats: PDF, PNG, JPEG, GIF, WEBP. ` +
-            `For HEIC files, please convert to JPEG or PNG first.`
-        );
-      }
-
-      return detectedType;
-    };
-
     const mimeType = getMimeType(fileData, allowance.filename || "");
 
     const extractedData = await extractAllowanceData(
@@ -274,6 +225,21 @@ export async function extractAllowanceDataAction(allowanceId: string) {
     console.error("Error extracting allowance data:", error);
     throw new Error(`Failed to extract allowance data: ${errorMessage}`);
   }
+}
+
+/**
+ * Server action wrapper: authenticates user, then delegates to core.
+ */
+export async function extractAllowanceDataAction(allowanceId: string) {
+  const supabase = await createClient();
+
+  // Get current user
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  return await extractAllowanceCore(allowanceId, supabase);
 }
 
 /**

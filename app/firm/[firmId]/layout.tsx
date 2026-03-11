@@ -32,12 +32,11 @@ async function FirmName({ params }: { params: Promise<{ firmId: string }> }) {
 
 async function SidebarByRole() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const userId = claimsData?.claims?.sub;
 
-  const { data: profile } = user?.id
-    ? await supabase.from("profiles").select("role").eq("id", user.id).single()
+  const { data: profile } = userId
+    ? await supabase.from("profiles").select("role").eq("id", userId).single()
     : { data: null };
 
   return profile?.role === "client" ? <PortalSidebar /> : <FirmSidebar />;

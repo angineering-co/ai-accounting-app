@@ -19,9 +19,10 @@ import { extractAllowanceData, type ClientInfo } from "@/lib/services/gemini";
 export async function createAllowance(data: CreateAllowanceInput) {
   const supabase = await createClient();
 
-  // Get current user
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Unauthorized');
+  // Get current user (getClaims is more performant than getUser)
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const userId = claimsData?.claims?.sub;
+  if (!userId) throw new Error('Unauthorized');
 
   const validated = createAllowanceSchema.parse(data);
 
@@ -29,7 +30,7 @@ export async function createAllowance(data: CreateAllowanceInput) {
     .from('allowances')
     .insert({
       ...validated,
-      uploaded_by: user.id,
+      uploaded_by: userId,
       status: 'uploaded',
     })
     .select()
@@ -108,11 +109,9 @@ export async function updateAllowance(allowanceId: string, data: UpdateAllowance
 export async function extractAllowanceDataAction(allowanceId: string) {
   const supabase = await createClient();
 
-  // Get current user
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Unauthorized");
+  // Get current user (getClaims is more performant than getUser)
+  const { data: claimsData } = await supabase.auth.getClaims();
+  if (!claimsData?.claims?.sub) throw new Error("Unauthorized");
 
   // Fetch allowance record
   const { data: allowance, error: fetchError } = await supabase

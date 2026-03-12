@@ -370,7 +370,7 @@ async function processInvoiceExcelFile(
             storage_path: storagePath,
             filename: filename,
             in_or_out: inOrOut,
-            status: 'uploaded',
+            status: inOrOut === 'out' ? 'confirmed' : 'uploaded',
             extracted_data: extractedData as unknown as Json,
             year_month: rocPeriod.toString(),
             tax_filing_period_id: filingPeriodId,
@@ -589,7 +589,7 @@ function parseAllowanceFromRows(
     allowance_serial_code: serialCode,
     original_invoice_serial_code: originalSerialCode,
     in_or_out: inOrOut,
-    status: 'uploaded',
+    status: 'confirmed',
     uploaded_by: userId,
     extracted_data: extractedData as unknown as Json,
   };

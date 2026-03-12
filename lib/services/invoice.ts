@@ -17,7 +17,7 @@ import { getAccountListString } from "@/lib/services/account";
 import { type Json, type TablesUpdate } from "@/supabase/database.types";
 import { type ExtractedInvoiceData } from "@/lib/domain/models";
 import { ensurePeriodEditable } from "@/lib/services/tax-period";
-import { getMimeType } from "@/lib/utils/mime-type";
+import { getImportFileMimeType } from "@/lib/utils/mime-type";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 async function saveExtractedInvoiceData(
@@ -233,7 +233,7 @@ export async function getInvoicesByClient(clientId: string) {
  */
 /**
  * Core invoice extraction logic that accepts a pre-built Supabase client.
- * Used by both the server action (user-scoped) and the Edge Function worker (service role).
+ * Used by the server action wrapper (user-scoped).
  */
 export async function extractInvoiceCore(
   invoiceId: string,
@@ -341,7 +341,7 @@ export async function extractInvoiceCore(
     // Convert Blob to ArrayBuffer
     const arrayBuffer = await fileData.arrayBuffer();
 
-    const mimeType = getMimeType(fileData, invoice.filename);
+    const mimeType = getImportFileMimeType(fileData, invoice.filename);
 
     // Convert in_or_out to Chinese format
     const inOrOut = invoice.in_or_out === "in" ? "進項" : "銷項";

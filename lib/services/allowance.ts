@@ -12,8 +12,9 @@ import {
 import { type Json, type TablesUpdate } from "@/supabase/database.types";
 import { tryLinkOriginalInvoice } from "@/lib/services/invoice-import";
 import { extractAllowanceData, type ClientInfo } from "@/lib/services/gemini";
-import { getMimeType } from "@/lib/utils/mime-type";
+import { getImportFileMimeType } from "@/lib/utils/mime-type";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { ensurePeriodEditable } from "@/lib/services/tax-period";
 
 /**
  * Create an allowance record
@@ -177,7 +178,7 @@ export async function extractAllowanceCore(
     // Convert Blob to ArrayBuffer
     const arrayBuffer = await fileData.arrayBuffer();
 
-    const mimeType = getMimeType(fileData, allowance.filename || "");
+    const mimeType = getImportFileMimeType(fileData, allowance.filename || "");
 
     const extractedData = await extractAllowanceData(
       arrayBuffer,
@@ -238,6 +239,22 @@ export async function extractAllowanceDataAction(allowanceId: string) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
+
+  // Fetch allowance with period info to check period lock
+  const { data: allowance, error: fetchError } = await supabase
+    .from("allowances")
+    .select("client_id, tax_filing_periods(year_month)")
+    .eq("id", allowanceId)
+    .single();
+
+  if (fetchError) throw fetchError;
+  if (!allowance) throw new Error("Allowance not found");
+
+  // Check if period is locked (AI extraction modifies allowance data)
+  const yearMonth = allowance.tax_filing_periods?.year_month;
+  if (yearMonth && allowance.client_id) {
+    await ensurePeriodEditable(allowance.client_id, yearMonth);
+  }
 
   return await extractAllowanceCore(allowanceId, supabase);
 }

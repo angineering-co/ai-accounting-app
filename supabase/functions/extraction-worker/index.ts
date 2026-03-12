@@ -88,6 +88,19 @@ interface GeminiResponse {
   }>;
 }
 
+// ─── Base64 helper ──────────────────────────────────────────────────────────
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  const CHUNK_SIZE = 8192;
+  const parts: string[] = [];
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    const chunk = bytes.subarray(i, Math.min(i + CHUNK_SIZE, bytes.length));
+    parts.push(String.fromCharCode(...chunk));
+  }
+  return btoa(parts.join(""));
+}
+
 // ─── Gemini API helpers ─────────────────────────────────────────────────────
 
 function getGeminiApiUrl(): string {
@@ -196,9 +209,7 @@ async function extractInvoice(
   if (!fileData) throw new Error("Invoice file not found in storage");
 
   const arrayBuffer = await fileData.arrayBuffer();
-  const base64Data = btoa(
-    new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ""),
-  );
+  const base64Data = arrayBufferToBase64(arrayBuffer);
   const mimeType = getMimeType(fileData.type, invoice.filename);
   const inOrOut = invoice.in_or_out === "in" ? "進項" : "銷項";
 
@@ -398,9 +409,7 @@ async function extractAllowance(
   if (!fileData) throw new Error("Allowance file not found in storage");
 
   const arrayBuffer = await fileData.arrayBuffer();
-  const base64Data = btoa(
-    new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ""),
-  );
+  const base64Data = arrayBufferToBase64(arrayBuffer);
   const mimeType = getMimeType(fileData.type, allowance.filename || "");
 
   const prompt = buildAllowancePrompt(clientInfo);

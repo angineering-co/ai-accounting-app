@@ -235,6 +235,7 @@ export function InvoiceReviewDialog({
   }, [totalSales, tax, totalAmount]);
 
   const dateValue = form.watch("date");
+  const inOrOutValue = form.watch("inOrOut");
 
   const isPeriodMismatch = useMemo(() => {
     if (!invoice?.year_month || !dateValue) return false;
@@ -246,11 +247,18 @@ export function InvoiceReviewDialog({
       if (isNaN(dateObj.getTime())) return false;
 
       const datePeriod = RocPeriod.fromDate(dateObj);
+
+      // Input invoices (進項) can be reported in any period on or after
+      // the invoice date (tax law allows deferred reporting).
+      // Output invoices (銷項) must match the exact period.
+      if (inOrOutValue === "進項") {
+        return invoice.year_month < datePeriod.toString();
+      }
       return !invoicePeriod.equals(datePeriod);
     } catch {
       return false;
     }
-  }, [invoice?.year_month, dateValue]);
+  }, [invoice?.year_month, dateValue, inOrOutValue]);
 
   const selectedInvoiceDate = useMemo(
     () => parseNormalizedDate(dateValue),

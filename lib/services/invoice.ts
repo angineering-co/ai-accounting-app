@@ -71,9 +71,10 @@ async function saveExtractedInvoiceData(
 export async function createInvoice(data: CreateInvoiceInput) {
   const supabase = await createClient();
   
-  // Get current user
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Unauthorized');
+  // Get current user (getClaims is more performant than getUser)
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const userId = claimsData?.claims?.sub;
+  if (!userId) throw new Error('Unauthorized');
 
   // Validate input
   const validated = createInvoiceSchema.parse(data);
@@ -88,7 +89,7 @@ export async function createInvoice(data: CreateInvoiceInput) {
     .from('invoices')
     .insert({
       ...validated,
-      uploaded_by: user.id,
+      uploaded_by: userId,
       status: 'uploaded',
     })
     .select()
@@ -231,11 +232,9 @@ export async function getInvoicesByClient(clientId: string) {
 export async function extractInvoiceDataAction(invoiceId: string) {
   const supabase = await createClient();
 
-  // Get current user
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Unauthorized");
+  // Get current user (getClaims is more performant than getUser)
+  const { data: claimsData } = await supabase.auth.getClaims();
+  if (!claimsData?.claims?.sub) throw new Error("Unauthorized");
 
   // Fetch invoice record
   const { data: invoice, error: fetchError } = await supabase

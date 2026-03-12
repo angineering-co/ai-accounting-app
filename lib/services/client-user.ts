@@ -13,18 +13,17 @@ type ClientUserSummary = {
 
 async function requireFirmManager() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const userId = claimsData?.claims?.sub;
 
-  if (!user) {
+  if (!userId) {
     throw new Error("Unauthorized");
   }
 
   const { data: profile, error } = await supabase
     .from("profiles")
     .select("id, firm_id, role")
-    .eq("id", user.id)
+    .eq("id", userId)
     .single();
 
   if (error || !profile) {
@@ -36,7 +35,7 @@ async function requireFirmManager() {
     throw new Error("Insufficient permissions");
   }
 
-  return { supabase, user, profile };
+  return { supabase, profile };
 }
 
 /**

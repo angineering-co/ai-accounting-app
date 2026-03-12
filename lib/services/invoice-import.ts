@@ -87,12 +87,9 @@ export async function processElectronicInvoiceFile(
     const buffer = Buffer.from(await fileData.arrayBuffer());
     let userId = options?.userId;
     if (!userId) {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) throw new Error("Unauthorized");
-      userId = user.id;
+      const { data: claimsData } = await supabase.auth.getClaims();
+      userId = claimsData?.claims?.sub;
+      if (!userId) throw new Error("Unauthorized");
     }
 
     const period = await getTaxPeriodByYYYMM(clientId, filingYearMonth, { supabaseClient: supabase });

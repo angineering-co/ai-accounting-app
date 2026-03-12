@@ -12,6 +12,7 @@
 // Setup type definitions for built-in Supabase Runtime APIs
 import "@supabase/functions-js/edge-runtime.d.ts"
 import { createClient } from "npm:@supabase/supabase-js@2"
+import { encodeBase64 } from "jsr:@std/encoding@^1/base64"
 
 const BATCH_SIZE = 5;
 const CONCURRENCY_LIMIT = 2;
@@ -86,19 +87,6 @@ interface GeminiResponse {
       parts: Array<{ text: string }>;
     };
   }>;
-}
-
-// ─── Base64 helper ──────────────────────────────────────────────────────────
-
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  const CHUNK_SIZE = 8192;
-  const parts: string[] = [];
-  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
-    const chunk = bytes.subarray(i, Math.min(i + CHUNK_SIZE, bytes.length));
-    parts.push(String.fromCharCode(...chunk));
-  }
-  return btoa(parts.join(""));
 }
 
 // ─── Gemini API helpers ─────────────────────────────────────────────────────
@@ -186,16 +174,19 @@ async function extractInvoice(
   if (invoice.extracted_data) {
     const ed = invoice.extracted_data as Record<string, unknown>;
     if (ed.invoiceType === "電子發票" && ed.source === "import-excel") {
+      console.log(`[invoice] ${invoiceId}: import-excel shortcut (${ed.inOrOut})`);
       let account: string;
       if (ed.inOrOut === "銷項") {
         account = "4101 營業收入";
       } else {
         // Call Gemini for account determination
+        const t0 = Date.now();
         account = await determineAccount(
           (ed.summary as string) || "",
           clientInfo,
           accountListString,
         );
+        console.log(`[invoice] ${invoiceId}: account determination took ${Date.now() - t0}ms`);
       }
       await saveInvoiceResult(supabase, invoiceId, { ...ed, account });
       return;
@@ -203,13 +194,17 @@ async function extractInvoice(
   }
 
   // Download file from storage
+  const dlStart = Date.now();
   const { data: fileData, error: dlErr } = await supabase.storage
     .from("invoices").download(invoice.storage_path);
   if (dlErr) throw new Error(`Failed to download: ${dlErr.message}`);
   if (!fileData) throw new Error("Invoice file not found in storage");
 
   const arrayBuffer = await fileData.arrayBuffer();
-  const base64Data = arrayBufferToBase64(arrayBuffer);
+  const fileSizeKB = Math.round(arrayBuffer.byteLength / 1024);
+  console.log(`[invoice] ${invoiceId}: downloaded ${fileSizeKB}KB in ${Date.now() - dlStart}ms`);
+
+  const base64Data = encodeBase64(arrayBuffer);
   const mimeType = getMimeType(fileData.type, invoice.filename);
   const inOrOut = invoice.in_or_out === "in" ? "進項" : "銷項";
 
@@ -224,7 +219,9 @@ async function extractInvoice(
     generationConfig: { response_mime_type: "application/json" },
   };
 
+  const geminiStart = Date.now();
   const responseText = await callGemini(payload);
+  console.log(`[invoice] ${invoiceId}: Gemini call took ${Date.now() - geminiStart}ms`);
   const extractedData = JSON.parse(responseText);
 
   // Normalize account string
@@ -403,13 +400,17 @@ async function extractAllowance(
     throw new Error("Allowance storage path is missing");
   }
 
+  const dlStart = Date.now();
   const { data: fileData, error: dlErr } = await supabase.storage
     .from("invoices").download(allowance.storage_path);
   if (dlErr) throw new Error(`Failed to download: ${dlErr.message}`);
   if (!fileData) throw new Error("Allowance file not found in storage");
 
   const arrayBuffer = await fileData.arrayBuffer();
-  const base64Data = arrayBufferToBase64(arrayBuffer);
+  const fileSizeKB = Math.round(arrayBuffer.byteLength / 1024);
+  console.log(`[allowance] ${allowanceId}: downloaded ${fileSizeKB}KB in ${Date.now() - dlStart}ms`);
+
+  const base64Data = encodeBase64(arrayBuffer);
   const mimeType = getMimeType(fileData.type, allowance.filename || "");
 
   const prompt = buildAllowancePrompt(clientInfo);
@@ -423,7 +424,9 @@ async function extractAllowance(
     generationConfig: { response_mime_type: "application/json" },
   };
 
+  const geminiStart = Date.now();
   const responseText = await callGemini(payload);
+  console.log(`[allowance] ${allowanceId}: Gemini call took ${Date.now() - geminiStart}ms`);
   const extractedData = JSON.parse(responseText);
 
   // Add source
@@ -503,6 +506,8 @@ async function processOneMessage(
   queue: any,
 ): Promise<ProcessResult> {
   const { entity_type, entity_id } = msg.message;
+  const startTime = Date.now();
+  console.log(`[process] Starting ${entity_type} ${entity_id} (attempt ${msg.read_ct}/${MAX_READ_COUNT})`);
 
   try {
     // Update entity status to processing (may already be processing from bulk enqueue)
@@ -516,6 +521,9 @@ async function processOneMessage(
       await extractAllowance(supabase, entity_id);
     }
 
+    const elapsed = Date.now() - startTime;
+    console.log(`[process] Completed ${entity_type} ${entity_id} in ${elapsed}ms`);
+
     // Success: archive the message
     await queue.rpc("archive", {
       queue_name: "extraction_jobs",
@@ -523,11 +531,13 @@ async function processOneMessage(
     });
     return { success: true };
   } catch (error) {
+    const elapsed = Date.now() - startTime;
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(`Failed to process ${entity_type} ${entity_id}:`, errorMessage);
+    console.error(`[process] Failed ${entity_type} ${entity_id} after ${elapsed}ms:`, errorMessage);
 
     if (msg.read_ct >= MAX_READ_COUNT) {
       // Max retries exceeded — mark as failed and archive
+      console.error(`[process] Max retries exceeded for ${entity_type} ${entity_id}, marking as failed`);
       const table = entity_type === "invoice" ? "invoices" : "allowances";
       await supabase.from(table).update({ status: "failed" }).eq("id", entity_id);
 
@@ -536,9 +546,8 @@ async function processOneMessage(
         message_id: msg.msg_id,
       });
     } else {
-      // Will retry after visibility timeout expires
       console.log(
-        `Will retry ${entity_type} ${entity_id} (attempt ${msg.read_ct}/${MAX_READ_COUNT})`,
+        `[process] Will retry ${entity_type} ${entity_id} (attempt ${msg.read_ct}/${MAX_READ_COUNT})`,
       );
     }
     return { success: false };
@@ -546,6 +555,7 @@ async function processOneMessage(
 }
 
 Deno.serve(async (req) => {
+  const invocationStart = Date.now();
   try {
     // Verify authorization
     const authHeader = req.headers.get("Authorization");
@@ -565,6 +575,7 @@ Deno.serve(async (req) => {
 
     // Read batch from pgmq queue
     const queue = supabase.schema("pgmq_public");
+    const queueReadStart = Date.now();
     const { data: messages, error: readError } = await queue.rpc("read", {
       queue_name: "extraction_jobs",
       sleep_seconds: VISIBILITY_TIMEOUT,
@@ -572,7 +583,7 @@ Deno.serve(async (req) => {
     });
 
     if (readError) {
-      console.error("Failed to read from queue:", readError);
+      console.error("[worker] Failed to read from queue:", readError);
       return new Response(
         JSON.stringify({ error: readError.message }),
         { status: 500, headers: { "Content-Type": "application/json" } },
@@ -586,13 +597,19 @@ Deno.serve(async (req) => {
       );
     }
 
+    const typedMessages = messages as PgmqMessage[];
+    console.log(`[worker] Read ${typedMessages.length} messages from queue in ${Date.now() - queueReadStart}ms (batch=${BATCH_SIZE}, concurrency=${CONCURRENCY_LIMIT})`);
+
     let processed = 0;
     let failed = 0;
-    const typedMessages = messages as PgmqMessage[];
 
     // Process messages in parallel, chunked by CONCURRENCY_LIMIT
     for (let i = 0; i < typedMessages.length; i += CONCURRENCY_LIMIT) {
+      const chunkIndex = Math.floor(i / CONCURRENCY_LIMIT) + 1;
+      const totalChunks = Math.ceil(typedMessages.length / CONCURRENCY_LIMIT);
       const chunk = typedMessages.slice(i, i + CONCURRENCY_LIMIT);
+      console.log(`[worker] Processing chunk ${chunkIndex}/${totalChunks} (${chunk.length} messages)`);
+
       const results = await Promise.allSettled(
         chunk.map((msg) => processOneMessage(msg, supabase, queue)),
       );
@@ -606,12 +623,16 @@ Deno.serve(async (req) => {
       }
     }
 
+    const totalElapsed = Date.now() - invocationStart;
+    console.log(`[worker] Done: ${processed} processed, ${failed} failed, ${totalElapsed}ms total`);
+
     return new Response(
       JSON.stringify({ processed, failed, total: messages.length }),
       { status: 200, headers: { "Content-Type": "application/json" } },
     );
   } catch (error) {
-    console.error("Worker error:", error);
+    const totalElapsed = Date.now() - invocationStart;
+    console.error(`[worker] Unhandled error after ${totalElapsed}ms:`, error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { "Content-Type": "application/json" } },

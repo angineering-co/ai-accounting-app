@@ -46,16 +46,12 @@ The bulk AI extraction feature uses pgmq. After Supabase starts, you must expose
 1. Open **Supabase Studio** → http://localhost:54323
 2. Go to **Integrations** → **Queues**
 3. Click **"Expose Queues via PostgREST"**
-4. Edit `supabase/config.toml` — add `"pgmq_public"` to the schemas list:
-   ```toml
-   schemas = ["public", "graphql_public", "pgmq_public"]
-   ```
-5. Restart Supabase:
+4. Restart Supabase:
    ```bash
    npm run supabase:stop && npm run supabase:start
    ```
 
-> **Note**: This step is required after every `supabase db reset` since it recreates the database from scratch.
+> **Note**: `config.toml` already includes `pgmq_public` in the schemas list. You only need to do the Studio toggle + restart. This step is required after every `supabase db reset` since it recreates the database from scratch.
 
 ### 5. Serve the Edge Function (for bulk AI extraction)
 

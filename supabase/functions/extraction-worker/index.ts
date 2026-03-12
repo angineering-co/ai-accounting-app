@@ -13,8 +13,8 @@
 import "@supabase/functions-js/edge-runtime.d.ts"
 import { createClient } from "npm:@supabase/supabase-js@2"
 
-const BATCH_SIZE = 20;
-const CONCURRENCY_LIMIT = 10;
+const BATCH_SIZE = 5;
+const CONCURRENCY_LIMIT = 2;
 const VISIBILITY_TIMEOUT = 120; // seconds
 const MAX_READ_COUNT = 3;
 const GEMINI_MODEL = "gemini-2.5-flash";

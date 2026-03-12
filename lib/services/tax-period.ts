@@ -113,6 +113,7 @@ export async function updateTaxPeriodStatus(
   return taxFilingPeriodSchema.parse(data);
 }
 
+// TODO: use period_id instead of clientId + yearMonth to check period lock
 export async function ensurePeriodEditable(
   clientId: string,
   yearMonth: string,

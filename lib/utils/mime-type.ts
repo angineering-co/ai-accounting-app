@@ -2,7 +2,7 @@
  * Get MIME type from a Blob and filename.
  * Prefers the Blob's content-type if valid, falls back to extension-based detection.
  */
-export function getMimeType(blob: Blob, filename: string): string {
+export function getImportFileMimeType(blob: Blob, filename: string): string {
   // First, try to use the Blob's content-type if available and valid
   if (blob.type && blob.type !== "application/octet-stream") {
     const supportedTypes = [

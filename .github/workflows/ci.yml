@@ -25,14 +25,7 @@ jobs:
           version: latest
 
       - name: Start Supabase
-        run: supabase start -x studio,imgproxy,edge-runtime,pooler || true
-
-      - name: Create pgmq_public schema
-        run: |
-          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
-            -c "CREATE SCHEMA IF NOT EXISTS pgmq_public; GRANT USAGE ON SCHEMA pgmq_public TO postgres, anon, authenticated, service_role;"
-          docker restart supabase_rest_supabase
-          sleep 2
+        run: supabase start -x studio,imgproxy,edge-runtime,pooler
 
       - name: Export Supabase env
         run: |

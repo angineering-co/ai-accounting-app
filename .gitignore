@@ -45,3 +45,8 @@ next-env.d.ts
 
 # npm
 .npm-cache
+
+# playwright
+tests/e2e/.auth/
+test-results/
+playwright-report/

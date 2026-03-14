@@ -145,19 +145,6 @@ const invoiceReviewFormSchema = z
       .optional(),
     source: z.enum(["import-excel"]).optional(),
   })
-  .superRefine((data, ctx) => {
-    const buyerName = data.buyerName?.trim() || "";
-    const buyerTaxId = data.buyerTaxId?.trim() || "";
-    const isConsumer = buyerName === "" || buyerName === "0000000000";
-
-    if (!buyerTaxId && !isConsumer) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["buyerTaxId"],
-        message: "買方名稱非空白或 0000000000 時，需填寫買方統編",
-      });
-    }
-  })
   .passthrough();
 
 type InvoiceReviewFormValues = z.infer<typeof invoiceReviewFormSchema>;
@@ -194,6 +181,8 @@ export function InvoiceReviewDialog({
     rows: unknown[][];
   } | null>(null);
   const [linkedAllowances, setLinkedAllowances] = useState<Allowance[]>([]);
+  const [localConfirmed, setLocalConfirmed] = useState(false);
+  const [hasEdited, setHasEdited] = useState(false);
   const supabase = createClient();
 
   const form = useForm<InvoiceReviewFormValues>({
@@ -265,42 +254,63 @@ export function InvoiceReviewDialog({
     [dateValue],
   );
 
+  const watchedAccount = form.watch("account");
+  const isNonDeductible = (() => {
+    if (!watchedAccount) return false;
+    const code = watchedAccount.split(" ")[0];
+    const info = ACCOUNTS[code as keyof typeof ACCOUNTS];
+    return info ? !info.deductible : false;
+  })();
+
   const isConfirmDisabled = useMemo(() => {
+    const alreadyConfirmed =
+      localConfirmed || invoice?.status === "confirmed";
+
+    if (alreadyConfirmed && hasEdited) {
+      return !form.formState.isValid || isMathError || isPeriodMismatch;
+    }
+
     return (
-      invoice?.status === "confirmed" || // Already confirmed
+      alreadyConfirmed ||
       !form.formState.isValid ||
       isMathError ||
       isPeriodMismatch
     );
-  }, [form.formState.isValid, isMathError, isPeriodMismatch, invoice?.status]);
+  }, [localConfirmed, hasEdited, form.formState.isValid, isMathError, isPeriodMismatch, invoice?.status]);
 
   const confirmDisabledReason = useMemo(() => {
     if (isLocked) return "此發票目前已被鎖定，無法修改";
-    if (invoice?.status === "confirmed") return "此發票已確認";
-    if (typeof form.formState.errors.invoiceSerialCode?.message === "string")
-      return form.formState.errors.invoiceSerialCode.message;
-    if (typeof form.formState.errors.date?.message === "string")
-      return form.formState.errors.date.message;
-    if (typeof form.formState.errors.totalSales?.message === "string")
-      return form.formState.errors.totalSales.message;
-    if (typeof form.formState.errors.sellerTaxId?.message === "string")
-      return form.formState.errors.sellerTaxId.message;
-    if (typeof form.formState.errors.buyerTaxId?.message === "string")
-      return form.formState.errors.buyerTaxId.message;
-    if (typeof form.formState.errors.account?.message === "string")
-      return form.formState.errors.account.message;
+
+    const alreadyConfirmed =
+      localConfirmed || invoice?.status === "confirmed";
+    if (alreadyConfirmed && !hasEdited) return "此發票已確認";
+
+    const fieldOrder = [
+      "invoiceSerialCode",
+      "date",
+      "totalSales",
+      "sellerTaxId",
+      "buyerTaxId",
+      "account",
+    ] as const;
+
+    for (const field of fieldOrder) {
+      const msg = (form.formState.errors as Record<string, { message?: string }>)[field]?.message;
+      if (typeof msg === "string") return msg;
+    }
+
     if (isMathError) return "銷售額 + 稅額 不等於 總計";
     if (isPeriodMismatch) return "日期與期別不符";
     if (!form.formState.isValid) return "請修正欄位錯誤";
     return null;
-  }, [
-    isLocked,
-    invoice?.status,
-    form.formState.errors,
-    form.formState.isValid,
-    isMathError,
-    isPeriodMismatch,
-  ]);
+  }, [isLocked, localConfirmed, hasEdited, invoice?.status, form.formState.errors, form.formState.isValid, isMathError, isPeriodMismatch]);
+
+  // Reset localConfirmed when user edits a field after confirming via Shift+Enter
+  useEffect(() => {
+    if (hasEdited && localConfirmed) {
+      setLocalConfirmed(false);
+    }
+  }, [hasEdited, localConfirmed]);
 
   const getConfidenceStyle = (fieldName: string) => {
     const confidence = form.getValues("confidence");
@@ -312,6 +322,7 @@ export function InvoiceReviewDialog({
   };
 
   const clearConfidence = (fieldName: string) => {
+    setHasEdited(true);
     const currentConfidence = form.getValues("confidence");
     if (
       currentConfidence &&
@@ -330,20 +341,23 @@ export function InvoiceReviewDialog({
       setZoom(1);
       setPan({ x: 0, y: 0 });
       setIsPanMode(false);
+      setLocalConfirmed(false);
+      setHasEdited(false);
       // Use the extracted_data directly, ensuring all fields are properly mapped
       const extractedData = invoice.extracted_data || {};
 
-      // Determine initial deductible based on account if available
-      let initialDeductible = extractedData.deductible || false;
+      // Determine initial deductible based on account and DB value
+      let initialDeductible = extractedData.deductible ?? false;
       if (extractedData.account) {
         const accountCode = extractedData.account.split(" ")[0];
-        if (ACCOUNTS[accountCode as keyof typeof ACCOUNTS]) {
-          initialDeductible =
-            ACCOUNTS[accountCode as keyof typeof ACCOUNTS].deductible;
+        const accountInfo = ACCOUNTS[accountCode as keyof typeof ACCOUNTS];
+        if (accountInfo && !accountInfo.deductible) {
+          initialDeductible = false;
         }
       }
 
       form.reset({
+        ...extractedData, // Spread first so explicit fields below take precedence
         invoiceSerialCode: extractedData.invoiceSerialCode || "",
         date: normalizeDateInput(extractedData.date) || "",
         totalSales: extractedData.totalSales ?? 0,
@@ -361,7 +375,6 @@ export function InvoiceReviewDialog({
         inOrOut:
           extractedData.inOrOut ||
           (invoice.in_or_out === "in" ? "進項" : "銷項"),
-        ...extractedData, // Include any additional fields
       } as InvoiceReviewFormValues);
 
       // Get signed URL or text content for preview
@@ -465,6 +478,10 @@ export function InvoiceReviewDialog({
           status: status,
           in_or_out: inOrOutValue,
         });
+        if (status === "confirmed") {
+          setLocalConfirmed(true);
+        }
+        setHasEdited(false);
         toast.success(status === "confirmed" ? "發票已確認" : "變更已儲存");
 
         if (shouldClose) {
@@ -1304,6 +1321,7 @@ export function InvoiceReviewDialog({
                       <FormControl>
                         <Select
                           value={field.value ? "true" : "false"}
+                          disabled={isNonDeductible}
                           onValueChange={(value) => {
                             field.onChange(value === "true");
                             clearConfidence("deductible");

@@ -127,19 +127,6 @@ const allowanceReviewFormSchema = z
       .optional(),
     source: z.enum(["scan", "import-excel"]).optional(),
   })
-  .superRefine((data, ctx) => {
-    const buyerName = data.buyerName?.trim() || "";
-    const buyerTaxId = data.buyerTaxId?.trim() || "";
-    const isConsumer = buyerName === "" || buyerName === "0000000000";
-
-    if (!buyerTaxId && !isConsumer) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["buyerTaxId"],
-        message: "買方名稱非空白或 0000000000 時，需填寫買方統編",
-      });
-    }
-  })
   .passthrough();
 
 type AllowanceReviewFormValues = z.infer<typeof allowanceReviewFormSchema>;

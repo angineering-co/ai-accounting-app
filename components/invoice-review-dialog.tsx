@@ -255,34 +255,34 @@ export function InvoiceReviewDialog({
   );
 
   const watchedAccount = form.watch("account");
-  const isNonDeductible = (() => {
+  const isNonDeductible = useMemo(() => {
     if (!watchedAccount) return false;
     const code = watchedAccount.split(" ")[0];
     const info = ACCOUNTS[code as keyof typeof ACCOUNTS];
     return info ? !info.deductible : false;
-  })();
+  }, [watchedAccount]);
 
   const isConfirmDisabled = useMemo(() => {
-    const alreadyConfirmed =
-      localConfirmed || invoice?.status === "confirmed";
+    const alreadyConfirmed = localConfirmed || invoice?.status === "confirmed";
 
-    if (alreadyConfirmed && hasEdited) {
-      return !form.formState.isValid || isMathError || isPeriodMismatch;
+    if (alreadyConfirmed && !hasEdited) {
+      return true;
     }
 
-    return (
-      alreadyConfirmed ||
-      !form.formState.isValid ||
-      isMathError ||
-      isPeriodMismatch
-    );
-  }, [localConfirmed, hasEdited, form.formState.isValid, isMathError, isPeriodMismatch, invoice?.status]);
+    return !form.formState.isValid || isMathError || isPeriodMismatch;
+  }, [
+    localConfirmed,
+    hasEdited,
+    form.formState.isValid,
+    isMathError,
+    isPeriodMismatch,
+    invoice?.status,
+  ]);
 
   const confirmDisabledReason = useMemo(() => {
     if (isLocked) return "此發票目前已被鎖定，無法修改";
 
-    const alreadyConfirmed =
-      localConfirmed || invoice?.status === "confirmed";
+    const alreadyConfirmed = localConfirmed || invoice?.status === "confirmed";
     if (alreadyConfirmed && !hasEdited) return "此發票已確認";
 
     const fieldOrder = [
@@ -295,7 +295,9 @@ export function InvoiceReviewDialog({
     ] as const;
 
     for (const field of fieldOrder) {
-      const msg = (form.formState.errors as Record<string, { message?: string }>)[field]?.message;
+      const msg = (
+        form.formState.errors as Record<string, { message?: string }>
+      )[field]?.message;
       if (typeof msg === "string") return msg;
     }
 
@@ -303,7 +305,16 @@ export function InvoiceReviewDialog({
     if (isPeriodMismatch) return "日期與期別不符";
     if (!form.formState.isValid) return "請修正欄位錯誤";
     return null;
-  }, [isLocked, localConfirmed, hasEdited, invoice?.status, form.formState.errors, form.formState.isValid, isMathError, isPeriodMismatch]);
+  }, [
+    isLocked,
+    localConfirmed,
+    hasEdited,
+    invoice?.status,
+    form.formState.errors,
+    form.formState.isValid,
+    isMathError,
+    isPeriodMismatch,
+  ]);
 
   // Reset localConfirmed when user edits a field after confirming via Shift+Enter
   useEffect(() => {

@@ -748,8 +748,8 @@ async function linkAllowancesToInvoices(
   let linkedCount = 0;
   for (const [invoiceId, allowanceIdsToUpdate] of invoiceIdToAllowanceIds) {
     try {
-      for (let i = 0; i < allowanceIdsToUpdate.length; i += CHUNK_SIZE_QUERY) {
-        const chunk = allowanceIdsToUpdate.slice(i, i + CHUNK_SIZE_QUERY);
+      for (let i = 0; i < allowanceIdsToUpdate.length; i += DEFAULT_CHUNK_SIZE_QUERY) {
+        const chunk = allowanceIdsToUpdate.slice(i, i + DEFAULT_CHUNK_SIZE_QUERY);
         const { error } = await supabase
           .from('allowances')
           .update({ original_invoice_id: invoiceId })
@@ -757,7 +757,8 @@ async function linkAllowancesToInvoices(
         if (error) throw error;
       }
       linkedCount += allowanceIdsToUpdate.length;
-    } catch {
+    } catch (error) {
+      console.error(`Failed to link allowances for invoice ${invoiceId}:`, error);
       unlinkedCount += allowanceIdsToUpdate.length;
     }
   }

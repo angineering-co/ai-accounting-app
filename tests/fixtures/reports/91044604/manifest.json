@@ -1,0 +1,23 @@
+{
+  "clientId": "fc140f10-7743-4ab0-b7f8-e73d21afbeef",
+  "reportPeriod": "11501",
+  "description": "",
+  "tetUConfig": {
+    "fileNumber": "",
+    "taxPayerId": "490934720",
+    "consolidatedDeclarationCode": "0",
+    "declarationCode": "1",
+    "midYearClosureTaxPayable": 0,
+    "previousPeriodCarryForwardTax": 196457,
+    "midYearClosureTaxRefundable": 0,
+    "declarationType": "1",
+    "countyCity": "臺中市",
+    "declarationMethod": "2",
+    "declarerId": "          ",
+    "declarerName": "黃勝平",
+    "declarerPhoneAreaCode": "04",
+    "declarerPhone": "23758628",
+    "declarerPhoneExtension": "",
+    "agentRegistrationNumber": "104台財稅登字第4656號                             "
+  }
+}

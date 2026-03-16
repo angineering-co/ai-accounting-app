@@ -880,9 +880,9 @@ function aggregateInvoiceData(
 
   // 銷項統一發票之買受人為非營業人者，其發票所載金額應含營業稅額，於填寫申報書時，再彙總依下列公 式計算應申報之銷售額與稅額。 
   // 銷項稅額 = 當期開立統一發票總額 ÷（１+ 徵收率）× 徵收率（四捨五入）
-  const totalTaxWithoutBuyerId = Math.round(totalSalesWithoutBuyerTaxId / 1.05 * 0.05);
-  result.output.cashRegisterAndElectronic.sales -= totalTaxWithoutBuyerId;
-  result.output.cashRegisterAndElectronic.tax += totalTaxWithoutBuyerId;
+  const embeddedOutputTax = Math.round(totalSalesWithoutBuyerTaxId * (0.05 / 1.05));
+  result.output.cashRegisterAndElectronic.sales -= embeddedOutputTax;
+  result.output.cashRegisterAndElectronic.tax += embeddedOutputTax;
 
   // Calculate totals for output
   result.output.totalSales = result.output.triplicate.sales + 
@@ -903,49 +903,36 @@ function aggregateInvoiceData(
   // Only deductible input invoices are included
   const inputInvoices = invoices.filter(inv => inv.inOrOut === '進項').filter(inv => inv.deductible);
   inputInvoices.forEach(inv => {
-    const isFixedAsset = inv.summary && (inv.summary.includes('固定資產') || inv.summary.includes('設備'))
+    // TODO: Fixed asset (固定資產) classification is not implemented yet.
+    // Fixed asset input invoices require separate report columns (固定資產 fields in TET_U).
+    // In practice these are rare; for now all input invoices are treated as 進貨及費用.
     const sales = Math.round(inv.totalSales || 0);
     const tax = Math.round(inv.tax || 0);
-
-    // Safety check for invoiceType
     const invoiceType = inv.invoiceType || '';
 
     if (inv.taxType === '應稅') {
-      // Categorize by invoice type
       if (invoiceType === '手開三聯式') {
-        if (isFixedAsset) {
-          result.input.triplicate.fixedAssets += sales;
-          result.input.triplicate.fixedAssetsTax += tax;
-        } else {
-          result.input.triplicate.purchasesAndExpenses += sales;
-          result.input.triplicate.purchasesAndExpensesTax += tax;
-        }
-      } else if (invoiceType === '電子發票' || (invoiceType === '三聯式收銀機')) {
-        if (isFixedAsset) {
-          result.input.cashRegisterAndElectronic.fixedAssets += sales;
-          result.input.cashRegisterAndElectronic.fixedAssetsTax += tax;
-        } else {
-          result.input.cashRegisterAndElectronic.purchasesAndExpenses += sales;
-          result.input.cashRegisterAndElectronic.purchasesAndExpensesTax += tax;
-        }
+        result.input.triplicate.purchasesAndExpenses += sales;
+        result.input.triplicate.purchasesAndExpensesTax += tax;
+      } else if (invoiceType === '電子發票' || invoiceType === '三聯式收銀機') {
+        result.input.cashRegisterAndElectronic.purchasesAndExpenses += sales;
+        result.input.cashRegisterAndElectronic.purchasesAndExpensesTax += tax;
       } else if (invoiceType.includes('二聯式')) {
-        if (isFixedAsset) {
-          result.input.otherCertificates.fixedAssets += sales;
-          result.input.otherCertificates.fixedAssetsTax += tax;
-        } else {
-          result.input.otherCertificates.purchasesAndExpenses += sales;
-          result.input.otherCertificates.purchasesAndExpensesTax += tax;
-        }
+        result.input.otherCertificates.purchasesAndExpenses += sales;
+        result.input.otherCertificates.purchasesAndExpensesTax += tax;
       }
-
-      // Add to total (all input amounts including non-deductible)
-      if (isFixedAsset) {
-        result.input.totalFixedAssetsAll += sales;
-      } else {
-        result.input.totalPurchasesAndExpensesAll += sales;
-      }
+      result.input.totalPurchasesAndExpensesAll += sales;
     }
   });
+
+  // 二聯式收銀機統一發票及員工出差取得運輸事業開立 之火（汽）車、高鐵、船舶、飛機等收據或票根之進 項憑證，銷售額應內含營業稅額，
+  // 填寫申報書時再彙 總依下列公式計算進項稅額。 進項稅額 = 憑證總計金額 ×（徵收率÷（１＋ 徵收 率））
+  const embeddedInputTax = Math.round(
+    result.input.otherCertificates.purchasesAndExpenses * (0.05 / 1.05)
+  );
+  result.input.otherCertificates.purchasesAndExpenses -= embeddedInputTax;
+  result.input.otherCertificates.purchasesAndExpensesTax += embeddedInputTax;
+  result.input.totalPurchasesAndExpensesAll -= embeddedInputTax;
   
   // Calculate totals for input
   result.input.totalPurchasesAndExpenses = result.input.triplicate.purchasesAndExpenses + 

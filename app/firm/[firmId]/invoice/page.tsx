@@ -127,10 +127,15 @@ export default function InvoicePage({
 
     try {
       const { period, ...rest } = values;
-      await updateInvoice(editingInvoice.id, {
+      const result = await updateInvoice(editingInvoice.id, {
         ...rest,
         year_month: period.toString(),
       });
+
+      if (!result.success && result.error === "serial_conflict") {
+        toast.error(`字軌號碼 ${result.serialCode} 已被使用`);
+        return;
+      }
 
       toast.success("更新發票成功。");
       setEditingInvoice(null);

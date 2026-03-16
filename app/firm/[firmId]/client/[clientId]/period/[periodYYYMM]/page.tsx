@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, ArrowLeft, Lock, Unlock, Plus, FileText } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { InvoiceTable } from "@/components/invoice-table";
 import { AllowanceTable } from "@/components/allowance-table";
 import { RangeManagement } from "@/components/range-management";
@@ -19,6 +19,7 @@ import {
   type Invoice,
   type Allowance,
   clientSchema,
+  invoiceSchema,
 } from "@/lib/domain/models";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import {
@@ -53,6 +54,7 @@ export default function PeriodDetailPage({
 }) {
   const { firmId, clientId, periodYYYMM } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createSupabaseClient();
   const rocPeriod = RocPeriod.fromYYYMM(periodYYYMM);
 
@@ -278,6 +280,35 @@ export default function PeriodDetailPage({
       setReviewingAllowance(allowances[currentIndex - 1]);
     }
   };
+
+  // Navigate to a conflicting invoice within the same period
+  const handleNavigateToConflict = useCallback(
+    async (invoiceId: string) => {
+      // Fetch the invoice directly since it may not be in the current filtered page
+      const { data: inv } = await supabase
+        .from("invoices")
+        .select("*")
+        .eq("id", invoiceId)
+        .single();
+      if (inv) {
+        setReviewingInvoice(invoiceSchema.parse(inv));
+      }
+    },
+    [supabase],
+  );
+
+  // Auto-open review dialog when ?invoiceId= query param is present
+  useEffect(() => {
+    const invoiceId = searchParams.get("invoiceId");
+    if (invoiceId) {
+      handleNavigateToConflict(invoiceId);
+      // Clean up the URL param
+      router.replace(
+        `/firm/${firmId}/client/${clientId}/period/${periodYYYMM}`,
+        { scroll: false },
+      );
+    }
+  }, [searchParams, handleNavigateToConflict, router, firmId, clientId, periodYYYMM]);
 
   // Invoice review: optimistic auto-advance after confirm
   const handleInvoiceReviewSuccess = useCallback(() => {
@@ -606,6 +637,7 @@ export default function PeriodDetailPage({
         onNext={handleReviewNext}
         onPrevious={handleReviewPrevious}
         isLocked={isLocked}
+        onNavigateToConflict={handleNavigateToConflict}
       />
 
       <InvoiceDeleteDialog

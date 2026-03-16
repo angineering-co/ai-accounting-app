@@ -102,7 +102,18 @@ export async function createInvoice(data: CreateInvoiceInput) {
   return invoice;
 }
 
-export async function updateInvoice(invoiceId: string, data: UpdateInvoiceInput) {
+export type UpdateInvoiceResult =
+  | { success: true; invoice: Record<string, unknown> }
+  | {
+      success: false;
+      error: "serial_conflict";
+      serialCode: string;
+      conflictingInvoiceId: string;
+      conflictingYearMonth: string;
+      conflictingClientId: string;
+    };
+
+export async function updateInvoice(invoiceId: string, data: UpdateInvoiceInput): Promise<UpdateInvoiceResult> {
   const supabase = await createClient();
   
   const validated = updateInvoiceSchema.parse(data);
@@ -155,8 +166,34 @@ export async function updateInvoice(invoiceId: string, data: UpdateInvoiceInput)
     .select()
     .single();
 
-  if (error) throw error;
-  return invoice;
+  if (error) {
+    // Handle duplicate invoice_serial_code (unique constraint violation)
+    if (error.code === "23505" && updatePayload.invoice_serial_code) {
+      const serialCode = updatePayload.invoice_serial_code;
+      const clientId = existingInvoice.client_id;
+
+      // Find the conflicting invoice
+      const { data: conflicting } = await supabase
+        .from("invoices")
+        .select("id, year_month, client_id")
+        .eq("client_id", clientId!)
+        .eq("invoice_serial_code", serialCode)
+        .neq("id", invoiceId)
+        .single();
+
+      return {
+        success: false as const,
+        error: "serial_conflict" as const,
+        serialCode,
+        conflictingInvoiceId: conflicting?.id ?? "",
+        conflictingYearMonth: conflicting?.year_month ?? "",
+        conflictingClientId: conflicting?.client_id ?? clientId ?? "",
+      };
+    }
+    throw error;
+  }
+
+  return { success: true as const, invoice };
 }
 
 export async function deleteInvoice(invoiceId: string) {

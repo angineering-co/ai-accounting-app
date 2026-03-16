@@ -70,9 +70,7 @@ async function chunkedUpsert<T extends Record<string, unknown>>(
 
 interface ImportResult {
   total: number;
-  inserted: number;
-  updated: number;
-  skipped: number;
+  succeeded: number;
   failed: number;
   errors: string[];
   // Optional breakdown by type (for aggregated reporting)
@@ -123,9 +121,7 @@ export async function processElectronicInvoiceFile(
   const supabase = options?.supabaseClient ?? await createClient();
   const result: ImportResult = {
     total: 0,
-    inserted: 0,
-    updated: 0,
-    skipped: 0,
+    succeeded: 0,
     failed: 0,
     errors: [],
   };
@@ -214,10 +210,7 @@ export async function processElectronicInvoiceFile(
         'id',
       );
 
-      const upsertedCount = upserted.length;
-      result.inserted = upsertedCount;
-      result.updated = 0;
-      result.skipped = 0;
+      result.succeeded = upserted.length;
     }
   } catch (error) {
     console.error("Import error:", error);
@@ -457,9 +450,7 @@ async function processAllowanceExcelFile(
 ): Promise<ImportResult> {
   const result: ImportResult = {
     total: 0,
-    inserted: 0,
-    updated: 0,
-    skipped: 0,
+    succeeded: 0,
     failed: 0,
     errors: [],
     fileType: 'allowance',
@@ -514,8 +505,7 @@ async function processAllowanceExcelFile(
         'id',
       );
 
-      result.inserted = upserted.length;
-      result.updated = 0;
+      result.succeeded = upserted.length;
 
       // Attempt to link to original invoices
       const allowanceIds = upserted.map(a => a.id);

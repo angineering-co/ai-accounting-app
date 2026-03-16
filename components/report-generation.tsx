@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -38,8 +38,6 @@ import {
   type Client,
   tetUConfigSchema,
   type TetUConfig,
-  type Allowance,
-  type Invoice,
 } from "@/lib/domain/models";
 import { generateTxtReport, generateTetUReport } from "@/lib/services/reports";
 import { toast } from "sonner";
@@ -49,27 +47,18 @@ import { Download, FileText, Loader2 } from "lucide-react";
 interface ReportGenerationProps {
   client: Client;
   period: RocPeriod;
-  data: {
-    invoices: Invoice[],
-    allowances: Allowance[]
-  };
+  hasUnconfirmedDocuments: boolean;
 }
 
 export function ReportGeneration({
   client,
   period,
-  data,
+  hasUnconfirmedDocuments,
 }: ReportGenerationProps) {
   const clientId = client.id;
   const taxId = client.tax_id;
   const [isTetUModalOpen, setIsTetUModalOpen] = useState(false);
   const [isGeneratingTxt, setIsGeneratingTxt] = useState(false);
-  const hasUnconfirmedDocuments = useMemo(
-    () =>
-      data.invoices.some((invoice) => invoice.status !== "confirmed") ||
-      data.allowances.some((allowance) => allowance.status !== "confirmed"),
-    [data.invoices, data.allowances],
-  );
   const disabledReason = "請先確認所有發票與折讓單，才能產生報表";
 
   const tetUForm = useForm<TetUConfig>({

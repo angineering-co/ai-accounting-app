@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useCallback } from "react";
+import { use, useState, useCallback, useRef, useEffect } from "react";
 import useSWR from "swr";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -12,12 +12,12 @@ import { InvoiceTable } from "@/components/invoice-table";
 import { AllowanceTable } from "@/components/allowance-table";
 import { RangeManagement } from "@/components/range-management";
 import { ReportGeneration } from "@/components/report-generation";
+import { StatusFilterBar } from "@/components/status-filter-bar";
+import { TablePagination } from "@/components/table-pagination";
 import { toast } from "sonner";
 import {
   type Invoice,
   type Allowance,
-  invoiceSchema,
-  allowanceSchema,
   clientSchema,
 } from "@/lib/domain/models";
 import { RocPeriod } from "@/lib/domain/roc-period";
@@ -36,6 +36,10 @@ import { AllowanceReviewDialog } from "@/components/allowance-review-dialog";
 import { AllowanceDeleteDialog } from "@/components/allowance-delete-dialog";
 import { extractAllowanceDataAction } from "@/lib/services/allowance";
 import { BulkExtractionProgress } from "@/components/bulk-extraction-progress";
+import { usePaginatedPeriodInvoices } from "@/hooks/use-paginated-period-invoices";
+import { usePaginatedPeriodAllowances } from "@/hooks/use-paginated-period-allowances";
+
+const PAGE_SIZE = 50;
 
 type DeleteTarget = {
   id: string;
@@ -64,9 +68,18 @@ export default function PeriodDetailPage({
   const [allowanceToDelete, setAllowanceToDelete] =
     useState<DeleteTarget | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-
-  // Import Electronic Invoice State
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+  // Pagination & filter state
+  const [invoiceStatusFilter, setInvoiceStatusFilter] = useState("uploaded");
+  const [invoicePage, setInvoicePage] = useState(0);
+  const [allowanceStatusFilter, setAllowanceStatusFilter] =
+    useState("uploaded");
+  const [allowancePage, setAllowancePage] = useState(0);
+
+  // Auto-advance refs
+  const invoicePendingAdvanceRef = useRef(false);
+  const allowancePendingAdvanceRef = useRef(false);
 
   // Fetch Period Entity
   const {
@@ -91,38 +104,90 @@ export default function PeriodDetailPage({
     },
   );
 
-  // Fetch Invoices (Filtered by Period ID)
+  // Paginated invoice fetching
   const {
-    data: invoices = [],
+    invoices,
+    totalCount: invoiceTotalCount,
     isLoading: isInvoicesLoading,
-    mutate: fetchInvoices,
-  } = useSWR(period ? ["period-invoices", period.id] : null, async () => {
-    if (!period) return [];
-    const { data, error } = await supabase
-      .from("invoices")
-      .select("*")
-      .eq("tax_filing_period_id", period.id)
-      .order("created_at", { ascending: false });
-    if (error) throw error;
-    return invoiceSchema.array().parse(data || []);
+    mutate: mutateInvoices,
+  } = usePaginatedPeriodInvoices({
+    periodId: period?.id ?? null,
+    statusFilter: invoiceStatusFilter,
+    page: invoicePage,
+    pageSize: PAGE_SIZE,
   });
 
-  // Fetch Allowances (Filtered by Period ID)
+  // Paginated allowance fetching
   const {
-    data: allowances = [],
+    allowances,
+    totalCount: allowanceTotalCount,
     isLoading: isAllowancesLoading,
-    mutate: fetchAllowances,
-  } = useSWR(period ? ["period-allowances", period.id] : null, async () => {
-    if (!period) return [];
-    const { data, error } = await supabase
-      .from("allowances")
-      .select("*")
-      .eq("client_id", clientId)
-      .eq("tax_filing_period_id", period.id)
-      .order("created_at", { ascending: false });
-    if (error) throw error;
-    return allowanceSchema.array().parse(data || []);
+    mutate: mutateAllowances,
+  } = usePaginatedPeriodAllowances({
+    periodId: period?.id ?? null,
+    clientId,
+    statusFilter: allowanceStatusFilter,
+    page: allowancePage,
+    pageSize: PAGE_SIZE,
   });
+
+  // Check if there are unconfirmed documents (for report generation)
+  const { data: hasUnconfirmedDocuments = true } = useSWR(
+    period ? ["unconfirmed-check", period.id, clientId] : null,
+    async () => {
+      if (!period) return true;
+
+      const [invoiceResult, allowanceResult] = await Promise.all([
+        supabase
+          .from("invoices")
+          .select("id", { count: "exact", head: true })
+          .eq("tax_filing_period_id", period.id)
+          .neq("status", "confirmed"),
+        supabase
+          .from("allowances")
+          .select("id", { count: "exact", head: true })
+          .eq("client_id", clientId)
+          .eq("tax_filing_period_id", period.id)
+          .neq("status", "confirmed"),
+      ]);
+
+      return (
+        (invoiceResult.count ?? 0) > 0 || (allowanceResult.count ?? 0) > 0
+      );
+    },
+  );
+
+  // Total entity count for bulk extraction (across all statuses)
+  const { data: totalEntityCount = 0 } = useSWR(
+    period ? ["total-entity-count", period.id, clientId] : null,
+    async () => {
+      if (!period) return 0;
+
+      const [invoiceResult, allowanceResult] = await Promise.all([
+        supabase
+          .from("invoices")
+          .select("id", { count: "exact", head: true })
+          .eq("tax_filing_period_id", period.id),
+        supabase
+          .from("allowances")
+          .select("id", { count: "exact", head: true })
+          .eq("client_id", clientId)
+          .eq("tax_filing_period_id", period.id),
+      ]);
+
+      return (invoiceResult.count ?? 0) + (allowanceResult.count ?? 0);
+    },
+  );
+
+  const handleInvoiceStatusFilterChange = (status: string) => {
+    setInvoiceStatusFilter(status);
+    setInvoicePage(0);
+  };
+
+  const handleAllowanceStatusFilterChange = (status: string) => {
+    setAllowanceStatusFilter(status);
+    setAllowancePage(0);
+  };
 
   const handleToggleLock = async () => {
     if (!period) return;
@@ -138,18 +203,23 @@ export default function PeriodDetailPage({
     }
   };
 
+  const refreshAll = useCallback(() => {
+    mutateInvoices();
+    mutateAllowances();
+  }, [mutateInvoices, mutateAllowances]);
+
   const handleExtractInvoice = async (invoiceId: string) => {
     try {
       toast.info("AI 正在處理中...");
       await extractInvoiceDataAction(invoiceId);
-      fetchInvoices();
+      mutateInvoices();
       toast.success("AI 處理完成，請進行確認");
     } catch (error) {
       console.error("Error extracting invoice data:", error);
       const errorMessage =
         error instanceof Error ? error.message : "AI 提取失敗";
       toast.error(errorMessage);
-      fetchInvoices(); // Refresh to show updated status (likely "failed")
+      mutateInvoices();
     }
   };
 
@@ -157,17 +227,18 @@ export default function PeriodDetailPage({
     try {
       toast.info("AI 正在處理中...");
       await extractAllowanceDataAction(allowanceId);
-      fetchAllowances();
+      mutateAllowances();
       toast.success("AI 處理完成，請進行確認");
     } catch (error) {
       console.error("Error extracting allowance data:", error);
       const errorMessage =
         error instanceof Error ? error.message : "AI 提取失敗";
       toast.error(errorMessage);
-      fetchAllowances();
+      mutateAllowances();
     }
   };
 
+  // Review navigation within current page
   const handleReviewNext = () => {
     if (!reviewingInvoice) return;
     const currentIndex = invoices.findIndex(
@@ -208,12 +279,105 @@ export default function PeriodDetailPage({
     }
   };
 
-  // TODO: handle the extremely large number of invoices and allowances (1000+)
-  // by using pagination and filtering
+  // Invoice review: optimistic auto-advance after confirm
+  const handleInvoiceReviewSuccess = useCallback(() => {
+    if (!reviewingInvoice) return;
+
+    // Optimistically remove confirmed item and advance
+    const currentIndex = invoices.findIndex(
+      (inv) => inv.id === reviewingInvoice.id,
+    );
+    const remaining = invoices.filter(
+      (inv) => inv.id !== reviewingInvoice.id,
+    );
+
+    if (remaining.length > 0) {
+      const nextIndex = Math.min(currentIndex, remaining.length - 1);
+      setReviewingInvoice(remaining[nextIndex]);
+    } else {
+      setReviewingInvoice(null);
+    }
+
+    // Optimistically update SWR cache (remove confirmed item from current page)
+    mutateInvoices(
+      (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          items: current.items.filter(
+            (inv: Invoice) => inv.id !== reviewingInvoice.id,
+          ),
+          count: current.count - 1,
+        };
+      },
+      { revalidate: false },
+    );
+
+    invoicePendingAdvanceRef.current = true;
+  }, [reviewingInvoice, invoices, mutateInvoices]);
+
+  // Allowance review: optimistic auto-advance after confirm
+  const handleAllowanceReviewSuccess = useCallback(() => {
+    if (!reviewingAllowance) return;
+
+    const currentIndex = allowances.findIndex(
+      (a) => a.id === reviewingAllowance.id,
+    );
+    const remaining = allowances.filter(
+      (a) => a.id !== reviewingAllowance.id,
+    );
+
+    if (remaining.length > 0) {
+      const nextIndex = Math.min(currentIndex, remaining.length - 1);
+      setReviewingAllowance(remaining[nextIndex]);
+    } else {
+      setReviewingAllowance(null);
+    }
+
+    mutateAllowances(
+      (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          items: current.items.filter(
+            (a: Allowance) => a.id !== reviewingAllowance.id,
+          ),
+          count: current.count - 1,
+        };
+      },
+      { revalidate: false },
+    );
+
+    allowancePendingAdvanceRef.current = true;
+  }, [reviewingAllowance, allowances, mutateAllowances]);
+
+  // Revalidate when review dialog closes after optimistic updates
+  useEffect(() => {
+    if (!reviewingInvoice && invoicePendingAdvanceRef.current) {
+      invoicePendingAdvanceRef.current = false;
+      mutateInvoices();
+    }
+  }, [reviewingInvoice, mutateInvoices]);
+
+  useEffect(() => {
+    if (!reviewingAllowance && allowancePendingAdvanceRef.current) {
+      allowancePendingAdvanceRef.current = false;
+      mutateAllowances();
+    }
+  }, [reviewingAllowance, mutateAllowances]);
+
   const handleBulkRefresh = useCallback(() => {
-    fetchInvoices();
-    fetchAllowances();
-  }, [fetchInvoices, fetchAllowances]);
+    refreshAll();
+  }, [refreshAll]);
+
+  const invoiceTotalPages = Math.max(
+    1,
+    Math.ceil(invoiceTotalCount / PAGE_SIZE),
+  );
+  const allowanceTotalPages = Math.max(
+    1,
+    Math.ceil(allowanceTotalCount / PAGE_SIZE),
+  );
 
   if (isPeriodLoading || isClientLoading) {
     return (
@@ -296,7 +460,7 @@ export default function PeriodDetailPage({
             <BulkExtractionProgress
               periodId={period.id}
               isLocked={isLocked}
-              totalEntities={invoices.length + allowances.length}
+              totalEntities={totalEntityCount}
               onRefresh={handleBulkRefresh}
             />
             <div className="flex gap-2">
@@ -320,8 +484,12 @@ export default function PeriodDetailPage({
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-lg">
-                發票 ({invoices.length})
+                發票 ({invoiceTotalCount})
               </CardTitle>
+              <StatusFilterBar
+                activeStatus={invoiceStatusFilter}
+                onStatusChange={handleInvoiceStatusFilterChange}
+              />
             </CardHeader>
             <CardContent>
               <InvoiceTable
@@ -340,6 +508,13 @@ export default function PeriodDetailPage({
                 }
                 showClientColumn={false}
               />
+              <TablePagination
+                page={invoicePage}
+                totalPages={invoiceTotalPages}
+                totalItems={invoiceTotalCount}
+                pageSize={PAGE_SIZE}
+                onPageChange={setInvoicePage}
+              />
             </CardContent>
           </Card>
 
@@ -347,8 +522,12 @@ export default function PeriodDetailPage({
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-lg">
-                折讓 ({allowances.length})
+                折讓 ({allowanceTotalCount})
               </CardTitle>
+              <StatusFilterBar
+                activeStatus={allowanceStatusFilter}
+                onStatusChange={handleAllowanceStatusFilterChange}
+              />
             </CardHeader>
             <CardContent>
               <AllowanceTable
@@ -369,6 +548,13 @@ export default function PeriodDetailPage({
                         })
                 }
               />
+              <TablePagination
+                page={allowancePage}
+                totalPages={allowanceTotalPages}
+                totalItems={allowanceTotalCount}
+                pageSize={PAGE_SIZE}
+                onPageChange={setAllowancePage}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -382,15 +568,11 @@ export default function PeriodDetailPage({
         </TabsContent>
 
         <TabsContent value="reports" className="mt-6">
-          {isInvoicesLoading || isAllowancesLoading ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
-          ) : (
-            <ReportGeneration
-              client={client}
-              period={rocPeriod}
-              data={{ invoices, allowances }}
-            />
-          )}
+          <ReportGeneration
+            client={client}
+            period={rocPeriod}
+            hasUnconfirmedDocuments={hasUnconfirmedDocuments}
+          />
         </TabsContent>
       </Tabs>
 
@@ -400,8 +582,8 @@ export default function PeriodDetailPage({
         firmId={firmId}
         clientId={clientId}
         period={rocPeriod}
-        onSuccess={fetchInvoices}
-        onAllowanceSuccess={fetchAllowances}
+        onSuccess={mutateInvoices}
+        onAllowanceSuccess={mutateAllowances}
       />
 
       <InvoiceUploadDialog
@@ -412,15 +594,15 @@ export default function PeriodDetailPage({
         period={rocPeriod}
         periodId={period.id}
         clientName={client.name}
-        onSuccess={fetchInvoices}
-        onAllowanceSuccess={fetchAllowances}
+        onSuccess={mutateInvoices}
+        onAllowanceSuccess={mutateAllowances}
       />
 
       <InvoiceReviewDialog
         invoice={reviewingInvoice}
         isOpen={!!reviewingInvoice}
         onOpenChange={(open) => !open && setReviewingInvoice(null)}
-        onSuccess={fetchInvoices}
+        onSuccess={handleInvoiceReviewSuccess}
         onNext={handleReviewNext}
         onPrevious={handleReviewPrevious}
         isLocked={isLocked}
@@ -430,21 +612,21 @@ export default function PeriodDetailPage({
         invoice={invoiceToDelete}
         open={!!invoiceToDelete}
         onOpenChange={(open) => !open && setInvoiceToDelete(null)}
-        onSuccess={fetchInvoices}
+        onSuccess={mutateInvoices}
       />
 
       <AllowanceDeleteDialog
         allowance={allowanceToDelete}
         open={!!allowanceToDelete}
         onOpenChange={(open) => !open && setAllowanceToDelete(null)}
-        onSuccess={fetchAllowances}
+        onSuccess={mutateAllowances}
       />
 
       <AllowanceReviewDialog
         allowance={reviewingAllowance}
         isOpen={!!reviewingAllowance}
         onOpenChange={(open) => !open && setReviewingAllowance(null)}
-        onSuccess={fetchAllowances}
+        onSuccess={handleAllowanceReviewSuccess}
         onNext={handleAllowanceReviewNext}
         onPrevious={handleAllowanceReviewPrevious}
         isLocked={isLocked}

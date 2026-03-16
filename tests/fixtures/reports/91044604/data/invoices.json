@@ -1765,10 +1765,10 @@
       "buyerTaxId": "91044604",
       "deductible": false,
       "sellerName": "好市多股份有限公司台中分公司",
-      "totalSales": 3611,
+      "totalSales": 2370,
       "invoiceType": "電子發票",
       "sellerTaxId": "27948648",
-      "totalAmount": 3729,
+      "totalAmount": 2488,
       "invoiceSerialCode": "XA65116562"
     }
   },
@@ -2652,10 +2652,10 @@
       "buyerTaxId": "91044604",
       "deductible": false,
       "sellerName": "好市多股份有限公司台中分公司",
-      "totalSales": 3654,
+      "totalSales": 2775,
       "invoiceType": "電子發票",
       "sellerTaxId": "27948648",
-      "totalAmount": 3793,
+      "totalAmount": 2914,
       "invoiceSerialCode": "XA65262702"
     }
   },

@@ -14,6 +14,7 @@ import {
   type ClientInfo,
 } from "@/lib/services/gemini";
 import { getAccountListString } from "@/lib/services/account";
+import { ACCOUNT_LIST } from "@/lib/data/accounts";
 import { type Json, type TablesUpdate } from "@/supabase/database.types";
 import { type ExtractedInvoiceData } from "@/lib/domain/models";
 import { ensurePeriodEditable } from "@/lib/services/tax-period";
@@ -291,9 +292,10 @@ export async function extractInvoiceCore(
   try {
     // Check if it's an electronic invoice from import
     if (invoice.extracted_data) {
-      const extractedData = extractedInvoiceDataSchema.parse(
-        invoice.extracted_data
-      );
+      const parsed = extractedInvoiceDataSchema.safeParse(invoice.extracted_data);
+      const extractedData = parsed.success
+        ? parsed.data
+        : (invoice.extracted_data as ExtractedInvoiceData);
       if (
         extractedData.invoiceType === "電子發票" &&
         extractedData.source === "import-excel"
@@ -314,9 +316,14 @@ export async function extractInvoiceCore(
           accountListString
         );
 
+        // Validate the AI-determined account against the allowed list
+        const validatedAccount = (ACCOUNT_LIST as readonly string[]).includes(determinedAccount)
+          ? (determinedAccount as ExtractedInvoiceData['account'])
+          : undefined;
+
         const updatedData = {
           ...extractedData,
-          account: determinedAccount as ExtractedInvoiceData['account'],
+          account: validatedAccount,
         };
 
         return await saveExtractedInvoiceData(invoiceId, updatedData, supabase);

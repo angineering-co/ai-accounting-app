@@ -13,25 +13,29 @@ import { getTaxPeriodByYYYMM } from "@/lib/services/tax-period";
 // PostgREST encodes .in() values as URL query params. With thousands of
 // values the URL exceeds the ~8 KB server limit → "URL too long".
 // We split large arrays into chunks that stay safely under the limit.
-const CHUNK_SIZE_QUERY = 300;
-const CHUNK_SIZE_UPSERT = 500;
+const DEFAULT_CHUNK_SIZE_QUERY = 300;
+const DEFAULT_CHUNK_SIZE_UPSERT = 500;
+
+type SupabaseFrom = ReturnType<SupabaseClient<Database>['from']>;
+type SupabaseSelect = ReturnType<SupabaseFrom['select']>;
 
 /**
  * Execute a Supabase `.in()` query in chunks to avoid URL-length limits.
  * Returns the merged result rows from all chunks.
  */
-async function chunkedIn<T extends Record<string, unknown>>(
-  buildQuery: () => ReturnType<SupabaseClient<Database>['from']>,
+export async function chunkedIn<T extends Record<string, unknown>>(
+  buildQuery: () => SupabaseFrom,
   selectColumns: string,
   column: string,
   values: string[],
-  extraFilters?: (q: ReturnType<ReturnType<SupabaseClient<Database>['from']>['select']>) => typeof q,
+  extraFilters?: (q: SupabaseSelect) => SupabaseSelect,
+  chunkSize = DEFAULT_CHUNK_SIZE_QUERY,
 ): Promise<T[]> {
   if (values.length === 0) return [];
 
   const results: T[] = [];
-  for (let i = 0; i < values.length; i += CHUNK_SIZE_QUERY) {
-    const chunk = values.slice(i, i + CHUNK_SIZE_QUERY);
+  for (let i = 0; i < values.length; i += chunkSize) {
+    const chunk = values.slice(i, i + chunkSize);
     let query = buildQuery().select(selectColumns).in(column, chunk);
     if (extraFilters) {
       query = extraFilters(query);
@@ -47,19 +51,20 @@ async function chunkedIn<T extends Record<string, unknown>>(
  * Upsert rows in chunks to avoid oversized POST bodies.
  * Returns all upserted rows (with selected columns).
  */
-async function chunkedUpsert<T extends Record<string, unknown>>(
+export async function chunkedUpsert<T extends Record<string, unknown>>(
   supabase: SupabaseClient<Database>,
   table: 'invoices' | 'allowances',
   rows: Record<string, unknown>[],
   onConflict: string,
   selectColumns: string,
+  chunkSize = DEFAULT_CHUNK_SIZE_UPSERT,
 ): Promise<T[]> {
   if (rows.length === 0) return [];
 
   const results: T[] = [];
-  for (let i = 0; i < rows.length; i += CHUNK_SIZE_UPSERT) {
-    const chunk = rows.slice(i, i + CHUNK_SIZE_UPSERT);
-    const { data, error } = await (supabase.from(table) as ReturnType<SupabaseClient<Database>['from']>)
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    const chunk = rows.slice(i, i + chunkSize);
+    const { data, error } = await (supabase.from(table) as SupabaseFrom)
       .upsert(chunk, { onConflict })
       .select(selectColumns);
     if (error) throw error;

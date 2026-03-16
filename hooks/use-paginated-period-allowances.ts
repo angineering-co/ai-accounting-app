@@ -49,6 +49,9 @@ export function usePaginatedPeriodAllowances({
       if (error) throw error;
 
       return {
+        // Skip strict Zod validation — extracted_data may contain invalid AI-generated
+        // values (e.g., hallucinated account names). Strict .parse() would throw and
+        // break the table view, preventing users from correcting data in the review dialog.
         items: (rows || []) as unknown as Allowance[],
         count: count ?? 0,
       };

@@ -292,6 +292,9 @@ export async function extractInvoiceCore(
   try {
     // Check if it's an electronic invoice from import
     if (invoice.extracted_data) {
+      // Use safeParse — extracted_data may contain invalid AI-generated values (e.g.,
+      // hallucinated account names) that fail Zod validation. We still need to proceed
+      // with re-extraction to correct the account field, so fall back to raw data.
       const parsed = extractedInvoiceDataSchema.safeParse(invoice.extracted_data);
       const extractedData = parsed.success
         ? parsed.data

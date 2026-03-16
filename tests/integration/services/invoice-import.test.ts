@@ -52,7 +52,7 @@ function mockQueryBuilder(recordedChunks: string[][]) {
  */
 function mockQueryBuilderWithFilters(
   recordedChunks: string[][],
-  filterSpy: ReturnType<typeof vi.fn>,
+  filterSpy: (...args: unknown[]) => void,
 ) {
   const builder = () => ({
     select: () => ({

@@ -316,8 +316,8 @@ async function processInvoiceExcelFile(
         const buyerName = getString(row, '買方名稱');
         
         const salesAmount = getNumber(row, '銷售額合計');
-        const taxAmount = getNumber(row, '營業稅');
-        const totalAmount = getNumber(row, '總計');
+        const taxAmount = getNumber(row, '應稅銷售額');
+        const totalAmount = salesAmount + taxAmount;
         
         const taxTypeRaw = getString(row, '課稅別');
         let taxType = '應稅';

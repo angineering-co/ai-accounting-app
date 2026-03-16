@@ -346,8 +346,8 @@ describe.skipIf(!hasDbEnv)("processElectronicInvoiceFile", () => {
   });
 });
 
-describe("processElectronicInvoiceFile – 91044604", () => {
-  const supabase = getServiceClient();
+describe.skipIf(!hasDbEnv)("processElectronicInvoiceFile – 91044604", () => {
+  let supabase: ReturnType<typeof getServiceClient>;
   let fixture: TestFixture;
   const testPeriod = "11501";
 
@@ -366,6 +366,7 @@ describe("processElectronicInvoiceFile – 91044604", () => {
   const referenceIn = referenceInvoices.filter((inv) => inv.in_or_out === "in");
 
   beforeAll(async () => {
+    supabase = getServiceClient();
     fixture = await createTestFixture(supabase);
 
     // Upload both Excel files
@@ -415,7 +416,7 @@ describe("processElectronicInvoiceFile – 91044604", () => {
     );
 
     expect(outResult.failed).toBe(0);
-    expect(outResult.inserted).toBe(referenceOut.length);
+    expect(outResult.succeeded).toBe(referenceOut.length);
 
     // Process IN file
     const inResult = await processElectronicInvoiceFile(
@@ -428,7 +429,7 @@ describe("processElectronicInvoiceFile – 91044604", () => {
     );
 
     expect(inResult.failed).toBe(0);
-    expect(inResult.inserted).toBe(referenceIn.length);
+    expect(inResult.succeeded).toBe(referenceIn.length);
 
     // Fetch all imported invoices
     const { data: invoices, error } = await supabase
@@ -482,8 +483,7 @@ describe("processElectronicInvoiceFile – 91044604", () => {
     );
 
     expect(outResult.failed).toBe(0);
-    expect(outResult.inserted).toBe(0);
-    expect(outResult.updated).toBe(referenceOut.length);
+    expect(outResult.succeeded).toBe(referenceOut.length);
 
     const inResult = await processElectronicInvoiceFile(
       fixture.clientId,
@@ -495,8 +495,7 @@ describe("processElectronicInvoiceFile – 91044604", () => {
     );
 
     expect(inResult.failed).toBe(0);
-    expect(inResult.inserted).toBe(0);
-    expect(inResult.updated).toBe(referenceIn.length);
+    expect(inResult.succeeded).toBe(referenceIn.length);
 
     // Total count unchanged
     const { data: invoices, error } = await supabase

@@ -91,8 +91,8 @@ export function InvoiceImportDialog({
 
       // Aggregate results by type
       const aggregated = {
-        invoices: { inserted: 0, updated: 0, failed: 0 },
-        allowances: { inserted: 0, updated: 0, failed: 0 },
+        invoices: { succeeded: 0, failed: 0 },
+        allowances: { succeeded: 0, failed: 0 },
         errors: [] as string[],
       };
 
@@ -100,12 +100,10 @@ export function InvoiceImportDialog({
         if (result.status === 'fulfilled') {
           const r = result.value;
           if (r.fileType === 'allowance') {
-            aggregated.allowances.inserted += r.inserted;
-            aggregated.allowances.updated += r.updated;
+            aggregated.allowances.succeeded += r.succeeded;
             aggregated.allowances.failed += r.failed;
           } else {
-            aggregated.invoices.inserted += r.inserted;
-            aggregated.invoices.updated += r.updated;
+            aggregated.invoices.succeeded += r.succeeded;
             aggregated.invoices.failed += r.failed;
           }
           aggregated.errors.push(...r.errors);
@@ -115,8 +113,8 @@ export function InvoiceImportDialog({
       });
 
       // Show success messages
-      const invoiceCount = aggregated.invoices.inserted + aggregated.invoices.updated;
-      const allowanceCount = aggregated.allowances.inserted + aggregated.allowances.updated;
+      const invoiceCount = aggregated.invoices.succeeded;
+      const allowanceCount = aggregated.allowances.succeeded;
       const totalSuccess = invoiceCount + allowanceCount;
 
       if (totalSuccess > 0) {

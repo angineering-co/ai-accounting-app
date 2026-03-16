@@ -81,8 +81,7 @@ describe("processElectronicInvoiceFile", () => {
     );
 
     expect(result1.failed).toBe(0);
-    expect(result1.inserted).toBeGreaterThan(0);
-    expect(result1.updated).toBe(0);
+    expect(result1.succeeded).toBeGreaterThan(0);
 
     const { data: rowsAfterFirst, error: countErrorFirst } = await supabase
       .from("invoices")
@@ -112,8 +111,7 @@ describe("processElectronicInvoiceFile", () => {
     );
 
     expect(result2.failed).toBe(0);
-    expect(result2.inserted).toBe(0);
-    expect(result2.updated).toBe(firstCount);
+    expect(result2.succeeded).toBe(firstCount);
 
     const { data: rowsAfterSecond, error: countErrorSecond } = await supabase
       .from("invoices")

@@ -49,6 +49,7 @@ import { RocPeriod } from "@/lib/domain/roc-period";
 import { updateInvoice } from "@/lib/services/invoice";
 import { toast } from "sonner";
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import Image from "next/image";
 import {
@@ -157,6 +158,7 @@ interface InvoiceReviewDialogProps {
   onNext?: () => void;
   onPrevious?: () => void;
   isLocked?: boolean;
+  onNavigateToConflict?: (invoiceId: string) => void;
 }
 
 export function InvoiceReviewDialog({
@@ -167,6 +169,7 @@ export function InvoiceReviewDialog({
   onNext,
   onPrevious,
   isLocked = false,
+  onNavigateToConflict,
 }: InvoiceReviewDialogProps) {
   const [rotation, setRotation] = useState(0);
   const [zoom, setZoom] = useState(1);
@@ -470,6 +473,9 @@ export function InvoiceReviewDialog({
     }
   }, [invoice, isOpen, form, supabase.storage, supabase]);
 
+  const { firmId } = useParams<{ firmId: string }>();
+  const router = useRouter();
+
   const handleSave = useCallback(
     async (
       data: InvoiceReviewFormValues,
@@ -484,11 +490,41 @@ export function InvoiceReviewDialog({
         const { confidence, ...dataToSave } = data;
         const inOrOutValue = dataToSave.inOrOut === "進項" ? "in" : "out";
 
-        await updateInvoice(invoice.id, {
+        const result = await updateInvoice(invoice.id, {
           extracted_data: dataToSave,
           status: status,
           in_or_out: inOrOutValue,
         });
+
+        if (!result.success && result.error === "serial_conflict") {
+          const periodLabel = result.conflictingYearMonth
+            ? RocPeriod.fromYYYMM(result.conflictingYearMonth).format()
+            : "";
+          const isSamePeriod = result.conflictingYearMonth === invoice.year_month;
+          toast.error(
+            `字軌號碼 ${result.serialCode} 已被使用${periodLabel ? `（期別：${periodLabel}）` : ""}`,
+            {
+              action: {
+                label: "查看",
+                onClick: () => {
+                  if (isSamePeriod) {
+                    // Same period: close current dialog, let parent handle opening the conflicting invoice
+                    onOpenChange(false);
+                    onNavigateToConflict?.(result.conflictingInvoiceId);
+                  } else {
+                    // Different period: navigate to that period page
+                    router.push(
+                      `/firm/${firmId}/client/${result.conflictingClientId}/period/${result.conflictingYearMonth}?invoiceId=${result.conflictingInvoiceId}`,
+                    );
+                  }
+                },
+              },
+              duration: 10000,
+            },
+          );
+          return;
+        }
+
         if (status === "confirmed") {
           setLocalConfirmed(true);
         }
@@ -505,7 +541,7 @@ export function InvoiceReviewDialog({
         toast.error("更新失敗");
       }
     },
-    [invoice, onOpenChange, onSuccess],
+    [invoice, onOpenChange, onSuccess, onNavigateToConflict, firmId, router],
   );
 
   useEffect(() => {

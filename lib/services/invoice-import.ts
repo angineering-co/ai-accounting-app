@@ -10,6 +10,64 @@ import { formatDateToYYYYMMDD } from "@/lib/utils";
 import * as XLSX from 'xlsx';
 import { getTaxPeriodByYYYMM } from "@/lib/services/tax-period";
 
+// PostgREST encodes .in() values as URL query params. With thousands of
+// values the URL exceeds the ~8 KB server limit → "URL too long".
+// We split large arrays into chunks that stay safely under the limit.
+const CHUNK_SIZE_QUERY = 300;
+const CHUNK_SIZE_UPSERT = 500;
+
+/**
+ * Execute a Supabase `.in()` query in chunks to avoid URL-length limits.
+ * Returns the merged result rows from all chunks.
+ */
+async function chunkedIn<T extends Record<string, unknown>>(
+  buildQuery: () => ReturnType<SupabaseClient<Database>['from']>,
+  selectColumns: string,
+  column: string,
+  values: string[],
+  extraFilters?: (q: ReturnType<ReturnType<SupabaseClient<Database>['from']>['select']>) => typeof q,
+): Promise<T[]> {
+  if (values.length === 0) return [];
+
+  const results: T[] = [];
+  for (let i = 0; i < values.length; i += CHUNK_SIZE_QUERY) {
+    const chunk = values.slice(i, i + CHUNK_SIZE_QUERY);
+    let query = buildQuery().select(selectColumns).in(column, chunk);
+    if (extraFilters) {
+      query = extraFilters(query);
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    if (data) results.push(...(data as T[]));
+  }
+  return results;
+}
+
+/**
+ * Upsert rows in chunks to avoid oversized POST bodies.
+ * Returns all upserted rows (with selected columns).
+ */
+async function chunkedUpsert<T extends Record<string, unknown>>(
+  supabase: SupabaseClient<Database>,
+  table: 'invoices' | 'allowances',
+  rows: Record<string, unknown>[],
+  onConflict: string,
+  selectColumns: string,
+): Promise<T[]> {
+  if (rows.length === 0) return [];
+
+  const results: T[] = [];
+  for (let i = 0; i < rows.length; i += CHUNK_SIZE_UPSERT) {
+    const chunk = rows.slice(i, i + CHUNK_SIZE_UPSERT);
+    const { data, error } = await (supabase.from(table) as ReturnType<SupabaseClient<Database>['from']>)
+      .upsert(chunk, { onConflict })
+      .select(selectColumns);
+    if (error) throw error;
+    if (data) results.push(...(data as T[]));
+  }
+  return results;
+}
+
 interface ImportResult {
   total: number;
   inserted: number;
@@ -146,44 +204,19 @@ export async function processElectronicInvoiceFile(
     );
 
     // Batch upsert with ON CONFLICT (override duplicates)
+    // Chunked to avoid PostgREST URL-length limits on large imports.
     if (invoicesToInsert.length > 0) {
-      const serialCodes = Array.from(
-        new Set(
-          invoicesToInsert
-            .map((invoice) => invoice.invoice_serial_code)
-            .filter((code): code is string => Boolean(code && code.trim()))
-        )
+      const upserted = await chunkedUpsert<{ id: string }>(
+        supabase,
+        'invoices',
+        invoicesToInsert as unknown as Record<string, unknown>[],
+        'client_id, invoice_serial_code',
+        'id',
       );
 
-      let existingCount = 0;
-      if (serialCodes.length > 0) {
-        const { data: existingInvoices, error: existingError } = await supabase
-          .from("invoices")
-          .select("invoice_serial_code")
-          .eq("client_id", clientId)
-          .in("invoice_serial_code", serialCodes);
-
-        if (existingError) {
-          throw existingError;
-        }
-
-        existingCount = existingInvoices?.length || 0;
-      }
-
-      const { data: insertedData, error: insertError } = await supabase
-        .from("invoices")
-        .upsert(invoicesToInsert, {
-          onConflict: "client_id, invoice_serial_code",
-        })
-        .select("id"); // We need to select to know how many were inserted
-
-      if (insertError) {
-        throw insertError;
-      }
-
-      const upsertedCount = insertedData?.length || 0;
-      result.updated = Math.min(existingCount, upsertedCount);
-      result.inserted = Math.max(upsertedCount - existingCount, 0);
+      const upsertedCount = upserted.length;
+      result.inserted = upsertedCount;
+      result.updated = 0;
       result.skipped = 0;
     }
   } catch (error) {
@@ -470,46 +503,26 @@ async function processAllowanceExcelFile(
     }
   }
 
-  // Batch upsert
+  // Batch upsert — chunked to avoid PostgREST URL-length limits.
   if (allowancesToInsert.length > 0) {
-    // Check existing
-    const serialCodes = allowancesToInsert
-      .map(a => a.allowance_serial_code)
-      .filter((code): code is string => Boolean(code));
+    try {
+      const upserted = await chunkedUpsert<{ id: string }>(
+        supabase,
+        'allowances',
+        allowancesToInsert as unknown as Record<string, unknown>[],
+        'client_id, allowance_serial_code',
+        'id',
+      );
 
-    let existingCount = 0;
-    if (serialCodes.length > 0) {
-      const { data: existingAllowances, error: existingError } = await supabase
-        .from('allowances')
-        .select('allowance_serial_code')
-        .eq('client_id', clientId)
-        .in('allowance_serial_code', serialCodes);
-
-      if (existingError) {
-        throw existingError;
-      }
-
-      existingCount = existingAllowances?.length || 0;
-    }
-
-    const { data, error } = await supabase
-      .from('allowances')
-      .upsert(allowancesToInsert, {
-        onConflict: 'client_id, allowance_serial_code',
-      })
-      .select('id');
-
-    if (error) {
-      result.failed += allowancesToInsert.length;
-      result.errors.push(error.message);
-    } else {
-      const upsertedCount = data?.length || 0;
-      result.updated = Math.min(existingCount, upsertedCount);
-      result.inserted = Math.max(upsertedCount - existingCount, 0);
+      result.inserted = upserted.length;
+      result.updated = 0;
 
       // Attempt to link to original invoices
-      const allowanceIds = data?.map(a => a.id) || [];
+      const allowanceIds = upserted.map(a => a.id);
       await linkAllowancesToInvoices(clientId, allowanceIds, supabase);
+    } catch (error) {
+      result.failed += allowancesToInsert.length;
+      result.errors.push(error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -672,13 +685,14 @@ async function linkAllowancesToInvoices(
 ): Promise<{ linked: number; unlinked: number }> {
   if (allowanceIds.length === 0) return { linked: 0, unlinked: 0 };
 
-  // 1. Get all allowances needing linking (one query)
-  const { data: allowances } = await supabase
-    .from('allowances')
-    .select('id, original_invoice_serial_code')
-    .in('id', allowanceIds)
-    .is('original_invoice_id', null)
-    .not('original_invoice_serial_code', 'is', null);
+  // 1. Get all allowances needing linking (chunked to avoid URL-length limits)
+  const allowances = await chunkedIn<{ id: string; original_invoice_serial_code: string | null }>(
+    () => supabase.from('allowances'),
+    'id, original_invoice_serial_code',
+    'id',
+    allowanceIds,
+    (q) => q.is('original_invoice_id', null).not('original_invoice_serial_code', 'is', null),
+  );
 
   if (!allowances || allowances.length === 0) {
     return { linked: 0, unlinked: 0 };
@@ -695,14 +709,16 @@ async function linkAllowancesToInvoices(
     return { linked: 0, unlinked: allowances.length };
   }
 
-  // 3. Query all matching invoices in one call
-  const { data: invoices } = await supabase
-    .from('invoices')
-    .select('id, invoice_serial_code')
-    .eq('client_id', clientId)
-    .in('invoice_serial_code', serialCodes);
+  // 3. Query all matching invoices (chunked to avoid URL-length limits)
+  const invoices = await chunkedIn<{ id: string; invoice_serial_code: string | null }>(
+    () => supabase.from('invoices'),
+    'id, invoice_serial_code',
+    'invoice_serial_code',
+    serialCodes,
+    (q) => q.eq('client_id', clientId),
+  );
 
-  if (!invoices || invoices.length === 0) {
+  if (invoices.length === 0) {
     return { linked: 0, unlinked: allowances.length };
   }
 
@@ -733,17 +749,20 @@ async function linkAllowancesToInvoices(
     }
   }
 
-  // 6. Batch update: one update per unique invoice_id
+  // 6. Batch update: one update per unique invoice_id (chunked for safety)
   let linkedCount = 0;
   for (const [invoiceId, allowanceIdsToUpdate] of invoiceIdToAllowanceIds) {
-    const { error } = await supabase
-      .from('allowances')
-      .update({ original_invoice_id: invoiceId })
-      .in('id', allowanceIdsToUpdate);
-
-    if (!error) {
+    try {
+      for (let i = 0; i < allowanceIdsToUpdate.length; i += CHUNK_SIZE_QUERY) {
+        const chunk = allowanceIdsToUpdate.slice(i, i + CHUNK_SIZE_QUERY);
+        const { error } = await supabase
+          .from('allowances')
+          .update({ original_invoice_id: invoiceId })
+          .in('id', chunk);
+        if (error) throw error;
+      }
       linkedCount += allowanceIdsToUpdate.length;
-    } else {
+    } catch {
       unlinkedCount += allowanceIdsToUpdate.length;
     }
   }

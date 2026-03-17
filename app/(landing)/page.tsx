@@ -112,7 +112,19 @@ export default function Home() {
               >
                 價格
               </Link>
+              <Link
+                href="/auth/login"
+                className="hover:text-slate-900 transition-colors"
+              >
+                登入
+              </Link>
             </nav>
+            <Link
+              href="/auth/login"
+              className="md:hidden text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
+            >
+              登入
+            </Link>
             <Button
               asChild
               size="sm"

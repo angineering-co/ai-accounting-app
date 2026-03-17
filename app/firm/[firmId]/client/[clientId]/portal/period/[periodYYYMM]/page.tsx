@@ -250,6 +250,13 @@ export default function PortalPeriodDetailPage({
   const { firmId, clientId, periodYYYMM } = use(params);
   const supabase = createSupabaseClient();
   const rocPeriod = RocPeriod.fromYYYMM(periodYYYMM);
+  const { data: currentUser } = useSWR("portal-current-user", async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    return user;
+  });
+  const userId = currentUser?.id;
   const [invoiceToDelete, setInvoiceToDelete] = useState<DeleteTarget | null>(
     null,
   );
@@ -305,13 +312,14 @@ export default function PortalPeriodDetailPage({
     isLoading: isInvoicesLoading,
     mutate: mutateInvoices,
   } = useSWR(
-    period ? ["portal-period-invoices", period.id] : null,
+    period && userId ? ["portal-period-invoices", period.id, userId] : null,
     async () => {
-      if (!period) return [];
+      if (!period || !userId) return [];
       const { data, error } = await supabase
         .from("invoices")
         .select("*")
         .eq("tax_filing_period_id", period.id)
+        .eq("uploaded_by", userId)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return invoiceSchema.array().parse(data || []);
@@ -323,13 +331,14 @@ export default function PortalPeriodDetailPage({
     isLoading: isAllowancesLoading,
     mutate: mutateAllowances,
   } = useSWR(
-    period ? ["portal-period-allowances", period.id] : null,
+    period && userId ? ["portal-period-allowances", period.id, userId] : null,
     async () => {
-      if (!period) return [];
+      if (!period || !userId) return [];
       const { data, error } = await supabase
         .from("allowances")
         .select("*")
         .eq("tax_filing_period_id", period.id)
+        .eq("uploaded_by", userId)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return allowanceSchema.array().parse(data || []);

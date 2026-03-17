@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SnapBooks.ai 重設密碼</title>
+  </head>
+  <body
+    style="
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: #f8fafc;
+      color: #334155;
+      line-height: 1.6;
+    "
+  >
+    <div style="max-width: 600px; margin: 0 auto; padding: 40px 24px;">
+      <div
+        style="
+          background: white;
+          border-radius: 16px;
+          padding: 40px 32px;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+          border: 1px solid #e2e8f0;
+        "
+      >
+        <h2
+          style="
+            margin: 0 0 16px;
+            font-size: 24px;
+            font-weight: 700;
+            color: #0f172a;
+            letter-spacing: -0.02em;
+          "
+        >
+          重設您的密碼
+        </h2>
+        <p style="margin: 0 0 12px; font-size: 16px; color: #475569;">
+          我們收到了您的密碼重設請求。
+        </p>
+        <p style="margin: 0 0 24px; font-size: 16px; color: #475569;">
+          請點擊下方連結設定新密碼：
+        </p>
+        <p style="margin: 0;">
+          <a
+            href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=recovery&next=/auth/update-password"
+            style="
+              display: inline-block;
+              padding: 14px 28px;
+              background-color: #10b981;
+              color: white;
+              font-size: 16px;
+              font-weight: 600;
+              text-decoration: none;
+              border-radius: 9999px;
+              box-shadow: 0 4px 14px rgba(16, 185, 129, 0.25);
+            "
+          >
+            重設密碼
+          </a>
+        </p>
+        <p
+          style="
+            margin: 24px 0 0;
+            font-size: 14px;
+            color: #94a3b8;
+          "
+        >
+          如果您未發出此請求，請忽略此郵件。
+        </p>
+        <p
+          style="
+            margin: 12px 0 0;
+            font-size: 14px;
+            color: #94a3b8;
+          "
+        >
+          SnapBooks.ai 速博智慧有限公司
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

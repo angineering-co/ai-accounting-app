@@ -172,23 +172,27 @@ export async function updateInvoice(invoiceId: string, data: UpdateInvoiceInput)
       const serialCode = updatePayload.invoice_serial_code;
       const clientId = existingInvoice.client_id;
 
-      // Find the conflicting invoice
-      const { data: conflicting } = await supabase
-        .from("invoices")
-        .select("id, year_month, client_id")
-        .eq("client_id", clientId!)
-        .eq("invoice_serial_code", serialCode)
-        .neq("id", invoiceId)
-        .single();
+      if (clientId) {
+        // Find the conflicting invoice
+        const { data: conflicting } = await supabase
+          .from("invoices")
+          .select("id, year_month, client_id")
+          .eq("client_id", clientId)
+          .eq("invoice_serial_code", serialCode)
+          .neq("id", invoiceId)
+          .single();
 
-      return {
-        success: false as const,
-        error: "serial_conflict" as const,
-        serialCode,
-        conflictingInvoiceId: conflicting?.id ?? "",
-        conflictingYearMonth: conflicting?.year_month ?? "",
-        conflictingClientId: conflicting?.client_id ?? clientId ?? "",
-      };
+        if (conflicting) {
+          return {
+            success: false,
+            error: "serial_conflict",
+            serialCode,
+            conflictingInvoiceId: conflicting.id,
+            conflictingYearMonth: conflicting.year_month ?? "",
+            conflictingClientId: conflicting.client_id ?? clientId,
+          };
+        }
+      }
     }
     throw error;
   }

@@ -238,10 +238,10 @@ export function AllowanceTable({
   };
 
   return (
-    <div className="border rounded-md">
+    <div className="max-h-[60vh] overflow-y-auto border rounded-md">
       <TooltipProvider>
         <Table className="table-fixed">
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-10 bg-background">
             <TableRow>
               <TableHead className="w-[88px]">縮圖</TableHead>
               <TableHead className="w-[180px]">文件識別</TableHead>

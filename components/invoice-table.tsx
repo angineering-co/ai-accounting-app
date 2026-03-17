@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from "react";
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -240,8 +239,8 @@ export function InvoiceTable({
   };
 
   return (
-    <div className="max-h-[60vh] overflow-y-auto border rounded-md">
-      <Table className="table-fixed">
+    <div className="relative w-full overflow-auto max-h-[60vh] border rounded-md">
+      <table className="w-full caption-bottom text-sm table-fixed">
         <TableHeader className="sticky top-0 z-10 bg-background">
           <TableRow>
             <TableHead className="w-[88px]">縮圖</TableHead>
@@ -478,7 +477,7 @@ export function InvoiceTable({
             ))
           )}
         </TableBody>
-      </Table>
+      </table>
     </div>
   );
 }

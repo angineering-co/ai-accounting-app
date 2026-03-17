@@ -1,19 +1,36 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Noto_Serif_TC } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { GoogleAnalytics } from "@next/third-parties/google";
 import "./globals.css";
 import { Toaster } from "sonner";
+import { ServiceWorkerRegister } from "@/components/service-worker-register";
 
 const defaultUrl = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
   : "http://localhost:3000";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: "cover",
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
   title: "SnapBooks.ai | AI 記帳事務所",
   description:
     "SnapBooks.ai 協助一人公司與小型團隊，拍照上傳單據與 AI 整理流程，更快完成記帳與報稅。",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "SnapBooks.ai",
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
 };
 
 const geistSans = Geist({
@@ -48,6 +65,7 @@ export default function RootLayout({
         >
           {children}
           <Toaster />
+          <ServiceWorkerRegister />
         </ThemeProvider>
       </body>
     </html>

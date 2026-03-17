@@ -39,6 +39,7 @@ import { extractAllowanceDataAction } from "@/lib/services/allowance";
 import { BulkExtractionProgress } from "@/components/bulk-extraction-progress";
 import { usePaginatedPeriodInvoices } from "@/hooks/use-paginated-period-invoices";
 import { usePaginatedPeriodAllowances } from "@/hooks/use-paginated-period-allowances";
+import { useStatusCounts } from "@/hooks/use-status-counts";
 
 const PAGE_SIZE = 50;
 
@@ -133,6 +134,12 @@ export default function PeriodDetailPage({
     pageSize: PAGE_SIZE,
   });
 
+  // Status counts for filter bar badges
+  const { counts: invoiceStatusCounts, mutate: mutateInvoiceStatusCounts } =
+    useStatusCounts({ table: "invoices", periodId: period?.id ?? null });
+  const { counts: allowanceStatusCounts, mutate: mutateAllowanceStatusCounts } =
+    useStatusCounts({ table: "allowances", periodId: period?.id ?? null, clientId });
+
   // Check if there are unconfirmed documents (for report generation)
   const { data: hasUnconfirmedDocuments = true } = useSWR(
     period ? ["unconfirmed-check", period.id, clientId] : null,
@@ -208,13 +215,16 @@ export default function PeriodDetailPage({
   const refreshAll = useCallback(() => {
     mutateInvoices();
     mutateAllowances();
-  }, [mutateInvoices, mutateAllowances]);
+    mutateInvoiceStatusCounts();
+    mutateAllowanceStatusCounts();
+  }, [mutateInvoices, mutateAllowances, mutateInvoiceStatusCounts, mutateAllowanceStatusCounts]);
 
   const handleExtractInvoice = async (invoiceId: string) => {
     try {
       toast.info("AI 正在處理中...");
       await extractInvoiceDataAction(invoiceId);
       mutateInvoices();
+      mutateInvoiceStatusCounts();
       toast.success("AI 處理完成，請進行確認");
     } catch (error) {
       console.error("Error extracting invoice data:", error);
@@ -222,6 +232,7 @@ export default function PeriodDetailPage({
         error instanceof Error ? error.message : "AI 提取失敗";
       toast.error(errorMessage);
       mutateInvoices();
+      mutateInvoiceStatusCounts();
     }
   };
 
@@ -230,6 +241,7 @@ export default function PeriodDetailPage({
       toast.info("AI 正在處理中...");
       await extractAllowanceDataAction(allowanceId);
       mutateAllowances();
+      mutateAllowanceStatusCounts();
       toast.success("AI 處理完成，請進行確認");
     } catch (error) {
       console.error("Error extracting allowance data:", error);
@@ -237,6 +249,7 @@ export default function PeriodDetailPage({
         error instanceof Error ? error.message : "AI 提取失敗";
       toast.error(errorMessage);
       mutateAllowances();
+      mutateAllowanceStatusCounts();
     }
   };
 
@@ -387,15 +400,17 @@ export default function PeriodDetailPage({
     if (!reviewingInvoice && invoicePendingAdvanceRef.current) {
       invoicePendingAdvanceRef.current = false;
       mutateInvoices();
+      mutateInvoiceStatusCounts();
     }
-  }, [reviewingInvoice, mutateInvoices]);
+  }, [reviewingInvoice, mutateInvoices, mutateInvoiceStatusCounts]);
 
   useEffect(() => {
     if (!reviewingAllowance && allowancePendingAdvanceRef.current) {
       allowancePendingAdvanceRef.current = false;
       mutateAllowances();
+      mutateAllowanceStatusCounts();
     }
-  }, [reviewingAllowance, mutateAllowances]);
+  }, [reviewingAllowance, mutateAllowances, mutateAllowanceStatusCounts]);
 
   const handleBulkRefresh = useCallback(() => {
     refreshAll();
@@ -520,6 +535,7 @@ export default function PeriodDetailPage({
               <StatusFilterBar
                 activeStatus={invoiceStatusFilter}
                 onStatusChange={handleInvoiceStatusFilterChange}
+                counts={invoiceStatusCounts}
               />
             </CardHeader>
             <CardContent>
@@ -558,6 +574,7 @@ export default function PeriodDetailPage({
               <StatusFilterBar
                 activeStatus={allowanceStatusFilter}
                 onStatusChange={handleAllowanceStatusFilterChange}
+                counts={allowanceStatusCounts}
               />
             </CardHeader>
             <CardContent>
@@ -613,8 +630,8 @@ export default function PeriodDetailPage({
         firmId={firmId}
         clientId={clientId}
         period={rocPeriod}
-        onSuccess={mutateInvoices}
-        onAllowanceSuccess={mutateAllowances}
+        onSuccess={() => { mutateInvoices(); mutateInvoiceStatusCounts(); }}
+        onAllowanceSuccess={() => { mutateAllowances(); mutateAllowanceStatusCounts(); }}
       />
 
       <InvoiceUploadDialog
@@ -625,8 +642,8 @@ export default function PeriodDetailPage({
         period={rocPeriod}
         periodId={period.id}
         clientName={client.name}
-        onSuccess={mutateInvoices}
-        onAllowanceSuccess={mutateAllowances}
+        onSuccess={() => { mutateInvoices(); mutateInvoiceStatusCounts(); }}
+        onAllowanceSuccess={() => { mutateAllowances(); mutateAllowanceStatusCounts(); }}
       />
 
       <InvoiceReviewDialog
@@ -644,14 +661,14 @@ export default function PeriodDetailPage({
         invoice={invoiceToDelete}
         open={!!invoiceToDelete}
         onOpenChange={(open) => !open && setInvoiceToDelete(null)}
-        onSuccess={mutateInvoices}
+        onSuccess={() => { mutateInvoices(); mutateInvoiceStatusCounts(); }}
       />
 
       <AllowanceDeleteDialog
         allowance={allowanceToDelete}
         open={!!allowanceToDelete}
         onOpenChange={(open) => !open && setAllowanceToDelete(null)}
-        onSuccess={mutateAllowances}
+        onSuccess={() => { mutateAllowances(); mutateAllowanceStatusCounts(); }}
       />
 
       <AllowanceReviewDialog

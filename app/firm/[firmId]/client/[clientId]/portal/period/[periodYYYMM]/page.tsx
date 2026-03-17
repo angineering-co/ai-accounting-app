@@ -250,13 +250,13 @@ export default function PortalPeriodDetailPage({
   const { firmId, clientId, periodYYYMM } = use(params);
   const supabase = createSupabaseClient();
   const rocPeriod = RocPeriod.fromYYYMM(periodYYYMM);
-  const { data: currentUser } = useSWR("portal-current-user", async () => {
+  const { data: session } = useSWR("portal-session", async () => {
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    return user;
+      data: { session },
+    } = await supabase.auth.getSession();
+    return session;
   });
-  const userId = currentUser?.id;
+  const userId = session?.user?.id;
   const [invoiceToDelete, setInvoiceToDelete] = useState<DeleteTarget | null>(
     null,
   );

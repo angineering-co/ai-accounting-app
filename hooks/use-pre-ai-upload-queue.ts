@@ -121,7 +121,9 @@ export function usePreAiUploadQueue({
         missingPreviewRows.map(async (row) => {
           const { data: signedData, error: signedError } = await supabase.storage
             .from("invoices")
-            .createSignedUrl(row.storage_path!, 60 * 30);
+            .createSignedUrl(row.storage_path!, 60 * 30, {
+              transform: { width: 400, height: 400, resize: "contain" },
+            });
 
           if (signedError || !signedData?.signedUrl) {
             return { id: row.id, url: null as string | null };

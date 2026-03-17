@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -238,10 +237,10 @@ export function AllowanceTable({
   };
 
   return (
-    <div className="border rounded-md">
+    <div className="relative w-full overflow-auto max-h-[60vh] border rounded-md">
       <TooltipProvider>
-        <Table className="table-fixed">
-          <TableHeader>
+        <table className="w-full caption-bottom text-sm table-fixed">
+          <TableHeader className="sticky top-0 z-10 bg-background">
             <TableRow>
               <TableHead className="w-[88px]">縮圖</TableHead>
               <TableHead className="w-[180px]">文件識別</TableHead>
@@ -449,7 +448,7 @@ export function AllowanceTable({
               })
             )}
           </TableBody>
-        </Table>
+        </table>
       </TooltipProvider>
     </div>
   );

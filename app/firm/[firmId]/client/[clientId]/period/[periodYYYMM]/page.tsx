@@ -212,44 +212,48 @@ export default function PeriodDetailPage({
     }
   };
 
-  const refreshAll = useCallback(() => {
+  const refreshInvoices = useCallback(() => {
     mutateInvoices();
-    mutateAllowances();
     mutateInvoiceStatusCounts();
+  }, [mutateInvoices, mutateInvoiceStatusCounts]);
+
+  const refreshAllowances = useCallback(() => {
+    mutateAllowances();
     mutateAllowanceStatusCounts();
-  }, [mutateInvoices, mutateAllowances, mutateInvoiceStatusCounts, mutateAllowanceStatusCounts]);
+  }, [mutateAllowances, mutateAllowanceStatusCounts]);
+
+  const refreshAll = useCallback(() => {
+    refreshInvoices();
+    refreshAllowances();
+  }, [refreshInvoices, refreshAllowances]);
 
   const handleExtractInvoice = async (invoiceId: string) => {
+    toast.info("AI 正在處理中...");
     try {
-      toast.info("AI 正在處理中...");
       await extractInvoiceDataAction(invoiceId);
-      mutateInvoices();
-      mutateInvoiceStatusCounts();
       toast.success("AI 處理完成，請進行確認");
     } catch (error) {
       console.error("Error extracting invoice data:", error);
       const errorMessage =
         error instanceof Error ? error.message : "AI 提取失敗";
       toast.error(errorMessage);
-      mutateInvoices();
-      mutateInvoiceStatusCounts();
+    } finally {
+      refreshInvoices();
     }
   };
 
   const handleExtractAllowance = async (allowanceId: string) => {
+    toast.info("AI 正在處理中...");
     try {
-      toast.info("AI 正在處理中...");
       await extractAllowanceDataAction(allowanceId);
-      mutateAllowances();
-      mutateAllowanceStatusCounts();
       toast.success("AI 處理完成，請進行確認");
     } catch (error) {
       console.error("Error extracting allowance data:", error);
       const errorMessage =
         error instanceof Error ? error.message : "AI 提取失敗";
       toast.error(errorMessage);
-      mutateAllowances();
-      mutateAllowanceStatusCounts();
+    } finally {
+      refreshAllowances();
     }
   };
 
@@ -399,18 +403,16 @@ export default function PeriodDetailPage({
   useEffect(() => {
     if (!reviewingInvoice && invoicePendingAdvanceRef.current) {
       invoicePendingAdvanceRef.current = false;
-      mutateInvoices();
-      mutateInvoiceStatusCounts();
+      refreshInvoices();
     }
-  }, [reviewingInvoice, mutateInvoices, mutateInvoiceStatusCounts]);
+  }, [reviewingInvoice, refreshInvoices]);
 
   useEffect(() => {
     if (!reviewingAllowance && allowancePendingAdvanceRef.current) {
       allowancePendingAdvanceRef.current = false;
-      mutateAllowances();
-      mutateAllowanceStatusCounts();
+      refreshAllowances();
     }
-  }, [reviewingAllowance, mutateAllowances, mutateAllowanceStatusCounts]);
+  }, [reviewingAllowance, refreshAllowances]);
 
   const handleBulkRefresh = useCallback(() => {
     refreshAll();
@@ -630,8 +632,8 @@ export default function PeriodDetailPage({
         firmId={firmId}
         clientId={clientId}
         period={rocPeriod}
-        onSuccess={() => { mutateInvoices(); mutateInvoiceStatusCounts(); }}
-        onAllowanceSuccess={() => { mutateAllowances(); mutateAllowanceStatusCounts(); }}
+        onSuccess={refreshInvoices}
+        onAllowanceSuccess={refreshAllowances}
       />
 
       <InvoiceUploadDialog
@@ -642,8 +644,8 @@ export default function PeriodDetailPage({
         period={rocPeriod}
         periodId={period.id}
         clientName={client.name}
-        onSuccess={() => { mutateInvoices(); mutateInvoiceStatusCounts(); }}
-        onAllowanceSuccess={() => { mutateAllowances(); mutateAllowanceStatusCounts(); }}
+        onSuccess={refreshInvoices}
+        onAllowanceSuccess={refreshAllowances}
       />
 
       <InvoiceReviewDialog
@@ -661,14 +663,14 @@ export default function PeriodDetailPage({
         invoice={invoiceToDelete}
         open={!!invoiceToDelete}
         onOpenChange={(open) => !open && setInvoiceToDelete(null)}
-        onSuccess={() => { mutateInvoices(); mutateInvoiceStatusCounts(); }}
+        onSuccess={refreshInvoices}
       />
 
       <AllowanceDeleteDialog
         allowance={allowanceToDelete}
         open={!!allowanceToDelete}
         onOpenChange={(open) => !open && setAllowanceToDelete(null)}
-        onSuccess={() => { mutateAllowances(); mutateAllowanceStatusCounts(); }}
+        onSuccess={refreshAllowances}
       />
 
       <AllowanceReviewDialog

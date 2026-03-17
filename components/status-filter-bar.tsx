@@ -44,11 +44,13 @@ const STATUS_OPTIONS = [
 interface StatusFilterBarProps {
   activeStatus: string;
   onStatusChange: (status: string) => void;
+  counts?: Record<string, number>;
 }
 
 export function StatusFilterBar({
   activeStatus,
   onStatusChange,
+  counts,
 }: StatusFilterBarProps) {
   return (
     <div className="flex gap-1.5 overflow-x-auto pb-1">
@@ -70,6 +72,11 @@ export function StatusFilterBar({
               <span className={cn("h-1.5 w-1.5 rounded-full", option.dotClass)} />
             )}
             {option.label}
+            {counts?.[option.value] != null && (
+              <span className="ml-0.5 tabular-nums opacity-70">
+                ({counts[option.value]})
+              </span>
+            )}
           </button>
         );
       })}

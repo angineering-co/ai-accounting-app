@@ -13,7 +13,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -76,7 +75,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -661,7 +659,7 @@ export function InvoiceReviewDialog({
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent
-        className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto"
+        className="w-[95vw] max-w-7xl h-[90vh] flex flex-col"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <DialogHeader className="flex flex-row items-center justify-between space-y-0">
@@ -699,10 +697,10 @@ export function InvoiceReviewDialog({
           )}
         </DialogHeader>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
+        <div className="flex-1 flex flex-col md:flex-row gap-4 min-h-0 overflow-hidden py-4">
           {/* Preview Section */}
           <div
-            className={`border rounded-lg bg-muted flex items-center justify-center min-h-[300px] overflow-hidden relative group ${
+            className={`flex-1 min-h-[250px] min-w-0 border rounded-lg bg-muted flex items-center justify-center overflow-hidden relative group ${
               (isPanMode || !isPdf) && previewUrl && !excelData
                 ? isDragging
                   ? "cursor-grabbing"
@@ -870,60 +868,83 @@ export function InvoiceReviewDialog({
           </div>
 
           {/* Form Section */}
-          <Form {...form}>
-            <form className="space-y-4">
-              <FormField
-                control={form.control}
-                name="invoiceSerialCode"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>發票字軌號碼</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        placeholder="例如: AB12345678"
-                        className={getConfidenceStyle("invoiceSerialCode")}
-                        disabled={isLocked || isExcelImport}
-                        onChange={(e) => {
-                          field.onChange(
-                            e.target.value.toUpperCase().replace(/\s+/g, ""),
-                          );
-                          clearConfidence("invoiceSerialCode");
-                        }}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="date"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>發票日期</FormLabel>
-                    <div className="space-y-2">
+          <div className="md:w-[480px] shrink-0 flex flex-col min-h-0">
+            <Form {...form}>
+              <form className="flex-1 overflow-y-auto pr-2 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <FormField
+                  control={form.control}
+                  name="invoiceSerialCode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>發票字軌號碼</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          placeholder="AB12345678"
+                          className={getConfidenceStyle("invoiceSerialCode")}
+                          disabled={isLocked || isExcelImport}
+                          onChange={(e) => {
+                            field.onChange(
+                              e.target.value.toUpperCase().replace(/\s+/g, ""),
+                            );
+                            clearConfidence("invoiceSerialCode");
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="date"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>發票日期</FormLabel>
                       <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            disabled={isLocked || isExcelImport}
-                            className={cn(
-                              "w-full justify-start text-left font-normal",
-                              !field.value && "text-muted-foreground",
-                              getConfidenceStyle("date"),
-                              isPeriodMismatch &&
-                                "ring-2 ring-orange-400 ring-offset-1",
-                            )}
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {selectedInvoiceDate
-                              ? formatDateToYYYYMMDD(selectedInvoiceDate)
-                              : "選擇發票日期"}
-                          </Button>
-                        </PopoverTrigger>
+                        <div className="relative">
+                          <FormControl>
+                            <Input
+                              {...field}
+                              placeholder="YYYY/MM/DD"
+                              className={cn(
+                                "pr-9",
+                                getConfidenceStyle("date"),
+                                isPeriodMismatch &&
+                                  "ring-2 ring-orange-400 ring-offset-1",
+                              )}
+                              disabled={isLocked || isExcelImport}
+                              onChange={(e) => {
+                                field.onChange(e.target.value);
+                                clearConfidence("date");
+                              }}
+                              onBlur={(e) => {
+                                field.onBlur();
+                                const normalized = normalizeDateInput(
+                                  e.target.value,
+                                );
+                                if (!e.target.value.trim()) return;
+                                if (!normalized) return;
+                                form.setValue("date", normalized, {
+                                  shouldValidate: true,
+                                  shouldDirty: true,
+                                });
+                              }}
+                            />
+                          </FormControl>
+                          <PopoverTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="absolute right-0 top-0 h-full w-9 px-2"
+                              disabled={isLocked || isExcelImport}
+                            >
+                              <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                          </PopoverTrigger>
+                        </div>
                         <PopoverContent className="w-auto p-0">
                           <Calendar
                             mode="single"
@@ -946,50 +967,21 @@ export function InvoiceReviewDialog({
                           />
                         </PopoverContent>
                       </Popover>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          placeholder="YYYY/MM/DD"
-                          className={cn(
-                            getConfidenceStyle("date"),
-                            isPeriodMismatch &&
-                              "ring-2 ring-orange-400 ring-offset-1",
-                          )}
-                          disabled={isLocked || isExcelImport}
-                          onChange={(e) => {
-                            field.onChange(e.target.value);
-                            clearConfidence("date");
-                          }}
-                          onBlur={(e) => {
-                            field.onBlur();
-                            const normalized = normalizeDateInput(
-                              e.target.value,
-                            );
-                            if (!e.target.value.trim()) return;
-                            if (!normalized) return;
-                            form.setValue("date", normalized, {
-                              shouldValidate: true,
-                              shouldDirty: true,
-                            });
-                          }}
-                        />
-                      </FormControl>
-                    </div>
-                    {isPeriodMismatch && invoice?.year_month && (
-                      <div className="flex items-center gap-1.5 mt-2 text-xs font-medium text-orange-600 bg-orange-50 p-2 rounded border border-orange-200">
-                        <AlertCircle className="h-3.5 w-3.5" />
-                        <span>
-                          日期與期別不符 (期別:{" "}
-                          {RocPeriod.fromYYYMM(invoice.year_month).format()})
-                        </span>
-                      </div>
-                    )}
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                      {isPeriodMismatch && invoice?.year_month && (
+                        <div className="flex items-center gap-1.5 mt-1 text-xs font-medium text-orange-600 bg-orange-50 p-1.5 rounded border border-orange-200">
+                          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                          <span>
+                            期別不符 ({RocPeriod.fromYYYMM(invoice.year_month).format()})
+                          </span>
+                        </div>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-3">
                 <FormField
                   control={form.control}
                   name="totalSales"
@@ -1078,74 +1070,80 @@ export function InvoiceReviewDialog({
                           }}
                         />
                       </FormControl>
-                      {isTaxAmountWarning && (
-                        <div className="flex items-center gap-1.5 mt-2 text-xs font-medium text-orange-600 bg-orange-50 p-2 rounded border border-orange-200">
-                          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                          <span>
-                            稅額 ({tax || 0}) 與銷售額 5% (
-                            {Math.round((Number(totalSales) || 0) * 0.05)}) 不符
-                          </span>
-                        </div>
-                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="totalAmount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>總計</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="text"
+                          inputMode="numeric"
+                          value={field.value ?? ""}
+                          className={cn(
+                            getConfidenceStyle("totalAmount"),
+                            isMathError &&
+                              "ring-2 ring-orange-400 ring-offset-1",
+                          )}
+                          disabled={isLocked || isExcelImport}
+                          onChange={(e) => {
+                            const cleaned = e.target.value.replace(
+                              /[,\s]/g,
+                              "",
+                            );
+                            if (!cleaned) {
+                              field.onChange(undefined);
+                              form.clearErrors("totalAmount");
+                              clearConfidence("totalAmount");
+                              return;
+                            }
+                            if (!/^\d+$/.test(cleaned)) {
+                              form.setError("totalAmount", {
+                                type: "manual",
+                                message: "請輸入非負整數",
+                              });
+                              return;
+                            }
+                            field.onChange(Number(cleaned));
+                            form.clearErrors("totalAmount");
+                            clearConfidence("totalAmount");
+                          }}
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
+              {/* Warnings for money fields */}
+              {(isMathError || isTaxAmountWarning) && (
+                <div className="space-y-1.5">
+                  {isMathError && (
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-orange-600 bg-orange-50 p-1.5 rounded border border-orange-200">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        銷售額 ({totalSales || 0}) + 稅額 ({tax || 0}) ≠ 總計 ({totalAmount || 0})
+                      </span>
+                    </div>
+                  )}
+                  {isTaxAmountWarning && (
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-orange-600 bg-orange-50 p-1.5 rounded border border-orange-200">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        稅額 ({tax || 0}) 與銷售額 5% ({Math.round((Number(totalSales) || 0) * 0.05)}) 不符
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
 
-              <FormField
-                control={form.control}
-                name="totalAmount"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>總計</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        type="text"
-                        inputMode="numeric"
-                        value={field.value ?? ""}
-                        className={cn(
-                          getConfidenceStyle("totalAmount"),
-                          isMathError && "ring-2 ring-orange-400 ring-offset-1",
-                        )}
-                        disabled={isLocked || isExcelImport}
-                        onChange={(e) => {
-                          const cleaned = e.target.value.replace(/[,\s]/g, "");
-                          if (!cleaned) {
-                            field.onChange(undefined);
-                            form.clearErrors("totalAmount");
-                            clearConfidence("totalAmount");
-                            return;
-                          }
-                          if (!/^\d+$/.test(cleaned)) {
-                            form.setError("totalAmount", {
-                              type: "manual",
-                              message: "請輸入非負整數",
-                            });
-                            return;
-                          }
-                          field.onChange(Number(cleaned));
-                          form.clearErrors("totalAmount");
-                          clearConfidence("totalAmount");
-                        }}
-                      />
-                    </FormControl>
-                    {isMathError && (
-                      <div className="flex items-center gap-1.5 mt-2 text-xs font-medium text-orange-600 bg-orange-50 p-2 rounded border border-orange-200">
-                        <AlertCircle className="h-3.5 w-3.5" />
-                        <span>
-                          銷售額 ({totalSales || 0}) + 稅額 ({tax || 0}) ≠ 總計
-                          ({totalAmount || 0})
-                        </span>
-                      </div>
-                    )}
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <FormField
                   control={form.control}
                   name="sellerName"
@@ -1204,7 +1202,7 @@ export function InvoiceReviewDialog({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <FormField
                   control={form.control}
                   name="buyerName"
@@ -1286,7 +1284,7 @@ export function InvoiceReviewDialog({
                 )}
               />
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <FormField
                   control={form.control}
                   name="account"
@@ -1366,7 +1364,7 @@ export function InvoiceReviewDialog({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-3">
                 <FormField
                   control={form.control}
                   name="inOrOut"
@@ -1385,7 +1383,7 @@ export function InvoiceReviewDialog({
                           <SelectTrigger
                             className={getConfidenceStyle("inOrOut")}
                           >
-                            <SelectValue placeholder="選擇進銷項" />
+                            <SelectValue placeholder="進銷項" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="進項">進項</SelectItem>
@@ -1415,7 +1413,7 @@ export function InvoiceReviewDialog({
                           <SelectTrigger
                             className={getConfidenceStyle("invoiceType")}
                           >
-                            <SelectValue placeholder="選擇發票類型" />
+                            <SelectValue placeholder="類型" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="手開二聯式">
@@ -1438,9 +1436,6 @@ export function InvoiceReviewDialog({
                     </FormItem>
                   )}
                 />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="deductible"
@@ -1459,7 +1454,7 @@ export function InvoiceReviewDialog({
                           <SelectTrigger
                             className={getConfidenceStyle("deductible")}
                           >
-                            <SelectValue placeholder="選擇可扣抵" />
+                            <SelectValue placeholder="扣抵" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="true">是</SelectItem>
@@ -1472,20 +1467,15 @@ export function InvoiceReviewDialog({
                   )}
                 />
               </div>
-            </form>
-          </Form>
-        </div>
+              </form>
+            </Form>
 
-        {/* Linked Allowances Section */}
-        {linkedAllowances.length > 0 && (
-          <Card className="mt-4">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">
-                相關折讓單 ({linkedAllowances.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="space-y-2">
+            {/* Linked Allowances Section */}
+            {linkedAllowances.length > 0 && (
+              <div className="mt-3 space-y-2 border-t pt-3">
+                <p className="text-sm font-medium">
+                  相關折讓單 ({linkedAllowances.length})
+                </p>
                 {linkedAllowances.map((allowance) => (
                   <div
                     key={allowance.id}
@@ -1513,64 +1503,65 @@ export function InvoiceReviewDialog({
                   </div>
                 ))}
               </div>
-            </CardContent>
-          </Card>
-        )}
+            )}
 
-        <DialogFooter className="flex flex-col sm:flex-row gap-2">
-          <TooltipProvider>
-            <Tooltip delayDuration={0}>
-              <TooltipTrigger asChild>
-                <div className="flex-1">
-                  <Button
-                    variant="outline"
-                    onClick={form.handleSubmit((data) =>
-                      handleSave(data, "processed"),
-                    )}
-                    disabled={form.formState.isSubmitting || isLocked}
-                    className="w-full"
-                  >
-                    <Save className="mr-2 h-4 w-4" /> 僅儲存
-                  </Button>
-                </div>
-              </TooltipTrigger>
-              {isLocked && (
-                <TooltipContent>
-                  <p>此發票目前已被鎖定，無法修改</p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-            <Tooltip delayDuration={0}>
-              <TooltipTrigger asChild>
-                <div className="flex-1">
-                  <Button
-                    onClick={form.handleSubmit((data) =>
-                      handleSave(data, "confirmed"),
-                    )}
-                    disabled={
-                      form.formState.isSubmitting ||
-                      isConfirmDisabled ||
-                      isLocked
-                    }
-                    className="w-full"
-                  >
-                    {form.formState.isSubmitting ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <CheckCircle className="mr-2 h-4 w-4" />
-                    )}
-                    確認並儲存
-                  </Button>
-                </div>
-              </TooltipTrigger>
-              {(isConfirmDisabled || isLocked) && confirmDisabledReason && (
-                <TooltipContent>
-                  <p>{confirmDisabledReason}</p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
-        </DialogFooter>
+            {/* Sticky action buttons */}
+            <div className="pt-3 border-t mt-auto shrink-0 flex flex-col sm:flex-row gap-2">
+              <TooltipProvider>
+                <Tooltip delayDuration={0}>
+                  <TooltipTrigger asChild>
+                    <div className="flex-1">
+                      <Button
+                        variant="outline"
+                        onClick={form.handleSubmit((data) =>
+                          handleSave(data, "processed"),
+                        )}
+                        disabled={form.formState.isSubmitting || isLocked}
+                        className="w-full"
+                      >
+                        <Save className="mr-2 h-4 w-4" /> 僅儲存
+                      </Button>
+                    </div>
+                  </TooltipTrigger>
+                  {isLocked && (
+                    <TooltipContent>
+                      <p>此發票目前已被鎖定，無法修改</p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+                <Tooltip delayDuration={0}>
+                  <TooltipTrigger asChild>
+                    <div className="flex-1">
+                      <Button
+                        onClick={form.handleSubmit((data) =>
+                          handleSave(data, "confirmed"),
+                        )}
+                        disabled={
+                          form.formState.isSubmitting ||
+                          isConfirmDisabled ||
+                          isLocked
+                        }
+                        className="w-full"
+                      >
+                        {form.formState.isSubmitting ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <CheckCircle className="mr-2 h-4 w-4" />
+                        )}
+                        確認並儲存
+                      </Button>
+                    </div>
+                  </TooltipTrigger>
+                  {(isConfirmDisabled || isLocked) && confirmDisabledReason && (
+                    <TooltipContent>
+                      <p>{confirmDisabledReason}</p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

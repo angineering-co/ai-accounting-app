@@ -228,6 +228,7 @@ export function InvoiceReviewDialog({
   }, [totalSales, tax, totalAmount]);
 
   const taxType = form.watch("taxType");
+  const invoiceType = form.watch("invoiceType");
   const sellerTaxId = form.watch("sellerTaxId");
   const buyerTaxId = form.watch("buyerTaxId");
 
@@ -236,8 +237,11 @@ export function InvoiceReviewDialog({
     const s = Number(totalSales) || 0;
     const t = Number(tax) || 0;
     if (s === 0 && t === 0) return false;
+    // 二聯式 invoices have tax embedded in the sales amount by convention;
+    // the tax is extracted later during report generation, so tax must be 0.
+    if (invoiceType === "二聯式收銀機" || invoiceType === "手開二聯式") return t !== 0;
     return t !== Math.round(s * 0.05);
-  }, [taxType, totalSales, tax]);
+  }, [taxType, invoiceType, totalSales, tax]);
 
   const isSellerTaxIdInvalid = useMemo(() => {
     if (!sellerTaxId || sellerTaxId.length !== 8) return false;
@@ -295,12 +299,13 @@ export function InvoiceReviewDialog({
       return true;
     }
 
-    return !form.formState.isValid || isMathError || isPeriodMismatch || isSellerTaxIdInvalid || isBuyerTaxIdInvalid;
+    return !form.formState.isValid || isMathError || isTaxAmountWarning || isPeriodMismatch || isSellerTaxIdInvalid || isBuyerTaxIdInvalid;
   }, [
     localConfirmed,
     hasEdited,
     form.formState.isValid,
     isMathError,
+    isTaxAmountWarning,
     isPeriodMismatch,
     isSellerTaxIdInvalid,
     isBuyerTaxIdInvalid,
@@ -330,6 +335,9 @@ export function InvoiceReviewDialog({
     }
 
     if (isMathError) return "銷售額 + 稅額 不等於 總計";
+    if (isTaxAmountWarning) return invoiceType === "二聯式收銀機" || invoiceType === "手開二聯式"
+      ? "二聯式發票稅額應為 0（稅額內含於銷售額）"
+      : "稅額與銷售額 5% 不符";
     if (isPeriodMismatch) return "日期與期別不符";
     if (isSellerTaxIdInvalid) return "賣方統一編號檢核碼不符";
     if (isBuyerTaxIdInvalid) return "買方統一編號檢核碼不符";
@@ -343,6 +351,8 @@ export function InvoiceReviewDialog({
     form.formState.errors,
     form.formState.isValid,
     isMathError,
+    isTaxAmountWarning,
+    invoiceType,
     isPeriodMismatch,
     isSellerTaxIdInvalid,
     isBuyerTaxIdInvalid,
@@ -1049,7 +1059,7 @@ export function InvoiceReviewDialog({
                           className={cn(
                             getConfidenceStyle("tax"),
                             (isMathError || isTaxAmountWarning) &&
-                              "ring-2 ring-orange-400 ring-offset-1",
+                              "ring-2 ring-red-400 ring-offset-1",
                           )}
                           disabled={isLocked || isExcelImport}
                           onChange={(e) => {
@@ -1127,11 +1137,11 @@ export function InvoiceReviewDialog({
                   )}
                 />
               </div>
-              {/* Warnings for money fields */}
+              {/* Errors for money fields */}
               {(isMathError || isTaxAmountWarning) && (
                 <div className="space-y-1.5">
                   {isMathError && (
-                    <div className="flex items-center gap-1.5 text-xs font-medium text-orange-600 bg-orange-50 p-1.5 rounded border border-orange-200">
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-red-600 bg-red-50 p-1.5 rounded border border-red-200">
                       <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                       <span>
                         銷售額 ({totalSales || 0}) + 稅額 ({tax || 0}) ≠ 總計 ({totalAmount || 0})
@@ -1139,10 +1149,12 @@ export function InvoiceReviewDialog({
                     </div>
                   )}
                   {isTaxAmountWarning && (
-                    <div className="flex items-center gap-1.5 text-xs font-medium text-orange-600 bg-orange-50 p-1.5 rounded border border-orange-200">
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-red-600 bg-red-50 p-1.5 rounded border border-red-200">
                       <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                       <span>
-                        稅額 ({tax || 0}) 與銷售額 5% ({Math.round((Number(totalSales) || 0) * 0.05)}) 不符
+                        {invoiceType === "二聯式收銀機" || invoiceType === "手開二聯式"
+                          ? `二聯式發票稅額應為 0（稅額內含於銷售額），目前稅額為 ${tax || 0}`
+                          : `稅額 (${tax || 0}) 與銷售額 5% (${Math.round((Number(totalSales) || 0) * 0.05)}) 不符`}
                       </span>
                     </div>
                   )}

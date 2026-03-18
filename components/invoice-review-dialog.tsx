@@ -295,13 +295,15 @@ export function InvoiceReviewDialog({
       return true;
     }
 
-    return !form.formState.isValid || isMathError || isPeriodMismatch;
+    return !form.formState.isValid || isMathError || isPeriodMismatch || isSellerTaxIdInvalid || isBuyerTaxIdInvalid;
   }, [
     localConfirmed,
     hasEdited,
     form.formState.isValid,
     isMathError,
     isPeriodMismatch,
+    isSellerTaxIdInvalid,
+    isBuyerTaxIdInvalid,
     invoice?.status,
   ]);
 
@@ -329,6 +331,8 @@ export function InvoiceReviewDialog({
 
     if (isMathError) return "銷售額 + 稅額 不等於 總計";
     if (isPeriodMismatch) return "日期與期別不符";
+    if (isSellerTaxIdInvalid) return "賣方統一編號檢核碼不符";
+    if (isBuyerTaxIdInvalid) return "買方統一編號檢核碼不符";
     if (!form.formState.isValid) return "請修正欄位錯誤";
     return null;
   }, [
@@ -340,6 +344,8 @@ export function InvoiceReviewDialog({
     form.formState.isValid,
     isMathError,
     isPeriodMismatch,
+    isSellerTaxIdInvalid,
+    isBuyerTaxIdInvalid,
   ]);
 
   // Reset localConfirmed when user edits a field after confirming via Shift+Enter
@@ -1179,7 +1185,7 @@ export function InvoiceReviewDialog({
                           className={cn(
                             getConfidenceStyle("sellerTaxId"),
                             isSellerTaxIdInvalid &&
-                              "ring-2 ring-orange-400 ring-offset-1",
+                              "ring-2 ring-red-400 ring-offset-1",
                           )}
                           disabled={isLocked || isExcelImport}
                           onChange={(e) => {
@@ -1191,7 +1197,7 @@ export function InvoiceReviewDialog({
                         />
                       </FormControl>
                       {isSellerTaxIdInvalid && (
-                        <div className="flex items-center gap-1.5 mt-2 text-xs font-medium text-orange-600 bg-orange-50 p-2 rounded border border-orange-200">
+                        <div className="flex items-center gap-1.5 mt-2 text-xs font-medium text-red-600 bg-red-50 p-2 rounded border border-red-200">
                           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                           <span>統一編號檢核碼不符</span>
                         </div>
@@ -1238,7 +1244,7 @@ export function InvoiceReviewDialog({
                           className={cn(
                             getConfidenceStyle("buyerTaxId"),
                             isBuyerTaxIdInvalid &&
-                              "ring-2 ring-orange-400 ring-offset-1",
+                              "ring-2 ring-red-400 ring-offset-1",
                           )}
                           disabled={isLocked || isExcelImport}
                           onChange={(e) => {
@@ -1250,7 +1256,7 @@ export function InvoiceReviewDialog({
                         />
                       </FormControl>
                       {isBuyerTaxIdInvalid && (
-                        <div className="flex items-center gap-1.5 mt-2 text-xs font-medium text-orange-600 bg-orange-50 p-2 rounded border border-orange-200">
+                        <div className="flex items-center gap-1.5 mt-2 text-xs font-medium text-red-600 bg-red-50 p-2 rounded border border-red-200">
                           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                           <span>統一編號檢核碼不符</span>
                         </div>

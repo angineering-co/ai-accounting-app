@@ -178,27 +178,72 @@ test.describe("Consumer invoice validation", () => {
   });
 });
 
-// ─── Group 4: Math validation ───────────────────────────────────────────────
+// ─── Group 4: Computed total & AI mismatch warning ──────────────────────────
 
-test.describe("Math validation", () => {
-  test("mismatched sales + tax ≠ total disables confirm with error tooltip", async ({
+test.describe("Computed total and AI mismatch warning", () => {
+  test("total field is computed from sales + tax and is read-only", async ({
     page,
   }) => {
-    // Invoice 2: totalSales=2000, tax=100, totalAmount=2100 (valid math)
+    // Invoice 2: totalSales=2000, tax=100
     await openInvoiceDialog(page, "BB00000002");
 
+    const dialog = page.locator('[role="dialog"]');
+    const totalInput = dialog
+      .locator("label", { hasText: "總計" })
+      .locator("..")
+      .locator("input");
+
+    // Total should be computed (2000 + 100 = 2100) and disabled
+    await expect(totalInput).toBeDisabled();
+    await expect(totalInput).toHaveValue("2100");
+  });
+
+  test("total updates automatically when sales changes", async ({ page }) => {
+    await openInvoiceDialog(page, "BB00000002");
+
+    const dialog = page.locator('[role="dialog"]');
+    const salesInput = dialog
+      .locator("label", { hasText: "銷售額" })
+      .locator("..")
+      .locator("input");
+    const totalInput = dialog
+      .locator("label", { hasText: "總計" })
+      .locator("..")
+      .locator("input");
+
+    // Change sales → total should auto-update
+    await salesInput.fill("5000");
+    await expect(totalInput).toHaveValue("5100"); // 5000 + 100
+  });
+
+  test("changing sales to mismatch AI total shows warning but does not block confirm", async ({
+    page,
+  }) => {
+    // Invoice 2: AI extracted totalAmount=2100
+    await openInvoiceDialog(page, "BB00000002");
+
+    const dialog = page.locator('[role="dialog"]');
     const btn = confirmButton(page);
     await expect(btn).toBeEnabled();
 
-    // Change totalSales to break the math
-    const salesInput = page
-      .locator('[role="dialog"]')
+    // No warning initially (sales=2000, tax=100, AI total=2100 → match)
+    await expect(
+      dialog.locator("text=AI 辨識總計為"),
+    ).not.toBeVisible();
+
+    // Change sales to create mismatch with AI's extracted total
+    const salesInput = dialog
       .locator("label", { hasText: "銷售額" })
       .locator("..")
       .locator("input");
     await salesInput.fill("9999");
 
-    // Confirm button should now be disabled
-    await expect(btn).toBeDisabled();
+    // Warning should appear (AI total was 2100, computed is 9999+100=10099)
+    await expect(
+      dialog.locator("text=AI 辨識總計為 2100"),
+    ).toBeVisible();
+
+    // Confirm button should still be enabled (non-blocking warning)
+    await expect(btn).toBeEnabled();
   });
 });

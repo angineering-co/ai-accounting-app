@@ -110,10 +110,7 @@ const invoiceReviewFormSchema = z
       .number({ message: "請輸入稅額" })
       .int("請輸入非負整數")
       .nonnegative("請輸入非負整數"),
-    totalAmount: z
-      .number({ message: "請輸入總計" })
-      .int("請輸入非負整數")
-      .nonnegative("請輸入非負整數"),
+    totalAmount: z.number().optional(),
     sellerName: z.string().optional(),
     sellerTaxId: z
       .string()
@@ -187,6 +184,7 @@ export function InvoiceReviewDialog({
   const [linkedAllowances, setLinkedAllowances] = useState<Allowance[]>([]);
   const [localConfirmed, setLocalConfirmed] = useState(false);
   const [hasEdited, setHasEdited] = useState(false);
+  const [aiExtractedTotal, setAiExtractedTotal] = useState<number | null>(null);
   const supabase = createClient();
 
   const form = useForm<InvoiceReviewFormValues>({
@@ -214,18 +212,23 @@ export function InvoiceReviewDialog({
 
   const totalSales = form.watch("totalSales");
   const tax = form.watch("tax");
-  const totalAmount = form.watch("totalAmount");
   const source = form.watch("source");
   const isExcelImport = source === "import-excel";
 
-  const isMathError = useMemo(() => {
-    const s = Number(totalSales) || 0;
-    const t = Number(tax) || 0;
-    const a = Number(totalAmount) || 0;
-    // Don't show error if all are zero
-    if (s === 0 && t === 0 && a === 0) return false;
-    return Math.abs(s + t - a) > 0.01;
-  }, [totalSales, tax, totalAmount]);
+  const computedTotal = useMemo(() => {
+    return (Number(totalSales) || 0) + (Number(tax) || 0);
+  }, [totalSales, tax]);
+
+  const isAiTotalMismatch = useMemo(() => {
+    if (aiExtractedTotal == null) return false;
+    if (computedTotal === 0 && aiExtractedTotal === 0) return false;
+    return Math.abs(computedTotal - aiExtractedTotal) > 0.01;
+  }, [computedTotal, aiExtractedTotal]);
+
+  // Keep totalAmount in sync so saved data is consistent
+  useEffect(() => {
+    form.setValue("totalAmount", computedTotal, { shouldValidate: false });
+  }, [computedTotal, form]);
 
   const taxType = form.watch("taxType");
   const invoiceType = form.watch("invoiceType");
@@ -301,12 +304,11 @@ export function InvoiceReviewDialog({
       return true;
     }
 
-    return !form.formState.isValid || isMathError || isTaxAmountWarning || isPeriodMismatch || isSellerTaxIdInvalid || isBuyerTaxIdInvalid;
+    return !form.formState.isValid || isTaxAmountWarning || isPeriodMismatch || isSellerTaxIdInvalid || isBuyerTaxIdInvalid;
   }, [
     localConfirmed,
     hasEdited,
     form.formState.isValid,
-    isMathError,
     isTaxAmountWarning,
     isPeriodMismatch,
     isSellerTaxIdInvalid,
@@ -336,7 +338,6 @@ export function InvoiceReviewDialog({
       if (typeof msg === "string") return msg;
     }
 
-    if (isMathError) return "銷售額 + 稅額 不等於 總計";
     if (isTaxAmountWarning) return isTaxEmbeddedInvoice
       ? "二聯式發票稅額應為 0（稅額內含於銷售額）"
       : "稅額與銷售額 5% 不符";
@@ -352,7 +353,6 @@ export function InvoiceReviewDialog({
     invoice?.status,
     form.formState.errors,
     form.formState.isValid,
-    isMathError,
     isTaxAmountWarning,
     isTaxEmbeddedInvoice,
     isPeriodMismatch,
@@ -398,8 +398,10 @@ export function InvoiceReviewDialog({
       setIsPanMode(false);
       setLocalConfirmed(false);
       setHasEdited(false);
+      setAiExtractedTotal(null);
       // Use the extracted_data directly, ensuring all fields are properly mapped
       const extractedData = invoice.extracted_data || {};
+      setAiExtractedTotal(extractedData.totalAmount ?? null);
 
       // Determine initial deductible based on account and DB value
       let initialDeductible = extractedData.deductible ?? false;
@@ -1012,11 +1014,7 @@ export function InvoiceReviewDialog({
                           type="text"
                           inputMode="numeric"
                           value={field.value ?? ""}
-                          className={cn(
-                            getConfidenceStyle("totalSales"),
-                            isMathError &&
-                              "ring-2 ring-orange-400 ring-offset-1",
-                          )}
+                          className={getConfidenceStyle("totalSales")}
                           disabled={isLocked || isExcelImport}
                           onChange={(e) => {
                             const cleaned = e.target.value.replace(
@@ -1060,7 +1058,7 @@ export function InvoiceReviewDialog({
                           value={field.value ?? ""}
                           className={cn(
                             getConfidenceStyle("tax"),
-                            (isMathError || isTaxAmountWarning) &&
+                            isTaxAmountWarning &&
                               "ring-2 ring-red-400 ring-offset-1",
                           )}
                           disabled={isLocked || isExcelImport}
@@ -1092,61 +1090,25 @@ export function InvoiceReviewDialog({
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="totalAmount"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>總計</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          type="text"
-                          inputMode="numeric"
-                          value={field.value ?? ""}
-                          className={cn(
-                            getConfidenceStyle("totalAmount"),
-                            isMathError &&
-                              "ring-2 ring-orange-400 ring-offset-1",
-                          )}
-                          disabled={isLocked || isExcelImport}
-                          onChange={(e) => {
-                            const cleaned = e.target.value.replace(
-                              /[,\s]/g,
-                              "",
-                            );
-                            if (!cleaned) {
-                              field.onChange(undefined);
-                              form.clearErrors("totalAmount");
-                              clearConfidence("totalAmount");
-                              return;
-                            }
-                            if (!/^\d+$/.test(cleaned)) {
-                              form.setError("totalAmount", {
-                                type: "manual",
-                                message: "請輸入非負整數",
-                              });
-                              return;
-                            }
-                            field.onChange(Number(cleaned));
-                            form.clearErrors("totalAmount");
-                            clearConfidence("totalAmount");
-                          }}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <FormItem>
+                  <FormLabel>總計</FormLabel>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    value={computedTotal}
+                    disabled
+                    className="bg-muted"
+                  />
+                </FormItem>
               </div>
-              {/* Errors for money fields */}
-              {(isMathError || isTaxAmountWarning) && (
+              {/* Warnings for money fields */}
+              {(isAiTotalMismatch || isTaxAmountWarning) && (
                 <div className="space-y-1.5">
-                  {isMathError && (
-                    <div className="flex items-center gap-1.5 text-xs font-medium text-red-600 bg-red-50 p-1.5 rounded border border-red-200">
+                  {isAiTotalMismatch && (
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-orange-600 bg-orange-50 p-1.5 rounded border border-orange-200">
                       <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                       <span>
-                        銷售額 ({totalSales || 0}) + 稅額 ({tax || 0}) ≠ 總計 ({totalAmount || 0})
+                        AI 辨識總計為 {aiExtractedTotal}，與銷售額 + 稅額 ({computedTotal}) 不符，請確認銷售額與稅額是否正確
                       </span>
                     </div>
                   )}

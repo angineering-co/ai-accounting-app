@@ -198,7 +198,7 @@ export function InvoiceUploadDialog({
           <DialogTitle>上傳單據 - {clientName}</DialogTitle>
         </DialogHeader>
         <Form {...uploadForm}>
-          <form className="space-y-4 py-4">
+          <form className="space-y-4 py-4 flex-1 min-h-0 overflow-y-auto">
             <FormField
               control={uploadForm.control}
               name="period"

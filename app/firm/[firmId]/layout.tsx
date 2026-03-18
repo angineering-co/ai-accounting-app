@@ -1,22 +1,20 @@
 import { FirmSidebar } from "@/components/firm-sidebar";
 import { PortalSidebar } from "@/components/portal-sidebar";
-import { 
-  SidebarInset, 
-  SidebarTrigger 
+import { PortalBottomNav } from "@/components/portal-bottom-nav";
+import { SWRProvider } from "@/components/swr-provider";
+import {
+  SidebarInset,
+  SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { createClient } from "@/lib/supabase/server";
 import { Separator } from "@/components/ui/separator";
 import { Suspense } from "react";
 import { HydrationSafe } from "@/components/hydration-safe";
 
-/**
- * Fetches and displays the firm name.
- * Because it's wrapped in Suspense, it won't block the Sidebar shell.
- */
 async function FirmName({ params }: { params: Promise<{ firmId: string }> }) {
   const { firmId } = await params;
   const supabase = await createClient();
-  
+
   const { data } = await supabase
     .from("firms")
     .select("name")
@@ -37,13 +35,31 @@ async function SidebarByRole() {
   } = await supabase.auth.getUser();
 
   const { data: profile } = user?.id
-    ? await supabase.from("profiles").select("role").eq("id", user.id).single()
+    ? await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single()
     : { data: null };
 
-  return profile?.role === "client" ? <PortalSidebar /> : <FirmSidebar />;
+  const isPortalUser = profile?.role === "client";
+
+  return (
+    <>
+      {isPortalUser ? (
+        /* Hide sidebar on mobile for portal users — bottom nav is used instead */
+        <div className="hidden md:contents">
+          <PortalSidebar />
+        </div>
+      ) : (
+        <FirmSidebar />
+      )}
+      {isPortalUser && <PortalBottomNav />}
+    </>
+  );
 }
 
-export default function FirmLayout({
+export default function FirmIdLayout({
   children,
   params,
 }: {
@@ -51,28 +67,45 @@ export default function FirmLayout({
   params: Promise<{ firmId: string }>;
 }) {
   return (
-    <>
-      <Suspense fallback={<div className="w-[--sidebar-width] bg-sidebar border-r h-screen" />}>
-        <HydrationSafe fallback={<div className="w-[--sidebar-width] bg-sidebar border-r h-screen" />}>
+    <SWRProvider>
+      <Suspense
+        fallback={
+          <div className="w-[--sidebar-width] bg-sidebar border-r h-screen" />
+        }
+      >
+        <HydrationSafe
+          fallback={
+            <div className="w-[--sidebar-width] bg-sidebar border-r h-screen" />
+          }
+        >
           <SidebarByRole />
         </HydrationSafe>
       </Suspense>
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
+          <SidebarTrigger className="-ml-1 hidden md:flex" />
+          <Separator
+            orientation="vertical"
+            className="mr-2 hidden h-4 md:block"
+          />
           <div className="flex items-center gap-2 px-4">
-            <span className="text-sm font-medium text-muted-foreground">用戶:</span>
-            <Suspense fallback={<div className="h-4 w-32 bg-muted animate-pulse rounded" />}>
+            <span className="text-sm font-medium text-muted-foreground">
+              用戶:
+            </span>
+            <Suspense
+              fallback={
+                <div className="h-4 w-32 bg-muted animate-pulse rounded" />
+              }
+            >
               <FirmName params={params} />
             </Suspense>
           </div>
         </header>
 
-        <div className="flex flex-1 flex-col gap-4 p-4">
+        <div className="flex flex-1 flex-col gap-4 p-4 pb-20 md:pb-4">
           {children}
         </div>
       </SidebarInset>
-    </>
+    </SWRProvider>
   );
 }

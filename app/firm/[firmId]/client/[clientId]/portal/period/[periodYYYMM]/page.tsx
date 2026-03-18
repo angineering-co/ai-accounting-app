@@ -1,10 +1,10 @@
 "use client";
 
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useState } from "react";
 import useSWR from "swr";
+import dynamic from "next/dynamic";
 import { ArrowLeft, FileText, Loader2, Receipt } from "lucide-react";
 import Link from "next/link";
-import { toast } from "sonner";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import {
@@ -13,40 +13,48 @@ import {
   allowanceSchema,
 } from "@/lib/domain/models";
 import { getTaxPeriodByYYYMM } from "@/lib/services/tax-period";
-import { createInvoice } from "@/lib/services/invoice";
-import { createAllowance } from "@/lib/services/allowance";
-import { useSupabaseUpload } from "@/hooks/use-supabase-upload";
-import { InvoiceTable } from "@/components/invoice-table";
-import { AllowanceTable } from "@/components/allowance-table";
-import { RangeManagement } from "@/components/range-management";
+import { DocumentUploadSection } from "@/components/document-upload-section";
 import { InvoiceDeleteDialog } from "@/components/invoice/invoice-delete-dialog";
 import { AllowanceDeleteDialog } from "@/components/allowance-delete-dialog";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
+import { PortalUploadFab } from "@/components/portal-upload-fab";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Label } from "@/components/ui/label";
-import { MobileUploadActions } from "@/components/mobile-upload-actions";
-import { UploadQueueList } from "@/components/upload-queue-list";
-import { usePreAiUploadQueue } from "@/hooks/use-pre-ai-upload-queue";
-import {
-  Dropzone,
-  DropzoneContent,
-  DropzoneEmptyState,
-} from "@/components/dropzone";
+import { Skeleton } from "@/components/ui/skeleton";
 
-type DocumentSectionProps = {
-  title: string;
-  firmId: string;
-  clientId: string;
-  periodId: string;
-  periodYYYMM: string;
-  type: "invoice" | "allowance";
-  inOrOut: "in" | "out";
-  isLocked: boolean;
-  onUploaded: () => Promise<unknown>;
-};
+const InvoiceTable = dynamic(
+  () =>
+    import("@/components/invoice-table").then((m) => ({
+      default: m.InvoiceTable,
+    })),
+  {
+    loading: () => <Skeleton className="h-64 w-full" />,
+    ssr: false,
+  },
+);
+
+const AllowanceTable = dynamic(
+  () =>
+    import("@/components/allowance-table").then((m) => ({
+      default: m.AllowanceTable,
+    })),
+  {
+    loading: () => <Skeleton className="h-64 w-full" />,
+    ssr: false,
+  },
+);
+
+const RangeManagement = dynamic(
+  () =>
+    import("@/components/range-management").then((m) => ({
+      default: m.RangeManagement,
+    })),
+  {
+    loading: () => <Skeleton className="h-64 w-full" />,
+  },
+);
 
 type DeleteTarget = {
   id: string;
@@ -59,188 +67,6 @@ type PreviewTarget = {
   bucketName: "invoices" | "electronic-invoices";
   previewUrl?: string;
 };
-
-function DocumentUploadSection({
-  title,
-  firmId,
-  clientId,
-  periodId,
-  periodYYYMM,
-  type,
-  inOrOut,
-  isLocked,
-  onUploaded,
-}: DocumentSectionProps) {
-  const [isProcessingUpload, setIsProcessingUpload] = useState(false);
-  const [queueItemToDelete, setQueueItemToDelete] =
-    useState<DeleteTarget | null>(null);
-  const {
-    items: queueItems,
-    hasMore,
-    pageSize,
-    isLoading: isQueueLoading,
-    isLoadingMore: isQueueLoadingMore,
-    fetchNextPage,
-    refresh: refreshQueue,
-  } = usePreAiUploadQueue({
-    periodId,
-    inOrOut,
-    type,
-  });
-
-  const uploadProps = useSupabaseUpload({
-    bucketName: "invoices",
-    path: `${firmId}/${periodYYYMM}/${clientId}`,
-    allowedMimeTypes: ["image/*", "application/pdf"],
-    maxFiles: 10,
-    maxFileSize: 50 * 1024 * 1024,
-    getStorageKey: (file) => {
-      const ext = file.name.split(".").pop();
-      return `${crypto.randomUUID()}${ext ? `.${ext}` : ""}`;
-    },
-  });
-
-  const {
-    uploadedFiles,
-    setFiles: setUploadFiles,
-    setUploadedFiles: setUploadedFilesList,
-  } = uploadProps;
-
-  const handleUploadComplete = useCallback(async () => {
-    if (isProcessingUpload || uploadedFiles.length === 0) return;
-    setIsProcessingUpload(true);
-    try {
-      await Promise.all(
-        uploadedFiles.map(async (uploadedFile) => {
-          if (type === "invoice") {
-            await createInvoice({
-              firm_id: firmId,
-              client_id: clientId,
-              storage_path: uploadedFile.path,
-              filename: uploadedFile.name,
-              in_or_out: inOrOut,
-              year_month: periodYYYMM,
-              tax_filing_period_id: periodId,
-            });
-            return;
-          }
-
-          await createAllowance({
-            firm_id: firmId,
-            client_id: clientId,
-            storage_path: uploadedFile.path,
-            filename: uploadedFile.name,
-            in_or_out: inOrOut,
-            tax_filing_period_id: periodId,
-          });
-        }),
-      );
-
-      toast.success(`${title}上傳成功`);
-      await onUploaded();
-      await refreshQueue();
-      setUploadFiles([]);
-      setUploadedFilesList([]);
-    } catch (error) {
-      console.error(error);
-      toast.error(`${title}上傳失敗`);
-    } finally {
-      setIsProcessingUpload(false);
-    }
-  }, [
-    clientId,
-    firmId,
-    inOrOut,
-    isProcessingUpload,
-    onUploaded,
-    periodId,
-    periodYYYMM,
-    title,
-    type,
-    uploadedFiles,
-    setUploadFiles,
-    setUploadedFilesList,
-    refreshQueue,
-  ]);
-
-  useEffect(() => {
-    if (uploadProps.isSuccess && !isProcessingUpload) {
-      handleUploadComplete();
-    }
-  }, [uploadProps.isSuccess, isProcessingUpload, handleUploadComplete]);
-
-  const handleQueueDeleteSuccess = async () => {
-    await onUploaded();
-    await refreshQueue();
-  };
-
-  return (
-    <>
-      <Card className="border-slate-200/80 bg-white shadow-sm shadow-slate-200/60">
-        <CardHeader className="border-b border-slate-100/80">
-          <CardTitle className="text-slate-900">{title}</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-6">
-          {isLocked ? (
-            <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              此期別已鎖定，無法上傳新檔案。
-            </p>
-          ) : (
-            <div className="space-y-2">
-              <Label className="text-slate-700">
-                檔案上傳（僅支援 PDF / 圖片）
-              </Label>
-              <Dropzone {...uploadProps}>
-                <div className="md:hidden">
-                  <MobileUploadActions
-                    files={uploadProps.files}
-                    setFiles={uploadProps.setFiles}
-                    allowedMimeTypes={uploadProps.allowedMimeTypes}
-                    maxFileSize={uploadProps.maxFileSize}
-                    maxFiles={uploadProps.maxFiles}
-                  />
-                </div>
-                <DropzoneEmptyState className="hidden md:flex" />
-                <DropzoneContent />
-              </Dropzone>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-      <div className="md:hidden">
-        <UploadQueueList
-          items={queueItems}
-          isLoading={isQueueLoading}
-          isLoadingMore={isQueueLoadingMore}
-          hasMore={hasMore}
-          pageSize={pageSize}
-          onLoadMore={fetchNextPage}
-          onDelete={
-            isLocked
-              ? undefined
-              : (item) =>
-                  setQueueItemToDelete({ id: item.id, name: item.filename })
-          }
-        />
-      </div>
-      {type === "invoice" ? (
-        <InvoiceDeleteDialog
-          invoice={queueItemToDelete}
-          open={!!queueItemToDelete}
-          onOpenChange={(open) => !open && setQueueItemToDelete(null)}
-          onSuccess={handleQueueDeleteSuccess}
-        />
-      ) : (
-        <AllowanceDeleteDialog
-          allowance={queueItemToDelete}
-          open={!!queueItemToDelete}
-          onOpenChange={(open) => !open && setQueueItemToDelete(null)}
-          onSuccess={handleQueueDeleteSuccess}
-        />
-      )}
-    </>
-  );
-}
 
 export default function PortalPeriodDetailPage({
   params,
@@ -266,11 +92,14 @@ export default function PortalPeriodDetailPage({
   const [activeTab, setActiveTab] = useState("overview");
 
   const handleReview = useCallback(
-    (item: {
-      filename?: string | null;
-      storage_path?: string | null;
-      extracted_data?: { source?: string | null } | null;
-    }, options?: { previewUrl?: string }) => {
+    (
+      item: {
+        filename?: string | null;
+        storage_path?: string | null;
+        extracted_data?: { source?: string | null } | null;
+      },
+      options?: { previewUrl?: string },
+    ) => {
       setPreviewTarget({
         filename: item.filename,
         storagePath: item.storage_path,
@@ -341,6 +170,15 @@ export default function PortalPeriodDetailPage({
       if (error) throw error;
       return allowanceSchema.array().parse(data || []);
     },
+  );
+
+  const handleFabFilesSelected = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    (_files: File[], inOrOut: "in" | "out", _type: "invoice" | "allowance") => {
+      // Navigate to the correct tab
+      setActiveTab(inOrOut === "in" ? "input" : "output");
+    },
+    [],
   );
 
   if (isPeriodLoading || isClientLoading) {
@@ -670,6 +508,11 @@ export default function PortalPeriodDetailPage({
         open={!!allowanceToDelete}
         onOpenChange={(open) => !open && setAllowanceToDelete(null)}
         onSuccess={mutateAllowances}
+      />
+
+      <PortalUploadFab
+        onFilesSelected={handleFabFilesSelected}
+        isLocked={isLocked}
       />
     </div>
   );

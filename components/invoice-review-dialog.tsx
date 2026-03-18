@@ -37,6 +37,8 @@ import {
   Hand,
   AlertCircle,
   CalendarIcon,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import {
   allowanceSchema,
@@ -45,6 +47,7 @@ import {
   type Allowance,
 } from "@/lib/domain/models";
 import { ACCOUNTS, ACCOUNT_LIST } from "@/lib/data/accounts";
+import { isValidUBN } from "@/lib/domain/tax-id";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { updateInvoice } from "@/lib/services/invoice";
 import { toast } from "sonner";
@@ -225,6 +228,28 @@ export function InvoiceReviewDialog({
     if (s === 0 && t === 0 && a === 0) return false;
     return Math.abs(s + t - a) > 0.01;
   }, [totalSales, tax, totalAmount]);
+
+  const taxType = form.watch("taxType");
+  const sellerTaxId = form.watch("sellerTaxId");
+  const buyerTaxId = form.watch("buyerTaxId");
+
+  const isTaxAmountWarning = useMemo(() => {
+    if (taxType !== "應稅") return false;
+    const s = Number(totalSales) || 0;
+    const t = Number(tax) || 0;
+    if (s === 0 && t === 0) return false;
+    return t !== Math.round(s * 0.05);
+  }, [taxType, totalSales, tax]);
+
+  const isSellerTaxIdInvalid = useMemo(() => {
+    if (!sellerTaxId || sellerTaxId.length !== 8) return false;
+    return !isValidUBN(sellerTaxId);
+  }, [sellerTaxId]);
+
+  const isBuyerTaxIdInvalid = useMemo(() => {
+    if (!buyerTaxId || buyerTaxId.length !== 8) return false;
+    return !isValidUBN(buyerTaxId);
+  }, [buyerTaxId]);
 
   const dateValue = form.watch("date");
   const inOrOutValue = form.watch("inOrOut");
@@ -639,11 +664,39 @@ export function InvoiceReviewDialog({
         className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <DialogHeader>
-          <DialogTitle>發票內容確認</DialogTitle>
-          <DialogDescription>
-            請確認 AI 提取的資訊是否正確。您可以在此進行修改。
-          </DialogDescription>
+        <DialogHeader className="flex flex-row items-center justify-between space-y-0">
+          <div>
+            <DialogTitle>發票內容確認</DialogTitle>
+            <DialogDescription>
+              請確認 AI 提取的資訊是否正確。您可以在此進行修改。
+            </DialogDescription>
+          </div>
+          {(onPrevious || onNext) && (
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={onPrevious}
+                disabled={!onPrevious}
+                title="上一筆 (↑)"
+              >
+                <ChevronUp className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={onNext}
+                disabled={!onNext}
+                title="下一筆 (↓)"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </DialogHeader>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
@@ -997,7 +1050,7 @@ export function InvoiceReviewDialog({
                           value={field.value ?? ""}
                           className={cn(
                             getConfidenceStyle("tax"),
-                            isMathError &&
+                            (isMathError || isTaxAmountWarning) &&
                               "ring-2 ring-orange-400 ring-offset-1",
                           )}
                           disabled={isLocked || isExcelImport}
@@ -1025,6 +1078,15 @@ export function InvoiceReviewDialog({
                           }}
                         />
                       </FormControl>
+                      {isTaxAmountWarning && (
+                        <div className="flex items-center gap-1.5 mt-2 text-xs font-medium text-orange-600 bg-orange-50 p-2 rounded border border-orange-200">
+                          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                          <span>
+                            稅額 ({tax || 0}) 與銷售額 5% (
+                            {Math.round((Number(totalSales) || 0) * 0.05)}) 不符
+                          </span>
+                        </div>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )}
@@ -1116,7 +1178,11 @@ export function InvoiceReviewDialog({
                           {...field}
                           inputMode="numeric"
                           maxLength={8}
-                          className={getConfidenceStyle("sellerTaxId")}
+                          className={cn(
+                            getConfidenceStyle("sellerTaxId"),
+                            isSellerTaxIdInvalid &&
+                              "ring-2 ring-orange-400 ring-offset-1",
+                          )}
                           disabled={isLocked || isExcelImport}
                           onChange={(e) => {
                             field.onChange(
@@ -1126,6 +1192,12 @@ export function InvoiceReviewDialog({
                           }}
                         />
                       </FormControl>
+                      {isSellerTaxIdInvalid && (
+                        <div className="flex items-center gap-1.5 mt-2 text-xs font-medium text-orange-600 bg-orange-50 p-2 rounded border border-orange-200">
+                          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                          <span>統一編號檢核碼不符</span>
+                        </div>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )}
@@ -1165,7 +1237,11 @@ export function InvoiceReviewDialog({
                           {...field}
                           inputMode="numeric"
                           maxLength={8}
-                          className={getConfidenceStyle("buyerTaxId")}
+                          className={cn(
+                            getConfidenceStyle("buyerTaxId"),
+                            isBuyerTaxIdInvalid &&
+                              "ring-2 ring-orange-400 ring-offset-1",
+                          )}
                           disabled={isLocked || isExcelImport}
                           onChange={(e) => {
                             field.onChange(
@@ -1175,6 +1251,12 @@ export function InvoiceReviewDialog({
                           }}
                         />
                       </FormControl>
+                      {isBuyerTaxIdInvalid && (
+                        <div className="flex items-center gap-1.5 mt-2 text-xs font-medium text-orange-600 bg-orange-50 p-2 rounded border border-orange-200">
+                          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                          <span>統一編號檢核碼不符</span>
+                        </div>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )}

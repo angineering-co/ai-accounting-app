@@ -232,16 +232,18 @@ export function InvoiceReviewDialog({
   const sellerTaxId = form.watch("sellerTaxId");
   const buyerTaxId = form.watch("buyerTaxId");
 
+  // 二聯式 invoices have tax embedded in the sales amount by convention;
+  // the tax is extracted later during report generation.
+  const isTaxEmbeddedInvoice = invoiceType === "二聯式收銀機" || invoiceType === "手開二聯式";
+
   const isTaxAmountWarning = useMemo(() => {
     if (taxType !== "應稅") return false;
     const s = Number(totalSales) || 0;
     const t = Number(tax) || 0;
     if (s === 0 && t === 0) return false;
-    // 二聯式 invoices have tax embedded in the sales amount by convention;
-    // the tax is extracted later during report generation, so tax must be 0.
-    if (invoiceType === "二聯式收銀機" || invoiceType === "手開二聯式") return t !== 0;
+    if (isTaxEmbeddedInvoice) return t !== 0;
     return t !== Math.round(s * 0.05);
-  }, [taxType, invoiceType, totalSales, tax]);
+  }, [taxType, isTaxEmbeddedInvoice, totalSales, tax]);
 
   const isSellerTaxIdInvalid = useMemo(() => {
     if (!sellerTaxId || sellerTaxId.length !== 8) return false;
@@ -335,7 +337,7 @@ export function InvoiceReviewDialog({
     }
 
     if (isMathError) return "銷售額 + 稅額 不等於 總計";
-    if (isTaxAmountWarning) return invoiceType === "二聯式收銀機" || invoiceType === "手開二聯式"
+    if (isTaxAmountWarning) return isTaxEmbeddedInvoice
       ? "二聯式發票稅額應為 0（稅額內含於銷售額）"
       : "稅額與銷售額 5% 不符";
     if (isPeriodMismatch) return "日期與期別不符";
@@ -352,7 +354,7 @@ export function InvoiceReviewDialog({
     form.formState.isValid,
     isMathError,
     isTaxAmountWarning,
-    invoiceType,
+    isTaxEmbeddedInvoice,
     isPeriodMismatch,
     isSellerTaxIdInvalid,
     isBuyerTaxIdInvalid,
@@ -1152,7 +1154,7 @@ export function InvoiceReviewDialog({
                     <div className="flex items-center gap-1.5 text-xs font-medium text-red-600 bg-red-50 p-1.5 rounded border border-red-200">
                       <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                       <span>
-                        {invoiceType === "二聯式收銀機" || invoiceType === "手開二聯式"
+                        {isTaxEmbeddedInvoice
                           ? `二聯式發票稅額應為 0（稅額內含於銷售額），目前稅額為 ${tax || 0}`
                           : `稅額 (${tax || 0}) 與銷售額 5% (${Math.round((Number(totalSales) || 0) * 0.05)}) 不符`}
                       </span>

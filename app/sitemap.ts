@@ -14,19 +14,19 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
     {
       url: `${baseUrl}/terms`,
-      lastModified: new Date(),
+      lastModified: "2025-01-01",
       changeFrequency: "monthly",
       priority: 0.3,
     },
     {
       url: `${baseUrl}/privacy`,
-      lastModified: new Date(),
+      lastModified: "2025-01-01",
       changeFrequency: "monthly",
       priority: 0.3,
     },
     {
       url: `${baseUrl}/company`,
-      lastModified: new Date(),
+      lastModified: "2025-01-01",
       changeFrequency: "monthly",
       priority: 0.5,
     },

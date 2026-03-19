@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Ban, CheckCircle2, CircleHelp } from "lucide-react";
 
+import { trackPricingInteraction } from "@/lib/analytics";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -165,7 +166,10 @@ export function LandingPricingSection() {
                   <Button
                     variant="outline"
                     className="w-full rounded-xl border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
-                    onClick={() => setIsAddonOpen(false)}
+                    onClick={() => {
+                      setIsAddonOpen(false);
+                      trackPricingInteraction("toggle_addon", "close");
+                    }}
                   >
                     返回主方案內容
                   </Button>
@@ -262,7 +266,10 @@ export function LandingPricingSection() {
                 <Button
                   variant="outline"
                   className="w-full rounded-xl border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
-                  onClick={() => setIsAddonOpen(true)}
+                  onClick={() => {
+                    setIsAddonOpen(true);
+                    trackPricingInteraction("toggle_addon", "open");
+                  }}
                 >
                   加購設立登記服務
                 </Button>
@@ -277,9 +284,10 @@ export function LandingPricingSection() {
                   </p>
                   <Select
                     value={companyType}
-                    onValueChange={(value) =>
-                      setCompanyType(value as CompanyType)
-                    }
+                    onValueChange={(value) => {
+                      setCompanyType(value as CompanyType);
+                      trackPricingInteraction("change_company_type", value);
+                    }}
                   >
                     <SelectTrigger className="h-10 rounded-xl border-slate-200 text-sm font-medium text-slate-700">
                       <SelectValue placeholder="請選擇公司型態" />

@@ -1,21 +1,23 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
+import { CtaLink } from "@/components/cta-link";
 import { LandingPricingSection } from "@/components/landing-pricing-section";
 import { CheckCircle2, Smartphone, ShieldCheck, Zap } from "lucide-react";
 
-import { CurrentYear } from "@/components/current-year";
-
 export const metadata: Metadata = {
-  title: "SnapBooks.ai (速博) | 台灣第一家 AI 記帳事務所",
+  title: "AI 記帳事務所推薦｜速博 SnapBooks - 每月$1,200，專業會計師把關",
   description:
-    "SnapBooks.ai (速博智慧有限公司) 協助一人公司與小型團隊，拍照上傳單據與 AI 整理流程，更快完成記帳與報稅。",
+    "速博 SnapBooks.ai — 拍照上傳發票，AI 自動辨識，專業會計師 100% 覆核。適合年營業額 3,000 萬以下中小企業，每月 NT$1,200 起。",
   keywords: [
     "snapbooks",
     "snapbooks.ai",
     "速博",
     "AI 記帳事務所",
+    "記帳事務所推薦",
+    "一人公司記帳",
+    "記帳費用",
+    "電商報稅",
     "台灣",
     "記帳",
     "報稅",
@@ -24,9 +26,9 @@ export const metadata: Metadata = {
     canonical: "https://snapbooks.ai",
   },
   openGraph: {
-    title: "SnapBooks.ai (速博) | 台灣第一家 AI 記帳事務所",
+    title: "AI 記帳事務所推薦｜速博 SnapBooks - 每月$1,200，專業會計師把關",
     description:
-      "拍照上傳單據與 AI 整理流程，更快完成記帳與報稅。專為台灣企業打造！",
+      "速博 SnapBooks.ai — 拍照上傳發票，AI 自動辨識，專業會計師 100% 覆核。適合年營業額 3,000 萬以下中小企業，每月 NT$1,200 起。",
     url: "https://snapbooks.ai",
     siteName: "SnapBooks.ai",
     type: "website",
@@ -41,8 +43,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "SnapBooks.ai (速博) | 台灣第一家 AI 記帳事務所",
-    description: "拍照上傳單據與 AI 整理流程，更快完成記帳與報稅。",
+    title: "AI 記帳事務所推薦｜速博 SnapBooks - 每月$1,200，專業會計師把關",
+    description:
+      "速博 SnapBooks.ai — 拍照上傳發票，AI 自動辨識，專業會計師 100% 覆核。適合年營業額 3,000 萬以下中小企業，每月 NT$1,200 起。",
     images: ["https://snapbooks.ai/twitter-image.png"],
   },
 };
@@ -78,67 +81,16 @@ const jsonLd = {
 export default function Home() {
   const earlyAdopterFormUrl = process.env.NEXT_PUBLIC_EARLY_ADOPTER_FORM_URL;
   const hasFormUrl = Boolean(earlyAdopterFormUrl);
-  const ctaHref = hasFormUrl ? earlyAdopterFormUrl : "#signup-unavailable";
+  const ctaHref = earlyAdopterFormUrl ?? "#signup-unavailable";
 
   return (
-    <div className="min-h-screen bg-white selection:bg-emerald-100 selection:text-emerald-900 font-sans text-slate-900">
+    <>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      {/* Sticky Navigation */}
-      <header className="sticky top-0 z-50 w-full border-b border-slate-100/50 bg-white/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between px-5">
-          <Link href="/" aria-label="SnapBooks.ai">
-            <Image
-              src="/snapbooks.svg"
-              alt="SnapBooks.ai 速博 Logo"
-              width={182}
-              height={60}
-              className="h-10 w-auto"
-            />
-          </Link>
-          <div className="flex items-center gap-4 md:gap-6">
-            <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600">
-              <Link
-                href="#features"
-                className="hover:text-slate-900 transition-colors"
-              >
-                服務介紹
-              </Link>
-              <Link
-                href="#pricing"
-                className="hover:text-slate-900 transition-colors"
-              >
-                價格
-              </Link>
-              <Link
-                href="/auth/login"
-                className="hover:text-slate-900 transition-colors"
-              >
-                登入
-              </Link>
-            </nav>
-            <Link
-              href="/auth/login"
-              className="md:hidden text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
-            >
-              登入
-            </Link>
-            <Button
-              asChild
-              size="sm"
-              className="rounded-full bg-emerald-500 text-white hover:bg-slate-800 font-medium"
-            >
-              <a href={ctaHref} target="_blank" rel="noreferrer">
-                免費評估適用方案
-              </a>
-            </Button>
-          </div>
-        </div>
-      </header>
 
-      <main className="flex flex-col">
+      <main className="flex flex-1 flex-col">
         {/* Section 1: Hero */}
         <section className="relative overflow-hidden bg-gradient-to-br from-sky-50 via-slate-50 to-emerald-50 pt-28 pb-32 md:pt-40 md:pb-48">
           <div className="absolute inset-0 bg-[url('/noise.png')] opacity-[0.03]"></div>
@@ -162,9 +114,9 @@ export default function Home() {
                 size="lg"
                 className="rounded-full bg-emerald-600 text-white hover:bg-emerald-500 border-0 h-14 px-8 text-lg font-semibold shadow-lg shadow-emerald-600/20 transition-all hover:scale-105"
               >
-                <a href={ctaHref} target="_blank" rel="noreferrer">
+                <CtaLink href={ctaHref} location="hero">
                   免費評估適用方案
-                </a>
+                </CtaLink>
               </Button>
               {!hasFormUrl && (
                 <p id="signup-unavailable" className="text-xs text-slate-500">
@@ -420,63 +372,14 @@ export default function Home() {
                 size="lg"
                 className="rounded-full bg-emerald-500 text-white hover:bg-emerald-400 border-0 h-16 px-10 text-xl font-bold shadow-xl shadow-emerald-500/20 transition-all hover:scale-105"
               >
-                <a href={ctaHref} target="_blank" rel="noreferrer">
+                <CtaLink href={ctaHref} location="footer_cta">
                   立即填表，升級報稅體驗
-                </a>
+                </CtaLink>
               </Button>
             </div>
           </div>
         </section>
       </main>
-
-      {/* Footer */}
-      <footer className="border-t border-slate-200 bg-white py-12 md:py-16">
-        <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-8 px-5 md:flex-row md:items-start md:gap-0">
-          <div className="flex flex-col items-center md:items-start gap-4">
-            <Image
-              src="/snapbooks.svg"
-              alt="SnapBooks.ai 速博 Logo"
-              width={182}
-              height={60}
-              className="h-10 w-auto"
-            />
-            <div className="text-sm text-slate-500 text-center md:text-left leading-relaxed">
-              <p className="font-medium text-slate-700">
-                SnapBooks.ai 速博智慧有限公司｜速博智慧記帳事務所
-              </p>
-              <p>地址：台中市西區五權路1-67號11樓之5</p>
-              <p>電子信箱：snapbooks.ai@gmail.com</p>
-            </div>
-          </div>
-
-          <div className="flex flex-col items-center md:items-end gap-6">
-            <div className="flex flex-wrap justify-center gap-x-8 gap-y-4 text-sm font-medium text-slate-500">
-              <Link
-                href="/terms"
-                className="hover:text-slate-900 transition-colors"
-              >
-                服務條款
-              </Link>
-              <Link
-                href="/privacy"
-                className="hover:text-slate-900 transition-colors"
-              >
-                隱私權政策
-              </Link>
-              <Link
-                href="/company"
-                className="hover:text-slate-900 transition-colors"
-              >
-                關於我們
-              </Link>
-            </div>
-
-            <div className="text-sm text-slate-400">
-              &copy; <CurrentYear /> SnapBooks.ai. 速博智慧有限公司 版權所有。
-            </div>
-          </div>
-        </div>
-      </footer>
-    </div>
+    </>
   );
 }

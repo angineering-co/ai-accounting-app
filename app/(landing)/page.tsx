@@ -123,6 +123,13 @@ export default function Home() {
                   請設定 `NEXT_PUBLIC_EARLY_ADOPTER_FORM_URL` 環境變數。
                 </p>
               )}
+              <div className="flex flex-col items-center gap-2">
+                <span className="text-sm text-slate-500">或直接加 Line 諮詢</span>
+                <a href="https://lin.ee/nPVmG3M" target="_blank" rel="noopener noreferrer">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="https://scdn.line-apps.com/n/line_add_friends/btn/zh-Hant.png" alt="加入好友" height="36" className="h-9" />
+                </a>
+              </div>
             </div>
             <div className="mt-16 flex justify-center">
               <div className="inline-flex items-center gap-2.5 rounded-full border border-slate-200 bg-white/60 px-5 py-2.5 text-sm font-medium text-slate-700 backdrop-blur-md shadow-sm">
@@ -376,6 +383,13 @@ export default function Home() {
                   立即填表，升級報稅體驗
                 </CtaLink>
               </Button>
+              <div className="mt-6 flex flex-col items-center gap-2">
+                <span className="text-sm text-slate-500">或直接加 Line 諮詢</span>
+                <a href="https://lin.ee/nPVmG3M" target="_blank" rel="noopener noreferrer">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="https://scdn.line-apps.com/n/line_add_friends/btn/zh-Hant.png" alt="加入好友" height="36" className="h-9" />
+                </a>
+              </div>
             </div>
           </div>
         </section>

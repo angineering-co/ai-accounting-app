@@ -25,6 +25,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
   Loader2,
@@ -228,7 +229,8 @@ export function InvoiceReviewDialog({
   // Keep totalAmount in sync so saved data is consistent
   useEffect(() => {
     form.setValue("totalAmount", computedTotal, { shouldValidate: false });
-  }, [computedTotal, form]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [computedTotal]);
 
   const taxType = form.watch("taxType");
   const invoiceType = form.watch("invoiceType");
@@ -1091,7 +1093,7 @@ export function InvoiceReviewDialog({
                   )}
                 />
                 <FormItem>
-                  <FormLabel>總計</FormLabel>
+                  <Label>總計</Label>
                   <Input
                     type="text"
                     inputMode="numeric"

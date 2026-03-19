@@ -47,10 +47,13 @@ export async function updateSession(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const user = data?.claims;
 
-  const publicRoutes = ["/", "/terms", "/privacy", "/company"];
+  // When adding public landing pages, add them here to skip auth redirect.
+  // Use the array for exact paths; use startsWith checks below for prefixes.
+  const publicRoutes = ["/", "/terms", "/privacy", "/company", "/blog"];
 
   if (
     !publicRoutes.includes(request.nextUrl.pathname) &&
+    !request.nextUrl.pathname.startsWith("/blog/") &&
     !user &&
     !request.nextUrl.pathname.startsWith("/login") &&
     !request.nextUrl.pathname.startsWith("/auth")

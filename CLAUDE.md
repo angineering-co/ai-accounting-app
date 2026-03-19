@@ -71,7 +71,7 @@ The `[firmId]` layout (`app/firm/[firmId]/layout.tsx`) serves both accounting st
 - `server.ts` — `createClient()` for Server Components / Server Actions (cookie-based auth)
 - `client.ts` — `createClient()` for Client Components (browser)
 - `admin.ts` — Service role client for admin operations
-- `proxy.ts` — Proxy client
+- `proxy.ts` — Auth middleware (see "Public Routes" below)
 
 **`lib/utils.ts`** — Shared utilities: `cn()`, date helpers, ROC year conversion (`toRocYearMonth`, `toGregorianDate`)
 
@@ -106,6 +106,14 @@ Invoice/Allowance status flow: `uploaded → processing → processed → confir
 - **Integration tests**: `tests/integration/` — use real Supabase instance
 - Test fixtures/helpers in `tests/utils/supabase.ts` (`createTestFixture`, `cleanupTestFixture`)
 - Static test data (JSON, XLSX) in `tests/fixtures/`
+
+### Public Routes (Auth Middleware)
+
+`lib/supabase/proxy.ts` acts as auth middleware: any route not explicitly listed as public will redirect unauthenticated visitors to `/auth/login`. When adding new public-facing pages (landing pages, blog posts, legal pages, etc.), you **must** add the route to the `publicRoutes` array or add a `startsWith` check in `proxy.ts`. Forgetting this will make the page inaccessible to logged-out users.
+
+Currently public:
+- Exact paths in `publicRoutes`: `/`, `/terms`, `/privacy`, `/company`, `/blog`
+- Prefix matches: `/auth`, `/login`, `/blog/`
 
 ### Supabase
 

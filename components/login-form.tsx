@@ -48,10 +48,12 @@ export function LoginForm({
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl">登入</CardTitle>
-          <CardDescription>
+      <Card className="border-slate-200/60 bg-white/80 shadow-lg backdrop-blur-sm">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl font-bold tracking-tight text-slate-900">
+            登入
+          </CardTitle>
+          <CardDescription className="text-slate-600">
             請輸入您的電子郵件與密碼
           </CardDescription>
         </CardHeader>
@@ -59,7 +61,9 @@ export function LoginForm({
           <form onSubmit={handleLogin}>
             <div className="flex flex-col gap-6">
               <div className="grid gap-2">
-                <Label htmlFor="email">電子郵件</Label>
+                <Label htmlFor="email" className="text-slate-700 font-medium">
+                  電子郵件
+                </Label>
                 <Input
                   id="email"
                   type="email"
@@ -67,14 +71,17 @@ export function LoginForm({
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  className="border-slate-200 focus-visible:ring-emerald-500"
                 />
               </div>
               <div className="grid gap-2">
                 <div className="flex items-center">
-                  <Label htmlFor="password">密碼</Label>
+                  <Label htmlFor="password" className="text-slate-700 font-medium">
+                    密碼
+                  </Label>
                   <Link
                     href="/auth/forgot-password"
-                    className="ml-auto inline-block text-sm underline-offset-4 hover:underline"
+                    className="ml-auto inline-block text-sm text-emerald-600 underline-offset-4 hover:underline"
                   >
                     忘記密碼？
                   </Link>
@@ -85,10 +92,19 @@ export function LoginForm({
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  className="border-slate-200 focus-visible:ring-emerald-500"
                 />
               </div>
-              {error && <p className="text-sm text-red-500">{error}</p>}
-              <Button type="submit" className="w-full" disabled={isLoading}>
+              {error && (
+                <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">
+                  {error}
+                </p>
+              )}
+              <Button
+                type="submit"
+                className="w-full rounded-full bg-emerald-600 text-white hover:bg-emerald-500 border-0 h-12 text-base font-semibold shadow-lg shadow-emerald-600/20 transition-all hover:scale-[1.02]"
+                disabled={isLoading}
+              >
                 {isLoading ? "登入中..." : "登入"}
               </Button>
             </div>

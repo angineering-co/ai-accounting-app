@@ -11,6 +11,16 @@ export interface BlogPost {
 
 export const blogPosts: BlogPost[] = [
   {
+    slug: "company-taxes-2026-guide",
+    title: "2026 公司報稅，你到底要繳哪些稅？",
+    description:
+      "營業稅、營所稅、扣繳、暫繳、二代健保、未分配盈餘稅，六大稅種的申報時間、算法、罰則一次講完。2026 年公司和行號報稅完整指南。",
+    date: "2026-03-23",
+    author: "SnapBooks.ai 團隊",
+    tags: ["報稅", "營業稅", "營所稅", "中小企業"],
+    published: true,
+  },
+  {
     slug: "why-ai-accounting-firm-not-saas",
     title: "為什麼做 AI 記帳事務所，而不是另一套記帳軟體",
     description:

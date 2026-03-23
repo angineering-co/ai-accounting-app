@@ -10,8 +10,8 @@ export const metadata: Metadata = {
   alternates: { canonical: "https://snapbooks.ai/blog" },
 };
 
-export default function BlogListingPage() {
-  const posts = getPublishedPosts();
+export default async function BlogListingPage() {
+  const posts = await getPublishedPosts();
 
   return (
     <main className="flex-1">

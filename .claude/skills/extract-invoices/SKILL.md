@@ -1,6 +1,6 @@
 ---
 name: extract-invoices
-description: Extract data from Taiwan Unified Invoice (統一發票) images using Claude's vision. Use this skill when the user wants to extract, read, or process invoice images locally, or says "extract invoices", "讀發票", "辨識發票", or points to a directory of invoice files.
+description: Extract data from Taiwan Unified Invoice (統一發票) images using Claude's vision — no API keys or network needed. Use this skill whenever the user wants to extract, read, process, or review invoice images locally. Trigger on phrases like "extract invoices", "讀發票", "辨識發票", "幫我處理發票", "read these invoices", or when the user points to a directory/folder of invoice files, receipt images, or scanned documents. Also trigger if the user asks to identify invoice details, pull data from invoice photos, or batch-process a folder of financial documents.
 ---
 
 # Invoice Data Extraction
@@ -40,18 +40,21 @@ Process invoices in parallel using the **Agent tool**. Launch up to 5 sub-agents
 
 ### Sub-agent Prompt
 
-For each invoice file, launch a sub-agent with a prompt that includes:
+Before launching agents, read `scripts/accounts.ts` and `scripts/tax-id.ts` once. Then for each invoice, launch a sub-agent whose prompt contains everything it needs to work independently (it won't have access to this SKILL.md). Include:
+
 1. The **file path** to the invoice image
 2. The **client info** (name, taxId, industry)
-3. The **account list** from `scripts/accounts.ts` (read once, pass to all agents)
-4. The **extraction instructions** below
-5. The **target period** (if provided)
+3. The **full account list** (the ACCOUNTS object content from `scripts/accounts.ts`)
+4. The **UBN validation algorithm** (the isValidUBN function from `scripts/tax-id.ts`)
+5. The **extraction instructions**: all field definitions, invoice type rules, account assignment logic, and confidence scoring rules from Sections 3-5 below
+6. The **target period** (if provided)
+7. Instruction to return a **single JSON object** with keys: `filename`, `data` (all extracted fields), `validationIssues` (array of strings), `lowConfidenceFields` (array of field names)
 
 Each sub-agent should:
 1. Read the image using the Read tool
 2. Extract all fields listed below
 3. Run all validation rules (Section 5)
-4. Return a JSON object with the extracted data, validation issues, and low-confidence fields
+4. Return the JSON object described above
 
 ### Auto-detect 進項/銷項
 
@@ -83,8 +86,8 @@ Compare the client's tax ID against the buyer and seller tax IDs on the invoice:
 
 ### Invoice Type-Specific Rules
 
-- **手開二聯式 / 二聯式收銀機**: Tax is embedded in the sales amount. Set `totalSales` = `totalAmount` (the displayed value is tax-inclusive), `tax` = 0.
-- **手開三聯式 / 三聯式收銀機 / 電子發票**: Extract `totalSales`, `tax`, and `totalAmount` as separate values. Verify: totalSales + tax = totalAmount.
+- **手開二聯式 / 二聯式收銀機**: These invoices show a single total with tax already included — there's no separate tax line on the form. Set `totalSales` = `totalAmount` (the displayed value), `tax` = 0. The tax portion is calculated later during report generation.
+- **手開三聯式 / 三聯式收銀機 / 電子發票**: These invoices have separate fields for sales, tax, and total. Extract `totalSales`, `tax`, and `totalAmount` as separate values. Verify: totalSales + tax = totalAmount.
 
 ### Account Assignment
 
@@ -191,7 +194,7 @@ Write results to `extracted-invoices.json` in the working directory:
         }
       },
       "validationIssues": [],
-      "lowConfidenceFields": ["sellerName"]
+      "lowConfidenceFields": ["sellerTaxId"]
     }
   ]
 }
@@ -216,5 +219,5 @@ After presenting the summary table:
 
 - All user-facing output in Traditional Chinese (zh-Hant)
 - Do not use emojis
-- Do not use `——` (double em-dash); use standard Chinese punctuation
+- Do not use `——` (double em-dash) — it reads as AI-generated in Chinese content. Use standard punctuation: `，`、`。`、`：`、`；` or sentence breaks
 - Keep tone direct and professional

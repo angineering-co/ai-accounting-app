@@ -2,17 +2,17 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
-import { getPostBySlug, getPublishedPosts } from "@/content/blog";
+import { blogSlugs, getPostBySlug } from "@/content/blog";
 
 type Props = { params: Promise<{ slug: string }> };
 
 export function generateStaticParams() {
-  return getPublishedPosts().map((post) => ({ slug: post.slug }));
+  return blogSlugs.map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const post = getPostBySlug(slug);
+  const post = await getPostBySlug(slug);
   if (!post) return {};
 
   return {
@@ -31,10 +31,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function BlogPostPage({ params }: Props) {
   const { slug } = await params;
-  const post = getPostBySlug(slug);
+  const post = await getPostBySlug(slug);
   if (!post) notFound();
 
-  const { default: Content } = await import(`@/content/blog/${slug}`);
+  const { default: Content } = await import(`@/content/blog/${slug}.mdx`);
 
   return (
     <main className="flex-1">
@@ -72,7 +72,7 @@ export default async function BlogPostPage({ params }: Props) {
       </section>
 
       {/* Article content */}
-      <article className="mx-auto max-w-3xl px-5 py-16 md:py-20">
+      <article className="prose prose-lg prose-slate mx-auto max-w-3xl px-5 py-16 md:py-20 prose-headings:font-bold prose-headings:text-slate-900 prose-a:text-emerald-600 prose-a:underline hover:prose-a:text-emerald-700 prose-li:marker:text-emerald-500 prose-table:overflow-hidden prose-table:rounded-xl prose-table:border prose-table:border-slate-200 prose-thead:bg-slate-50 prose-th:px-4 prose-th:py-3 prose-th:font-semibold prose-th:text-slate-800 prose-td:px-4 prose-td:py-3 prose-td:text-slate-600 first:[&_td]:whitespace-nowrap">
         <Content />
       </article>
     </main>

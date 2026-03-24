@@ -4,6 +4,7 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { CtaLink } from "@/components/cta-link";
 import { CurrentYear } from "@/components/current-year";
+import { ToolsNavDropdown } from "@/components/tools-nav-dropdown";
 
 export default function LandingLayout({
   children,
@@ -47,6 +48,7 @@ export default function LandingLayout({
               >
                 部落格
               </Link>
+              <ToolsNavDropdown />
               <Link
                 href="/auth/login"
                 className="hover:text-slate-900 transition-colors"
@@ -120,6 +122,12 @@ export default function LandingLayout({
                 className="hover:text-slate-900 transition-colors"
               >
                 部落格
+              </Link>
+              <Link
+                href="/tools/invoice-helper"
+                className="hover:text-slate-900 transition-colors"
+              >
+                手開發票小幫手
               </Link>
             </div>
 

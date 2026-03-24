@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import Image from "next/image";
 import Link from "next/link";
 
 import { blogSlugs, getPostBySlug } from "@/content/blog";
@@ -25,6 +26,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       type: "article",
       publishedTime: post.date,
       siteName: "SnapBooks.ai",
+      ...(post.coverImage && {
+        images: [{ url: post.coverImage, width: 1200, height: 630 }],
+      }),
     },
   };
 }
@@ -70,6 +74,20 @@ export default async function BlogPostPage({ params }: Props) {
           </div>
         </div>
       </section>
+
+      {/* Cover image */}
+      {post.coverImage && (
+        <div className="mx-auto max-w-3xl px-5 pt-10 md:pt-14">
+          <Image
+            src={post.coverImage}
+            alt={post.title}
+            width={1200}
+            height={630}
+            className="w-full rounded-2xl"
+            priority
+          />
+        </div>
+      )}
 
       {/* Article content */}
       <article className="prose prose-lg prose-slate mx-auto max-w-3xl px-5 py-16 md:py-20 prose-headings:font-bold prose-headings:text-slate-900 prose-a:text-emerald-600 prose-a:underline hover:prose-a:text-emerald-700 prose-li:marker:text-emerald-500 prose-table:overflow-hidden prose-table:rounded-xl prose-table:border prose-table:border-slate-200 prose-thead:bg-slate-50 prose-th:px-4 prose-th:py-3 prose-th:font-semibold prose-th:text-slate-800 prose-td:px-4 prose-td:py-3 prose-td:text-slate-600 first:[&_td]:whitespace-nowrap">

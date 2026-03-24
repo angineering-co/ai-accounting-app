@@ -73,7 +73,55 @@ The `<BlogCta>` component automatically appends a closing paragraph with Line an
 
 Add the new slug to the `blogSlugs` array in `content/blog/index.ts`. Order doesn't matter — `getPublishedPosts()` sorts by date descending.
 
-### 6. Writing style rules
+### 6. Cover image
+
+The user generates the cover image separately. After the user provides the image file, process it:
+
+1. **Optimize**: Resize to 1200px wide and convert to WebP using sharp-cli:
+   ```bash
+   mkdir -p public/blog
+   npx sharp-cli -i <source-image> -o public/blog/<slug>.webp -f webp --quality 80 resize 1200
+   ```
+2. **Delete the original** unoptimized image to avoid bloating the repo.
+3. **Add `coverImage` to metadata** in the MDX file:
+   ```js
+   coverImage: "/blog/<slug>.webp",
+   ```
+
+The blog post page (`app/(landing)/blog/[slug]/page.tsx`) already renders the cover image below the hero and includes it in OpenGraph metadata. No code changes needed.
+
+**To help the user generate the image**, output an image-generation prompt in a fenced code block they can paste into their preferred tool (e.g. Nano Banana, Midjourney, Ideogram):
+- Describe a scene that visually represents the blog post topic
+- Include any Traditional Chinese text that should appear — spell out exact characters (e.g. `「營業稅」`)
+- Specify: flat/modern illustration style, 16:9 aspect ratio, blog hero image
+- Calm, professional color palette (soft blues, whites, light grays) with accent colors
+- No photorealistic elements
+- Under 200 words
+
+### 7. Originality rules
+
+When the user provides a reference article or URL as source material:
+
+- **Do not copy examples verbatim.** Create original examples with different scenarios, amounts, and characters. For instance, if the source uses a 設計師 with 21,000 + 17,000 payments, write a new scenario with a different profession and different numbers.
+- **Rewrite explanations in your own words.** Use the source for factual accuracy, but the phrasing and structure should be original.
+
+### 8. Add references
+
+If the blog post cites specific tax rates, thresholds, legal requirements, or government regulations, add a `## 參考資料` section before the `<BlogCta>` block. List official government sources that back up the claims, using markdown links:
+
+```markdown
+## 參考資料
+
+- [法規或資料名稱](https://...) — 機關名稱，簡短說明
+```
+
+**Only use `.gov.tw` domains.** Government sources are far more credible than blogs or third-party sites. Use WebFetch to verify each URL actually contains the relevant content before including it. Prioritize:
+- 財政部 / 國稅局 / 稅務入口網 — etax.nat.gov.tw, mof.gov.tw (tax law, withholding rates)
+- 勞動部 — mol.gov.tw (minimum wage, labor regulations)
+- 衛福部 / 健保署 — mohw.gov.tw, nhi.gov.tw (NHI premiums)
+- 全國法規資料庫 — law.moj.gov.tw (full text of laws)
+
+### 9. Writing style rules
 
 - Content is in Traditional Chinese (zh-Hant)
 - Never use `——` (double em-dash). It reads as AI-generated. Use standard Chinese punctuation: `，`、`。`、`：`、`；` or sentence breaks

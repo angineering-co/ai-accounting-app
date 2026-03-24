@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { Geist, Noto_Serif_TC } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { GoogleAnalytics } from "@next/third-parties/google";
 import "./globals.css";
@@ -22,6 +22,13 @@ const geistSans = Geist({
   subsets: ["latin"],
 });
 
+const notoSerifTC = Noto_Serif_TC({
+  variable: "--font-noto-serif-tc",
+  display: "swap",
+  subsets: ["latin"],
+  weight: ["400", "700", "900"],
+});
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -32,7 +39,7 @@ export default function RootLayout({
       {process.env.NEXT_PUBLIC_GA_ID && (
         <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GA_ID} />
       )}
-      <body className={`${geistSans.className} antialiased`}>
+      <body className={`${geistSans.className} ${notoSerifTC.variable} antialiased`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="light"

@@ -140,7 +140,7 @@ export function LandingPricingSection() {
     <TooltipProvider delayDuration={120}>
       <section id="pricing" className="mx-auto max-w-5xl px-5 py-24 md:py-32">
         <div className="mx-auto mb-16 max-w-2xl text-center">
-          <h2 className="mb-6 text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
+          <h2 className="font-display mb-6 text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
             顛覆業界的透明定價
           </h2>
           <p className="text-lg text-slate-600 leading-relaxed">
@@ -152,7 +152,7 @@ export function LandingPricingSection() {
           <div className="overflow-hidden rounded-[2.5rem] bg-white ring-1 ring-slate-200 shadow-2xl shadow-slate-200/50 transition-all hover:-translate-y-1 hover:shadow-emerald-100">
             <div className="p-10 md:p-12">
               <div className="mb-4 flex items-baseline gap-2">
-                <span className="text-5xl font-extrabold tracking-tight text-slate-900">
+                <span className="font-display text-5xl font-extrabold tracking-tight text-slate-900">
                   NT$ 1,200
                 </span>
                 <span className="text-lg font-medium text-slate-500">/ 月（起）</span>
@@ -244,7 +244,7 @@ export function LandingPricingSection() {
           <div className="rounded-[2rem] bg-white p-7 ring-1 ring-emerald-200 shadow-xl shadow-emerald-100/40 md:p-8">
             <div className="mb-6 flex flex-col gap-3">
               <div className="flex items-center gap-2">
-                <h3 className="text-2xl font-bold tracking-tight text-slate-900">
+                <h3 className="font-display text-2xl font-bold tracking-tight text-slate-900">
                   設立登記
                 </h3>
                 <Tooltip>
@@ -329,7 +329,7 @@ export function LandingPricingSection() {
                     <span className="text-sm font-semibold text-slate-600">
                       (一次性加購費用)
                     </span>
-                    <span className="text-3xl font-extrabold tracking-tight text-slate-900">
+                    <span className="font-display text-3xl font-extrabold tracking-tight text-slate-900">
                       {formatCurrency(addonTotal)}
                     </span>
                   </div>

@@ -48,6 +48,12 @@ export default function LandingLayout({
               >
                 部落格
               </Link>
+              <Link
+                href="/faq"
+                className="hover:text-slate-900 transition-colors"
+              >
+                常見問題
+              </Link>
               <ToolsNavDropdown />
               <Link
                 href="/auth/login"
@@ -122,6 +128,12 @@ export default function LandingLayout({
                 className="hover:text-slate-900 transition-colors"
               >
                 部落格
+              </Link>
+              <Link
+                href="/faq"
+                className="hover:text-slate-900 transition-colors"
+              >
+                常見問題
               </Link>
               <Link
                 href="/tools/invoice-helper"

@@ -6,6 +6,8 @@ export interface BlogPost {
   date: string;
   author: string;
   tags: string[];
+  /** Path relative to /public, e.g. "/blog/my-post.webp" */
+  coverImage?: string;
 }
 
 /**
@@ -15,6 +17,7 @@ export interface BlogPost {
  * Order doesn't matter — getPublishedPosts() sorts by date descending.
  */
 export const blogSlugs: string[] = [
+  "what-is-labor-report",
   "company-taxes-2026-guide",
   "why-ai-accounting-firm-not-saas",
   "ai-accounting-firm-taiwan",

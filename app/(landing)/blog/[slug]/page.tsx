@@ -27,7 +27,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       publishedTime: post.date,
       siteName: "SnapBooks.ai",
       ...(post.coverImage && {
-        images: [{ url: post.coverImage, width: 1200, height: 630 }],
+        images: [{ url: `https://snapbooks.ai${post.coverImage}`, width: 1200, height: 630 }],
       }),
     },
   };

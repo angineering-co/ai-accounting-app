@@ -11,6 +11,13 @@ interface InvoicePreviewProps {
   data: InvoiceFormData;
 }
 
+/** Max line items visible on the invoice paper */
+const MAX_ITEM_ROWS = 4;
+/** 三聯式 totals: 銷售額合計 + 營業稅 label + 營業稅 checkmark + 總計 */
+const TOTALS_ROWS_三聯 = 4;
+/** 二聯式 totals: 總計 only */
+const TOTALS_ROWS_二聯 = 1;
+
 function fmt(n: number): string {
   return n ? n.toLocaleString("zh-TW") : "";
 }
@@ -112,18 +119,15 @@ export function InvoicePreview({ data }: InvoicePreviewProps) {
   const rocCn = data.rocYear ? rocYearToChinese(data.rocYear) : "＿＿＿";
   const bimonthly = data.month ? getBimonthlyPeriod(data.month) : "＿、＿";
 
-  const maxRows = 4;
-  const filledItems = data.items.slice(0, maxRows);
-  const emptyRows = Math.max(0, maxRows - filledItems.length);
+  const filledItems = data.items.slice(0, MAX_ITEM_ROWS);
+  const emptyRows = Math.max(0, MAX_ITEM_ROWS - filledItems.length);
   const hasContent = filledItems.some(
     (item) => item.description || item.amount
   );
 
-  // Count total rows in the items+totals area for the stamp column rowSpan
-  const totalRows三聯 = 4;
-  const totalRows二聯 = 1;
+  // Stamp column spans from first item row through all totals rows
   const stampTotalRows =
-    maxRows + (is三聯 ? totalRows三聯 : totalRows二聯);
+    MAX_ITEM_ROWS + (is三聯 ? TOTALS_ROWS_三聯 : TOTALS_ROWS_二聯);
 
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-100 p-5 shadow-sm">

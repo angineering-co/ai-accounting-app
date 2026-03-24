@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { Plus, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,11 +58,11 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
     onChange({ ...data, ...patch });
   }
 
-  const handleLookupResult = useRef((name: string) => {
+  const handleLookupResult = useCallback((name: string) => {
     const { data: d, onChange: cb } = latestRef.current;
     if (d.buyerName === name) return;
     cb({ ...d, buyerName: name });
-  }).current;
+  }, []);
 
   useTaxIdLookup(data.buyerTaxId, handleLookupResult);
 

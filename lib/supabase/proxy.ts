@@ -49,11 +49,12 @@ export async function updateSession(request: NextRequest) {
 
   // When adding public landing pages, add them here to skip auth redirect.
   // Use the array for exact paths; use startsWith checks below for prefixes.
-  const publicRoutes = ["/", "/terms", "/privacy", "/company", "/blog"];
+  const publicRoutes = ["/", "/terms", "/privacy", "/company", "/blog", "/tools"];
 
   if (
     !publicRoutes.includes(request.nextUrl.pathname) &&
     !request.nextUrl.pathname.startsWith("/blog/") &&
+    !request.nextUrl.pathname.startsWith("/tools/") &&
     !user &&
     !request.nextUrl.pathname.startsWith("/login") &&
     !request.nextUrl.pathname.startsWith("/auth")

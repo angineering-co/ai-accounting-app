@@ -3,7 +3,17 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { CtaLink } from "@/components/cta-link";
 import { LandingPricingSection } from "@/components/landing-pricing-section";
-import { CheckCircle2, Smartphone, ShieldCheck, Zap } from "lucide-react";
+import {
+  CheckCircle2,
+  Smartphone,
+  ShieldCheck,
+  Zap,
+  ArrowRight,
+  FileText,
+  ClipboardCheck,
+  PenLine,
+  Camera,
+} from "lucide-react";
 
 export const metadata: Metadata = {
   title: "AI 記帳事務所推薦｜速博 SnapBooks - 每月$1,200，專業會計師把關",
@@ -91,41 +101,57 @@ export default function Home() {
       />
 
       <main className="flex flex-1 flex-col">
-        {/* Section 1: Hero */}
-        <section className="relative overflow-hidden bg-gradient-to-br from-sky-50 via-slate-50 to-emerald-50 pt-28 pb-32 md:pt-40 md:pb-48">
-          <div className="absolute inset-0 bg-[url('/noise.png')] opacity-[0.03]"></div>
+        {/* ── Hero ── */}
+        <section className="grain relative overflow-hidden bg-gradient-to-br from-emerald-50 via-slate-50 to-sky-50 pt-28 pb-36 md:pt-44 md:pb-56">
+          {/* Decorative blobs */}
+          <div className="absolute -top-40 -right-40 h-[500px] w-[500px] rounded-full bg-emerald-200/30 blur-3xl" />
+          <div className="absolute -bottom-40 -left-40 h-[400px] w-[400px] rounded-full bg-sky-200/20 blur-3xl" />
+
           <div className="relative mx-auto max-w-5xl px-5 text-center">
-            <h1 className="mx-auto max-w-4xl text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl md:text-6xl/tight">
+            <div className="animate-fade-up">
+              <p className="mb-6 inline-flex items-center gap-2 rounded-full border border-emerald-200/60 bg-white/70 px-5 py-2 text-sm font-medium text-emerald-800 backdrop-blur-sm shadow-sm">
+                <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                創業友善價 $1,200 / 月，專業會計師 100% 審核把關
+              </p>
+            </div>
+
+            <h1 className="animate-fade-up delay-100 font-display mx-auto max-w-4xl text-4xl font-black tracking-tight text-slate-900 sm:text-5xl md:text-6xl/[1.15]">
               拍照上傳發票與收據，
               <br className="hidden sm:block" />
-              報稅就是那麼簡單
+              <span className="bg-gradient-to-r from-emerald-600 to-teal-500 bg-clip-text text-transparent">
+                報稅就是那麼簡單
+              </span>
             </h1>
-            <p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-slate-600 md:text-xl">
-              SnapBooks.ai (速博) 是 AI 記帳事務所！
-              <br />
+
+            <p className="animate-fade-up delay-200 mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-slate-600 md:text-xl">
+              SnapBooks.ai (速博) 是 智慧記帳事務所
+              <br className="hidden md:block" />
               由專業會計師把關，你專注在產品和成長，帳務與報稅就交給我們。
             </p>
-            <div className="mt-12 flex flex-col items-center justify-center gap-6">
-              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/60 bg-emerald-50/80 px-4 py-2 text-sm font-medium text-emerald-800 backdrop-blur-sm shadow-sm">
-                💡 創業友善價 $1,200 / 月 ｜ 專業會計師 100% 審核把關
-              </div>
+
+            <div className="animate-fade-up delay-300 mt-12 flex flex-col items-center justify-center gap-5">
               <Button
                 asChild
                 size="lg"
-                className="rounded-full bg-emerald-600 text-white hover:bg-emerald-500 border-0 h-14 px-8 text-lg font-semibold shadow-lg shadow-emerald-600/20 transition-all hover:scale-105"
+                className="group rounded-full bg-emerald-600 text-white hover:bg-emerald-500 border-0 h-14 px-8 text-lg font-semibold shadow-lg shadow-emerald-600/25 transition-all duration-300 hover:shadow-xl hover:shadow-emerald-600/30 hover:-translate-y-0.5"
               >
                 <CtaLink href={ctaHref} location="hero">
                   免費評估適用方案
+                  <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
                 </CtaLink>
               </Button>
               {!hasFormUrl && (
-                <p id="signup-unavailable" className="text-xs text-slate-500">
+                <p
+                  id="signup-unavailable"
+                  className="text-xs text-slate-500"
+                >
                   請設定 `NEXT_PUBLIC_EARLY_ADOPTER_FORM_URL` 環境變數。
                 </p>
               )}
             </div>
-            <div className="mt-16 flex justify-center">
-              <div className="inline-flex items-center gap-2.5 rounded-full border border-slate-200 bg-white/60 px-5 py-2.5 text-sm font-medium text-slate-700 backdrop-blur-md shadow-sm">
+
+            <div className="animate-fade-up delay-400 mt-16">
+              <div className="inline-flex items-center gap-2.5 rounded-full border border-slate-200/80 bg-white/60 px-5 py-2.5 text-sm font-medium text-slate-600 backdrop-blur-md shadow-sm">
                 <ShieldCheck className="h-5 w-5 text-emerald-600" />
                 <span>適用年營業額 3,000 萬以下之中小企業</span>
               </div>
@@ -133,74 +159,77 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Section 2: Founders & Vision */}
-        <section className="mx-auto max-w-5xl px-5 py-24 md:py-32">
-          <div className="mx-auto mb-20 max-w-4xl text-center">
-            <div className="mb-6 flex justify-center">
-              <svg
-                className="h-10 w-10 text-emerald-200"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" />
-              </svg>
+        {/* ── Founders & Vision ── */}
+        <section className="mx-auto max-w-5xl px-5 py-24 md:py-36">
+          <div className="mx-auto mb-24 max-w-3xl">
+            <div className="mb-8 flex justify-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-300">
+                <svg
+                  className="h-8 w-8"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" />
+                </svg>
+              </div>
             </div>
-            <blockquote className="text-xl leading-relaxed text-slate-700 italic md:text-2xl md:leading-loose font-medium">
-              「我們深知台灣中小企業在記帳與報稅上面臨的痛點。傳統流程繁瑣，而純軟體工具又缺乏專業稅務的最終把關。
-              <br />
-              <br />
-              SnapBooks.ai 的誕生，是因為我們相信：
-              <span className="text-slate-900 not-italic font-bold">
-                記帳應該像拍照一樣簡單，而報稅必須像傳統事務所一樣嚴謹。
-              </span>{" "}
-              我們結合了前沿的 AI 自動化技術與深厚的稅法實務經驗，打造出新型態的
-              AI 記帳事務所，致力於成為企業主最可靠的後盾。」
+            <blockquote className="text-center font-display text-xl leading-relaxed text-slate-700 italic md:text-2xl md:leading-[1.8] font-normal">
+              我們深知台灣中小企業在記帳與報稅上面臨的痛點。傳統流程繁瑣，而純軟體工具又缺乏專業稅務的最終把關。
             </blockquote>
+            <p className="mt-8 text-center text-lg leading-relaxed text-slate-600 md:text-xl md:leading-relaxed">
+              SnapBooks.ai 的誕生，是因為我們相信：
+              <span className="font-display font-bold text-slate-900 not-italic">
+                記帳應該像拍照一樣簡單，而報稅必須像傳統事務所一樣嚴謹。
+              </span>
+              我們結合了前沿的 AI 自動化技術與深厚的稅法實務經驗，打造出新型態的
+              AI 記帳事務所，致力於成為企業主最可靠的後盾。
+            </p>
           </div>
 
-          <div className="grid gap-16 md:grid-cols-2">
-            <div className="flex flex-col gap-4">
+          <div className="grid gap-16 md:grid-cols-2 md:gap-12">
+            {/* Joe */}
+            <div className="group rounded-3xl border border-slate-100 bg-gradient-to-b from-slate-50/80 to-white p-8 transition-all duration-300 hover:border-emerald-100 hover:shadow-lg hover:shadow-emerald-50">
               <div className="flex items-center gap-5">
-                <div className="h-20 w-20 shrink-0 overflow-hidden rounded-full shadow-sm ring-2 ring-emerald-50">
+                <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl shadow-md ring-4 ring-white transition-transform duration-300 group-hover:scale-105">
                   <Image
                     src="/joe.jpg"
                     alt="黃勝平 Joe"
                     width={80}
                     height={80}
-                    className="h-full w-full object-cover object-top scale-100"
+                    className="h-full w-full object-cover object-top"
                   />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold text-slate-900">
+                  <h2 className="font-display text-2xl font-bold text-slate-900">
                     黃勝平 Joe
                   </h2>
-                  <p className="mt-1 font-semibold text-emerald-600">
+                  <p className="mt-1 text-sm font-semibold text-emerald-600">
                     共同創辦人暨稅務主理人
                   </p>
                 </div>
               </div>
-              <ul className="mt-4 space-y-4 text-slate-600">
+              <ul className="mt-6 space-y-3.5 text-slate-600">
                 <li className="flex gap-3">
-                  <CheckCircle2 className="h-6 w-6 shrink-0 text-emerald-500" />
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500 mt-0.5" />
                   <span className="leading-relaxed">
                     勤信聯合會計事務所 所長 (10年+ 實務經驗)
                   </span>
                 </li>
                 <li className="flex gap-3">
-                  <CheckCircle2 className="h-6 w-6 shrink-0 text-emerald-500" />
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500 mt-0.5" />
                   <span className="leading-relaxed">
                     出身於四大會計師事務所
                   </span>
                 </li>
                 <li className="flex gap-3">
-                  <CheckCircle2 className="h-6 w-6 shrink-0 text-emerald-500" />
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500 mt-0.5" />
                   <span className="leading-relaxed">
                     台灣會計界自動化先鋒，率先導入自動化系統化管理
                   </span>
                 </li>
                 <li className="flex gap-3">
-                  <CheckCircle2 className="h-6 w-6 shrink-0 text-emerald-500" />
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500 mt-0.5" />
                   <span className="leading-relaxed">
                     客戶遍佈全台，深諳各行各業稅務痛點與節稅策略
                   </span>
@@ -208,47 +237,48 @@ export default function Home() {
               </ul>
             </div>
 
-            <div className="flex flex-col gap-4">
+            {/* Ang */}
+            <div className="group rounded-3xl border border-slate-100 bg-gradient-to-b from-slate-50/80 to-white p-8 transition-all duration-300 hover:border-emerald-100 hover:shadow-lg hover:shadow-emerald-50">
               <div className="flex items-center gap-5">
-                <div className="h-20 w-20 shrink-0 overflow-hidden rounded-full shadow-sm ring-2 ring-emerald-50">
+                <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl shadow-md ring-4 ring-white transition-transform duration-300 group-hover:scale-105">
                   <Image
                     src="/ang.png"
                     alt="王致昂 Ang"
                     width={80}
                     height={80}
-                    className="h-full w-full object-cover object-[center_5%] scale-100"
+                    className="h-full w-full object-cover object-[center_5%]"
                   />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold text-slate-900">
+                  <h2 className="font-display text-2xl font-bold text-slate-900">
                     王致昂 Ang
                   </h2>
-                  <p className="mt-1 font-semibold text-emerald-600">
+                  <p className="mt-1 text-sm font-semibold text-emerald-600">
                     共同創辦人暨技術負責人
                   </p>
                 </div>
               </div>
-              <ul className="mt-4 space-y-4 text-slate-600">
+              <ul className="mt-6 space-y-3.5 text-slate-600">
                 <li className="flex gap-3">
-                  <CheckCircle2 className="h-6 w-6 shrink-0 text-emerald-500" />
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500 mt-0.5" />
                   <span className="leading-relaxed">
                     審計雲 (AuditEasy) 創辦人
                   </span>
                 </li>
                 <li className="flex gap-3">
-                  <CheckCircle2 className="h-6 w-6 shrink-0 text-emerald-500" />
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500 mt-0.5" />
                   <span className="leading-relaxed">
                     矽谷科技公司技術主管 (Google, Square, Carousell)
                   </span>
                 </li>
                 <li className="flex gap-3">
-                  <CheckCircle2 className="h-6 w-6 shrink-0 text-emerald-500" />
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500 mt-0.5" />
                   <span className="leading-relaxed">
                     擁有深厚的金融科技 (FinTech) 與大型系統架構經驗
                   </span>
                 </li>
                 <li className="flex gap-3">
-                  <CheckCircle2 className="h-6 w-6 shrink-0 text-emerald-500" />
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500 mt-0.5" />
                   <span className="leading-relaxed">
                     專注於將企業級的 AI 數據處理能力，帶入中小企業日常
                   </span>
@@ -258,48 +288,55 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Section 3: Why Us & How it works */}
-        <section id="features" className="bg-slate-50 py-24 md:py-32">
-          <div className="mx-auto max-w-5xl px-5">
+        {/* ── Why Us & How it works ── */}
+        <section id="features" className="grain relative bg-emerald-950 py-24 text-white md:py-36">
+          <div className="absolute inset-0 bg-gradient-to-b from-black/10 to-transparent" />
+          <div className="relative mx-auto max-w-5xl px-5">
             <div className="mb-20 text-center">
-              <h2 className="text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
-                科技與專業的完美結合，重新定義記帳體驗
+              <p className="mb-4 text-sm font-semibold uppercase tracking-widest text-emerald-400">
+                Why SnapBooks
+              </p>
+              <h2 className="font-display text-3xl font-bold tracking-tight text-white md:text-4xl">
+                科技與專業的完美結合
               </h2>
+              <p className="mx-auto mt-4 max-w-xl text-emerald-200/60">
+                重新定義記帳體驗，讓你專心經營事業
+              </p>
             </div>
 
-            <div className="grid gap-12 md:grid-cols-3 md:gap-8">
-              <div className="flex flex-col items-center text-center">
-                <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-sky-100 text-sky-600 shadow-sm">
-                  <Smartphone className="h-10 w-10" />
+            <div className="grid gap-8 md:grid-cols-3">
+              <div className="group rounded-2xl border border-white/10 bg-white/[0.03] p-8 backdrop-blur-sm transition-all duration-300 hover:border-emerald-500/30 hover:bg-white/[0.06]">
+                <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-400 ring-1 ring-sky-500/20 transition-colors group-hover:bg-sky-500/20">
+                  <Smartphone className="h-7 w-7" />
                 </div>
-                <h3 className="mb-4 text-xl font-bold text-slate-900">
+                <h3 className="mb-3 text-lg font-bold text-white">
                   拍照就可報稅，AI 自動辨識
                 </h3>
-                <p className="text-slate-600 leading-relaxed">
+                <p className="text-sm leading-relaxed text-emerald-100/70">
                   告別月底整理紙本的惡夢。紙本發票隨手拍，雲端電子發票無限量自動匯入。
                 </p>
               </div>
 
-              <div className="flex flex-col items-center text-center">
-                <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-emerald-100 text-emerald-600 shadow-sm">
-                  <ShieldCheck className="h-10 w-10" />
+              <div className="group rounded-2xl border border-white/10 bg-white/[0.03] p-8 backdrop-blur-sm transition-all duration-300 hover:border-emerald-500/30 hover:bg-white/[0.06]">
+                <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20 transition-colors group-hover:bg-emerald-500/20">
+                  <ShieldCheck className="h-7 w-7" />
                 </div>
-                <h3 className="mb-4 text-xl font-bold text-slate-900">
+                <h3 className="mb-3 text-lg font-bold text-white">
                   AI 輔助，專業人員覆核
                 </h3>
-                <p className="text-slate-600 leading-relaxed">
+                <p className="text-sm leading-relaxed text-emerald-100/70">
                   所有的稅務申報與最終把關，皆由擁有十年實務經驗的「事務所專業團隊」親自覆核，確保絕對合規。
                 </p>
               </div>
 
-              <div className="flex flex-col items-center text-center">
-                <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-indigo-100 text-indigo-600 shadow-sm">
-                  <Zap className="h-10 w-10" />
+              <div className="group rounded-2xl border border-white/10 bg-white/[0.03] p-8 backdrop-blur-sm transition-all duration-300 hover:border-emerald-500/30 hover:bg-white/[0.06]">
+                <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-400 ring-1 ring-indigo-500/20 transition-colors group-hover:bg-indigo-500/20">
+                  <Zap className="h-7 w-7" />
                 </div>
-                <h3 className="mb-4 text-xl font-bold text-slate-900">
+                <h3 className="mb-3 text-lg font-bold text-white">
                   高效數位溝通，隨時掌握進度
                 </h3>
-                <p className="text-slate-600 leading-relaxed">
+                <p className="text-sm leading-relaxed text-emerald-100/70">
                   全面導入 Line 與 Email 客服，溝通精準、紀錄完整。
                 </p>
               </div>
@@ -307,62 +344,70 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Section 4: Pricing */}
+        {/* ── Pricing ── */}
         <LandingPricingSection />
 
-        {/* Section 5: How to start & CTA */}
-        <section className="bg-slate-50 py-24 md:py-32">
-          <div className="mx-auto max-w-5xl px-5">
+        {/* ── How to start & CTA ── */}
+        <section className="grain relative overflow-hidden bg-slate-50 py-24 md:py-36">
+          <div className="absolute top-0 right-0 h-[300px] w-[300px] rounded-full bg-emerald-100/40 blur-3xl" />
+          <div className="relative mx-auto max-w-5xl px-5">
             <div className="mb-20 text-center">
-              <h2 className="text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
+              <p className="mb-4 text-sm font-semibold uppercase tracking-widest text-emerald-600">
+                Get Started
+              </p>
+              <h2 className="font-display text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
                 報稅升級，輕鬆上手
               </h2>
             </div>
 
-            <div className="mx-auto mb-20 grid max-w-4xl gap-10 sm:grid-cols-2 md:grid-cols-4 md:gap-8">
-              <div className="relative flex flex-col items-center text-center md:items-start md:text-left">
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-xl font-bold text-emerald-600 shadow-sm">
-                  1
-                </div>
-                <h3 className="mb-2 text-xl font-bold text-slate-900">
-                  填寫表單
-                </h3>
-                <p className="text-slate-600 leading-relaxed">
-                  留下您的公司基本資料。
-                </p>
-              </div>
-              <div className="relative flex flex-col items-center text-center md:items-start md:text-left">
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-xl font-bold text-emerald-600 shadow-sm">
-                  2
-                </div>
-                <h3 className="mb-2 text-xl font-bold text-slate-900">
-                  專業評估
-                </h3>
-                <p className="text-slate-600 leading-relaxed">
-                  我們將透過 Line/Email 確認您是否適用此優惠方案。
-                </p>
-              </div>
-              <div className="relative flex flex-col items-center text-center md:items-start md:text-left">
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-xl font-bold text-emerald-600 shadow-sm">
-                  3
-                </div>
-                <h3 className="mb-2 text-xl font-bold text-slate-900">
-                  線上簽約
-                </h3>
-                <p className="text-slate-600 leading-relaxed">
-                  完成數位簽署與建檔。
-                </p>
-              </div>
-              <div className="relative flex flex-col items-center text-center md:items-start md:text-left">
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-xl font-bold text-emerald-600 shadow-sm">
-                  4
-                </div>
-                <h3 className="mb-2 text-xl font-bold text-slate-900">
-                  輕鬆記帳
-                </h3>
-                <p className="text-slate-600 leading-relaxed">
-                  開始享受「隨手拍、自動載」的全新報稅體驗！
-                </p>
+            {/* Timeline steps */}
+            <div className="mx-auto mb-24 max-w-4xl">
+              <div className="grid gap-8 sm:grid-cols-2 md:grid-cols-4 md:gap-6">
+                {[
+                  {
+                    step: 1,
+                    icon: FileText,
+                    title: "填寫表單",
+                    desc: "留下您的公司基本資料。",
+                  },
+                  {
+                    step: 2,
+                    icon: ClipboardCheck,
+                    title: "專業評估",
+                    desc: "我們將透過 Line/Email 確認您是否適用此優惠方案。",
+                  },
+                  {
+                    step: 3,
+                    icon: PenLine,
+                    title: "線上簽約",
+                    desc: "完成數位簽署與建檔。",
+                  },
+                  {
+                    step: 4,
+                    icon: Camera,
+                    title: "輕鬆記帳",
+                    desc: "開始享受「隨手拍、自動載」的全新報稅體驗！",
+                  },
+                ].map(({ step, icon: Icon, title, desc }) => (
+                  <div key={step} className="relative flex flex-col items-center text-center md:items-start md:text-left">
+                    {/* Connector line (hidden on last item and mobile) */}
+                    {step < 4 && (
+                      <div className="absolute top-6 left-[calc(50%+24px)] hidden h-px w-[calc(100%-48px)] bg-gradient-to-r from-emerald-300 to-emerald-100 md:block" />
+                    )}
+                    <div className="relative mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-600/20">
+                      <Icon className="h-5 w-5" />
+                      <span className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-bold text-emerald-700 shadow-sm ring-2 ring-emerald-100">
+                        {step}
+                      </span>
+                    </div>
+                    <h3 className="mb-2 text-lg font-bold text-slate-900">
+                      {title}
+                    </h3>
+                    <p className="text-sm leading-relaxed text-slate-600">
+                      {desc}
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -370,10 +415,11 @@ export default function Home() {
               <Button
                 asChild
                 size="lg"
-                className="rounded-full bg-emerald-500 text-white hover:bg-emerald-400 border-0 h-16 px-10 text-xl font-bold shadow-xl shadow-emerald-500/20 transition-all hover:scale-105"
+                className="group rounded-full bg-emerald-600 text-white hover:bg-emerald-500 border-0 h-16 px-10 text-xl font-bold shadow-xl shadow-emerald-600/20 transition-all duration-300 hover:shadow-2xl hover:shadow-emerald-600/30 hover:-translate-y-0.5"
               >
                 <CtaLink href={ctaHref} location="footer_cta">
                   立即填表，升級報稅體驗
+                  <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
                 </CtaLink>
               </Button>
             </div>

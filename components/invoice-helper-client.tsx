@@ -81,7 +81,14 @@ export function computeTotals(data: InvoiceFormData) {
     return { salesAmount: sales, tax, totalAmount: total };
   }
 
-  // Default: item sum is pre-tax (sales amount)
+  // 二聯式: item prices are tax-inclusive, so item sum = total amount
+  if (data.variant === "二聯式") {
+    const sales = Math.round(itemSum / 1.05);
+    const tax = itemSum - sales;
+    return { salesAmount: sales, tax, totalAmount: itemSum };
+  }
+
+  // 三聯式: item prices are pre-tax (sales amount), add tax on top
   const tax = Math.round(itemSum * 0.05);
   return { salesAmount: itemSum, tax, totalAmount: itemSum + tax };
 }

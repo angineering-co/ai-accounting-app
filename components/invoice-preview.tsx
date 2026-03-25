@@ -49,23 +49,36 @@ function ChineseAmountRow({ amount }: { amount: number }) {
     "玖",
   ];
 
+  // Find index of first non-zero digit to determine leading zeros
+  const firstNonZero = str.split("").findIndex((d) => d !== "0");
+  const leadingZeroCount = amount > 0 && firstNonZero > 0 ? firstNonZero : 0;
+
   return (
     <div className="flex items-center border-t border-slate-600">
       <div className="w-[100px] shrink-0 text-xs leading-tight px-2 py-1">
         <div>總計新臺幣</div>
         <div>(中文大寫)</div>
       </div>
-      {units.map(({ label, key }, i) => (
-        <div
-          key={key}
-          className="flex-1 text-center border-l border-slate-400 py-1"
-        >
-          <div className="text-[11px] text-slate-400">{label}</div>
-          <div className="font-medium text-base text-blue-600">
-            {amount > 0 ? cnDigits[parseInt(str[i])] : ""}
+      <div className="flex flex-1 relative">
+        {units.map(({ label, key }, i) => (
+          <div
+            key={key}
+            className="flex-1 text-center border-l border-slate-400 py-1"
+          >
+            <div className="text-[11px] text-slate-400">{label}</div>
+            <div className="relative font-medium text-base text-blue-600">
+              {amount > 0 ? cnDigits[parseInt(str[i])] : ""}
+              {/* Strikethrough: spans from this cell to the right edge for the first leading zero */}
+              {i === 0 && leadingZeroCount > 0 && (
+                <div
+                  className="absolute top-1/2 left-0 -translate-y-1/2 h-0.5 bg-blue-600 z-10 pointer-events-none"
+                  style={{ width: `${leadingZeroCount * 100}%` }}
+                />
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }

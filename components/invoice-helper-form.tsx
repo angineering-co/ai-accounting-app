@@ -332,7 +332,9 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
       {data.taxType === "應稅" && (
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
           <p className="text-sm text-slate-500">
-            可直接輸入未稅或含稅金額，系統自動計算另一欄
+            {data.variant === "二聯式"
+              ? "二聯式發票品項金額為含稅價，系統自動反算未稅金額"
+              : "三聯式發票品項金額為未稅價，系統自動加計營業稅"}
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>

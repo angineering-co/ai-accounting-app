@@ -15,7 +15,7 @@ export const faqCategories: FaqCategory[] = [
     name: "SnapBooks.ai 服務相關",
     items: [
       {
-        question: "憑證是無限上傳嗎？",
+        question: "憑證是無限上傳的嗎？",
         answer:
           "每月 50 筆（不含電子發票），將會收費 1,200 元（未稅）。50 至 100 筆（不含電子發票），將會加收 400 元（未稅），也就是 1,600 元（未稅）。之後每多 50 筆，每月多收 400 元。",
       },

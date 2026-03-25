@@ -130,11 +130,16 @@ export function InvoicePreview({ data }: InvoicePreviewProps) {
     MAX_ITEM_ROWS + (is三聯 ? TOTALS_ROWS_三聯 : TOTALS_ROWS_二聯);
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-100 p-5 shadow-sm">
-      <p className="text-sm text-slate-500 mb-3">發票預覽</p>
+    <div className="rounded-lg border border-slate-200 bg-slate-100 p-3 sm:p-5 shadow-sm">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm text-slate-500">發票預覽</p>
+        <p className="text-xs text-slate-400 sm:hidden">左右滑動查看完整發票</p>
+      </div>
 
+      {/* Horizontal scroll wrapper for mobile */}
+      <div className="overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0">
       {/* Invoice Paper — wider rectangular shape */}
-      <div className="bg-white border-[3px] border-amber-700 text-slate-800 shadow-lg w-full">
+      <div className="bg-white border-[3px] border-amber-700 text-slate-800 shadow-lg w-full min-w-[480px]">
         {/* Title area */}
         <div className="px-6 pt-5 pb-2">
           <div className="flex items-start justify-between">
@@ -170,7 +175,7 @@ export function InvoicePreview({ data }: InvoicePreviewProps) {
               <div className="flex items-center gap-2">
                 <span className="shrink-0 tracking-[0.3em]">統一編號：</span>
                 {data.buyerTaxId ? (
-                  <span className="font-mono tracking-[0.3em] text-blue-600 font-medium">
+                  <span className="font-mono text-blue-600 font-medium whitespace-nowrap">
                     {data.buyerTaxId.split("").join(" ")}
                   </span>
                 ) : (
@@ -260,13 +265,13 @@ export function InvoicePreview({ data }: InvoicePreviewProps) {
                       rowSpan={stampTotalRows}
                       className="border-b border-slate-300 align-bottom"
                     >
-                      <div className="flex flex-col items-center justify-end h-full px-3 pb-4">
+                      <div className="flex flex-col items-center justify-end h-full px-2 pb-3">
                         <div className="text-xs text-blue-600 text-center leading-relaxed mb-1.5">
                           營業人蓋用
                           <br />
                           統一發票專用章
                         </div>
-                        <div className="w-20 h-20 border-2 border-dashed border-blue-300 rounded" />
+                        <div className="w-28 h-28 border-2 border-dashed border-blue-300 rounded" />
                       </div>
                     </td>
                   )}
@@ -420,6 +425,7 @@ export function InvoicePreview({ data }: InvoicePreviewProps) {
           <span>第　聯　聯</span>
         </div>
       </div>
+      </div>{/* end scroll wrapper */}
     </div>
   );
 }

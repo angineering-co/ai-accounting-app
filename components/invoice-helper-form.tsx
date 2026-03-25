@@ -89,23 +89,28 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
     });
   }
 
+  // Shared class for enlarged inputs (buyer info, tax totals)
+  const largeInputClass = "h-12 sm:h-10 text-lg";
+
   return (
     <div className="space-y-6">
       {/* Invoice Variant Toggle */}
       <div>
-        <Label className="text-sm font-medium text-slate-700 mb-2 block">
+        <Label className="text-base font-medium text-slate-700 mb-2 block">
           發票類型
         </Label>
         <Tabs
           value={data.variant}
           onValueChange={(v) => update({ variant: v as InvoiceVariant })}
         >
-          <TabsList className="w-full">
-            <TabsTrigger value="二聯式" className="flex-1">
-              二聯式統一發票
+          <TabsList className="w-full h-12 sm:h-11">
+            <TabsTrigger value="二聯式" className="flex-1 text-base h-10 sm:h-9">
+              <span className="sm:hidden">二聯式</span>
+              <span className="hidden sm:inline">二聯式統一發票</span>
             </TabsTrigger>
-            <TabsTrigger value="三聯式" className="flex-1">
-              三聯式統一發票
+            <TabsTrigger value="三聯式" className="flex-1 text-base h-10 sm:h-9">
+              <span className="sm:hidden">三聯式</span>
+              <span className="hidden sm:inline">三聯式統一發票</span>
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -114,12 +119,12 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
       {/* Buyer Info - 三聯式 only */}
       {data.variant === "三聯式" && (
         <div className="space-y-3">
-          <Label className="text-sm font-medium text-slate-700 block">
+          <Label className="text-base font-medium text-slate-700 block">
             買受人
           </Label>
-          <div className="grid gap-3 sm:grid-cols-[160px_1fr]">
+          <div className="grid gap-3 sm:grid-cols-[180px_1fr]">
             <div>
-              <Label className="text-xs text-slate-500 mb-1 block">
+              <Label className="text-sm text-slate-600 mb-1 block">
                 統一編號
               </Label>
               <Input
@@ -131,11 +136,11 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
                     buyerTaxId: e.target.value.replace(/\D/g, ""),
                   })
                 }
-                className="font-mono"
+                className={`font-mono ${largeInputClass}`}
               />
             </div>
             <div>
-              <Label className="text-xs text-slate-500 mb-1 block flex items-center gap-1">
+              <Label className="text-sm text-slate-600 mb-1 block flex items-center gap-1">
                 公司名稱
                 {data.buyerTaxId.length === 8 && !data.buyerName && (
                   <Loader2 className="h-3 w-3 animate-spin text-slate-400" />
@@ -145,6 +150,7 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
                 placeholder="輸入統編自動帶入"
                 value={data.buyerName}
                 onChange={(e) => update({ buyerName: e.target.value })}
+                className={largeInputClass}
               />
             </div>
           </div>
@@ -153,20 +159,20 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
 
       {/* Tax Type */}
       <div>
-        <Label className="text-sm font-medium text-slate-700 mb-2 block">
+        <Label className="text-base font-medium text-slate-700 mb-2 block">
           課稅別
         </Label>
         <RadioGroup
           value={data.taxType}
           onValueChange={(v) => update({ taxType: v as TaxType })}
-          className="flex gap-4"
+          className="flex flex-wrap gap-6 sm:gap-5"
         >
           {(["應稅", "零稅率", "免稅"] as const).map((type) => (
-            <div key={type} className="flex items-center gap-1.5">
-              <RadioGroupItem value={type} id={`tax-${type}`} />
+            <div key={type} className="flex items-center gap-2.5">
+              <RadioGroupItem value={type} id={`tax-${type}`} className="h-5 w-5" />
               <Label
                 htmlFor={`tax-${type}`}
-                className="text-sm cursor-pointer"
+                className="text-base cursor-pointer"
               >
                 {type}
               </Label>
@@ -177,12 +183,12 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
 
       {/* Line Items */}
       <div>
-        <Label className="text-sm font-medium text-slate-700 mb-2 block">
+        <Label className="text-base font-medium text-slate-700 mb-2 block">
           品名明細
         </Label>
         <div className="space-y-3">
-          {/* Header row */}
-          <div className="flex gap-2 items-center text-xs text-slate-500 font-medium">
+          {/* Header row — hidden on mobile */}
+          <div className="hidden sm:flex gap-2 items-center text-sm text-slate-600 font-medium">
             <div className="flex-1 min-w-0">品名</div>
             <div className="w-16 text-center">數量</div>
             <div className="w-24 text-right">單價</div>
@@ -190,70 +196,134 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
             <div className="w-9" />
           </div>
           {data.items.map((item, index) => (
-            <div key={item.id} className="flex gap-2 items-start">
-              <div className="flex-1 min-w-0">
-                <Input
-                  placeholder="品名"
-                  value={item.description}
-                  onChange={(e) =>
-                    updateItem(index, { description: e.target.value })
-                  }
-                />
+            <div key={item.id}>
+              {/* Desktop: horizontal row */}
+              <div className="hidden sm:flex gap-2 items-start">
+                <div className="flex-1 min-w-0">
+                  <Input
+                    placeholder="品名"
+                    value={item.description}
+                    onChange={(e) =>
+                      updateItem(index, { description: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="w-16">
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="1"
+                    value={item.quantity || ""}
+                    onChange={(e) =>
+                      updateItem(index, {
+                        quantity: parseFloat(e.target.value) || 0,
+                      })
+                    }
+                    className="text-center"
+                  />
+                </div>
+                <div className="w-24">
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="0"
+                    value={item.unitPrice || ""}
+                    onChange={(e) =>
+                      updateItem(index, {
+                        unitPrice: parseFloat(e.target.value) || 0,
+                      })
+                    }
+                    className="text-right font-mono"
+                  />
+                </div>
+                <div className="w-24 flex items-center">
+                  <span className="w-full text-right font-mono text-sm text-slate-700 tabular-nums px-2 py-2">
+                    {item.amount ? item.amount.toLocaleString() : ""}
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeItem(index)}
+                  disabled={data.items.length <= 1}
+                  className="shrink-0 text-slate-400 hover:text-red-500"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
               </div>
-              <div className="w-16">
-                <Input
-                  type="number"
-                  min={0}
-                  placeholder="1"
-                  value={item.quantity || ""}
-                  onChange={(e) =>
-                    updateItem(index, {
-                      quantity: parseFloat(e.target.value) || 0,
-                    })
-                  }
-                  className="text-center"
-                />
+
+              {/* Mobile: stacked card layout */}
+              <div className="sm:hidden rounded-lg border border-slate-200 bg-slate-50/50 p-3 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <Input
+                    placeholder="品名"
+                    value={item.description}
+                    onChange={(e) =>
+                      updateItem(index, { description: e.target.value })
+                    }
+                    className="h-11 text-lg flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeItem(index)}
+                    disabled={data.items.length <= 1}
+                    className="shrink-0 h-11 w-11 text-slate-400 hover:text-red-500"
+                  >
+                    <Trash2 className="h-5 w-5" />
+                  </Button>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <Label className="text-sm text-slate-500 mb-1 block">數量</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="1"
+                      value={item.quantity || ""}
+                      onChange={(e) =>
+                        updateItem(index, {
+                          quantity: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      className="h-11 text-lg text-center"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm text-slate-500 mb-1 block">單價</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="0"
+                      value={item.unitPrice || ""}
+                      onChange={(e) =>
+                        updateItem(index, {
+                          unitPrice: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      className="h-11 text-lg text-right font-mono"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm text-slate-500 mb-1 block">金額</Label>
+                    <div className="h-11 flex items-center justify-end font-mono text-lg text-slate-700 tabular-nums px-2 bg-white rounded-md border border-slate-200">
+                      {item.amount ? item.amount.toLocaleString() : "-"}
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="w-24">
-                <Input
-                  type="number"
-                  min={0}
-                  placeholder="0"
-                  value={item.unitPrice || ""}
-                  onChange={(e) =>
-                    updateItem(index, {
-                      unitPrice: parseFloat(e.target.value) || 0,
-                    })
-                  }
-                  className="text-right font-mono"
-                />
-              </div>
-              <div className="w-24 flex items-center">
-                <span className="w-full text-right font-mono text-sm text-slate-700 tabular-nums px-2 py-2">
-                  {item.amount ? item.amount.toLocaleString() : ""}
-                </span>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={() => removeItem(index)}
-                disabled={data.items.length <= 1}
-                className="shrink-0 text-slate-400 hover:text-red-500"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
             </div>
           ))}
         </div>
         <Button
           type="button"
           variant="outline"
-          size="sm"
           onClick={addItem}
-          className="mt-3"
+          className="mt-3 h-11 sm:h-10 text-base"
         >
-          <Plus className="h-4 w-4 mr-1" />
+          <Plus className="h-5 w-5 mr-1" />
           新增品項
         </Button>
       </div>
@@ -261,12 +331,12 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
       {/* Bidirectional Tax Totals (only for 應稅) */}
       {data.taxType === "應稅" && (
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
-          <p className="text-xs text-slate-500">
+          <p className="text-sm text-slate-500">
             可直接輸入未稅或含稅金額，系統自動計算另一欄
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <Label className="text-xs text-slate-500 mb-1 block">
+              <Label className="text-sm text-slate-600 mb-1 block">
                 未稅金額（銷售額）
               </Label>
               <Input
@@ -280,11 +350,11 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
                     salesAmountOverride: val,
                   });
                 }}
-                className="font-mono text-right"
+                className={`font-mono text-right ${largeInputClass}`}
               />
             </div>
             <div>
-              <Label className="text-xs text-slate-500 mb-1 block">
+              <Label className="text-sm text-slate-600 mb-1 block">
                 含稅金額（總計）
               </Label>
               <Input
@@ -298,11 +368,11 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
                     totalAmountOverride: val,
                   });
                 }}
-                className="font-mono text-right"
+                className={`font-mono text-right ${largeInputClass}`}
               />
             </div>
           </div>
-          <div className="text-sm text-slate-600 text-right">
+          <div className="text-base text-slate-600 text-right">
             營業稅（5%）：
             <span className="font-mono font-medium">
               {totals.tax.toLocaleString()}

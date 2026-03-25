@@ -15,6 +15,9 @@ import type {
 } from "./invoice-helper-client";
 import { createEmptyItem, computeTotals } from "./invoice-helper-client";
 
+// Shared class for enlarged inputs (buyer info, tax totals)
+const largeInputClass = "h-12 sm:h-10 text-lg";
+
 function useTaxIdLookup(
   taxId: string,
   onResult: (name: string) => void
@@ -88,9 +91,6 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
       manualOverride: null,
     });
   }
-
-  // Shared class for enlarged inputs (buyer info, tax totals)
-  const largeInputClass = "h-12 sm:h-10 text-lg";
 
   return (
     <div className="space-y-6">
@@ -195,46 +195,47 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
             <div className="w-24 text-right pr-2">金額</div>
             <div className="w-9" />
           </div>
-          {data.items.map((item, index) => (
+          {data.items.map((item, index) => {
+            const descriptionProps = {
+              placeholder: "品名",
+              value: item.description,
+              onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
+                updateItem(index, { description: e.target.value }),
+            };
+            const quantityProps = {
+              type: "number" as const,
+              min: 0,
+              placeholder: "1",
+              value: item.quantity || "",
+              onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
+                updateItem(index, {
+                  quantity: parseFloat(e.target.value) || 0,
+                }),
+            };
+            const unitPriceProps = {
+              type: "number" as const,
+              min: 0,
+              placeholder: "0",
+              value: item.unitPrice || "",
+              onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
+                updateItem(index, {
+                  unitPrice: parseFloat(e.target.value) || 0,
+                }),
+            };
+            const canDelete = data.items.length > 1;
+
+            return (
             <div key={item.id}>
               {/* Desktop: horizontal row */}
               <div className="hidden sm:flex gap-2 items-start">
                 <div className="flex-1 min-w-0">
-                  <Input
-                    placeholder="品名"
-                    value={item.description}
-                    onChange={(e) =>
-                      updateItem(index, { description: e.target.value })
-                    }
-                  />
+                  <Input {...descriptionProps} />
                 </div>
                 <div className="w-16">
-                  <Input
-                    type="number"
-                    min={0}
-                    placeholder="1"
-                    value={item.quantity || ""}
-                    onChange={(e) =>
-                      updateItem(index, {
-                        quantity: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                    className="text-center"
-                  />
+                  <Input {...quantityProps} className="text-center" />
                 </div>
                 <div className="w-24">
-                  <Input
-                    type="number"
-                    min={0}
-                    placeholder="0"
-                    value={item.unitPrice || ""}
-                    onChange={(e) =>
-                      updateItem(index, {
-                        unitPrice: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                    className="text-right font-mono"
-                  />
+                  <Input {...unitPriceProps} className="text-right font-mono" />
                 </div>
                 <div className="w-24 flex items-center">
                   <span className="w-full text-right font-mono text-sm text-slate-700 tabular-nums px-2 py-2">
@@ -246,7 +247,7 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
                   variant="ghost"
                   size="icon"
                   onClick={() => removeItem(index)}
-                  disabled={data.items.length <= 1}
+                  disabled={!canDelete}
                   className="shrink-0 text-slate-400 hover:text-red-500"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -256,20 +257,13 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
               {/* Mobile: stacked card layout */}
               <div className="sm:hidden rounded-lg border border-slate-200 bg-slate-50/50 p-3 space-y-2.5">
                 <div className="flex items-center gap-2">
-                  <Input
-                    placeholder="品名"
-                    value={item.description}
-                    onChange={(e) =>
-                      updateItem(index, { description: e.target.value })
-                    }
-                    className="h-11 text-lg flex-1"
-                  />
+                  <Input {...descriptionProps} className="h-11 text-lg flex-1" />
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
                     onClick={() => removeItem(index)}
-                    disabled={data.items.length <= 1}
+                    disabled={!canDelete}
                     className="shrink-0 h-11 w-11 text-slate-400 hover:text-red-500"
                   >
                     <Trash2 className="h-5 w-5" />
@@ -278,33 +272,11 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <Label className="text-sm text-slate-500 mb-1 block">數量</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      placeholder="1"
-                      value={item.quantity || ""}
-                      onChange={(e) =>
-                        updateItem(index, {
-                          quantity: parseFloat(e.target.value) || 0,
-                        })
-                      }
-                      className="h-11 text-lg text-center"
-                    />
+                    <Input {...quantityProps} className="h-11 text-lg text-center" />
                   </div>
                   <div>
                     <Label className="text-sm text-slate-500 mb-1 block">單價</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      placeholder="0"
-                      value={item.unitPrice || ""}
-                      onChange={(e) =>
-                        updateItem(index, {
-                          unitPrice: parseFloat(e.target.value) || 0,
-                        })
-                      }
-                      className="h-11 text-lg text-right font-mono"
-                    />
+                    <Input {...unitPriceProps} className="h-11 text-lg text-right font-mono" />
                   </div>
                   <div>
                     <Label className="text-sm text-slate-500 mb-1 block">金額</Label>
@@ -315,7 +287,8 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
         <Button
           type="button"

@@ -23,6 +23,7 @@ export const blogSlugs: string[] = [
   "ai-accounting-firm-taiwan",
   "what-is-book-review-tax",
   "business-tax-vat-guide",
+  "business-income-tax-guide",
 ];
 
 export async function getPublishedPosts(): Promise<BlogPost[]> {

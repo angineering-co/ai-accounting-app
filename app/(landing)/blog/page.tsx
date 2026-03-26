@@ -16,13 +16,13 @@ export default async function BlogListingPage() {
   return (
     <main className="flex-1">
       {/* Hero */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-sky-50 via-slate-50 to-emerald-50 pt-20 pb-16 md:pt-28 md:pb-20">
+      <section className="relative overflow-hidden bg-gradient-to-br from-sky-50 via-slate-50 to-emerald-50 pt-14 pb-10 md:pt-20 md:pb-12">
         <div className="absolute inset-0 bg-[url('/noise.png')] opacity-[0.03]" />
         <div className="relative mx-auto max-w-3xl px-5">
-          <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 md:text-5xl">
+          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 md:text-4xl">
             部落格
           </h1>
-          <p className="mt-4 text-lg text-slate-600">
+          <p className="mt-2 text-base text-slate-600">
             AI 記帳、中小企業報稅、台灣稅務知識分享
           </p>
         </div>

@@ -42,38 +42,33 @@ export default async function BlogPostPage({ params }: Props) {
 
   return (
     <main className="flex-1">
-      {/* Hero banner */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-sky-50 via-slate-50 to-emerald-50 pt-20 pb-16 md:pt-28 md:pb-20">
-        <div className="absolute inset-0 bg-[url('/noise.png')] opacity-[0.03]" />
-        <div className="relative mx-auto max-w-3xl px-5">
-          <Link
-            href="/blog"
-            className="mb-6 inline-flex items-center text-sm font-medium text-slate-500 hover:text-emerald-600 transition-colors"
-          >
-            ← 返回部落格
-          </Link>
-          <time className="block text-sm font-medium text-slate-400">
-            {post.date}
-          </time>
-          <h1 className="mt-2 text-3xl font-extrabold leading-tight tracking-tight text-slate-900 md:text-4xl lg:text-5xl">
-            {post.title}
-          </h1>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <span className="text-sm font-medium text-slate-600">
-              {post.author}
-            </span>
-            <span className="text-slate-300">|</span>
-            {post.tags.map((tag) => (
-              <span
-                key={tag}
-                className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700"
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
+      {/* Post header */}
+      <header className="mx-auto max-w-3xl px-5 pt-10 md:pt-14">
+        <Link
+          href="/blog"
+          className="inline-flex items-center text-sm font-medium text-slate-500 hover:text-emerald-600 transition-colors"
+        >
+          ← 返回部落格
+        </Link>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-slate-400">
+          <time>{post.date}</time>
+          <span>·</span>
+          <span className="font-medium text-slate-600">{post.author}</span>
         </div>
-      </section>
+        <h1 className="mt-2 text-2xl font-extrabold leading-tight tracking-tight text-slate-900 md:text-3xl lg:text-4xl">
+          {post.title}
+        </h1>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {post.tags.map((tag) => (
+            <span
+              key={tag}
+              className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      </header>
 
       {/* Cover image */}
       {post.coverImage && (

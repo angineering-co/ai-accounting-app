@@ -13,3 +13,15 @@ export function trackPricingInteraction(action: string, detail?: string) {
     detail,
   });
 }
+
+export function trackAssessmentStart() {
+  sendGAEvent("event", "assessment_start", {});
+}
+
+export function trackAssessmentStep(step: number) {
+  sendGAEvent("event", "assessment_step", { step });
+}
+
+export function trackAssessmentComplete() {
+  sendGAEvent("event", "assessment_complete", {});
+}

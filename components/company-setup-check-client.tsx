@@ -342,8 +342,8 @@ export function CompanySetupCheckClient() {
           <Accordion type="single" collapsible className="rounded-xl border border-slate-200 bg-white">
             {currentQuestion.faq.map((item, i) => (
               <AccordionItem
-                key={i}
-                value={`faq-${i}`}
+                key={item.q}
+                value={item.q}
                 className="border-b border-slate-100 px-4 last:border-0"
               >
                 <AccordionTrigger className="py-3 text-left text-sm font-medium text-slate-700 hover:no-underline">

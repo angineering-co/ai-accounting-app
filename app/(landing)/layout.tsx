@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { CtaLink } from "@/components/cta-link";
 import { CurrentYear } from "@/components/current-year";
 import { ToolsNavDropdown } from "@/components/tools-nav-dropdown";
+import { MobileNav } from "@/components/mobile-nav";
 
 export default function LandingLayout({
   children,
@@ -62,12 +63,7 @@ export default function LandingLayout({
                 登入
               </Link>
             </nav>
-            <Link
-              href="/auth/login"
-              className="md:hidden text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
-            >
-              登入
-            </Link>
+            <MobileNav />
             <Button
               asChild
               size="sm"

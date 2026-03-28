@@ -6,6 +6,7 @@ import { CtaLink } from "@/components/cta-link";
 import { CurrentYear } from "@/components/current-year";
 import { ToolsNavDropdown } from "@/components/tools-nav-dropdown";
 import { MobileNav } from "@/components/mobile-nav";
+import { navLinks } from "@/lib/nav-links";
 
 export default function LandingLayout({
   children,
@@ -31,30 +32,15 @@ export default function LandingLayout({
           </Link>
           <div className="flex items-center gap-4 md:gap-6">
             <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600">
-              <Link
-                href="/#features"
-                className="hover:text-slate-900 transition-colors"
-              >
-                服務介紹
-              </Link>
-              <Link
-                href="/#pricing"
-                className="hover:text-slate-900 transition-colors"
-              >
-                價格
-              </Link>
-              <Link
-                href="/blog"
-                className="hover:text-slate-900 transition-colors"
-              >
-                部落格
-              </Link>
-              <Link
-                href="/faq"
-                className="hover:text-slate-900 transition-colors"
-              >
-                常見問題
-              </Link>
+              {navLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="hover:text-slate-900 transition-colors"
+                >
+                  {link.label}
+                </Link>
+              ))}
               <ToolsNavDropdown />
               <Link
                 href="/auth/login"

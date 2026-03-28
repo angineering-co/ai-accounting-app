@@ -9,14 +9,7 @@ import {
   SheetTrigger,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { tools } from "@/lib/nav-links";
-
-const navLinks = [
-  { href: "/#features", label: "服務介紹" },
-  { href: "/#pricing", label: "價格" },
-  { href: "/blog", label: "部落格" },
-  { href: "/faq", label: "常見問題" },
-];
+import { navLinks, tools } from "@/lib/nav-links";
 
 export function MobileNav() {
   const [open, setOpen] = useState(false);

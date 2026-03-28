@@ -9,14 +9,13 @@ import {
   SheetTrigger,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { tools } from "@/lib/nav-links";
 
 const navLinks = [
   { href: "/#features", label: "服務介紹" },
   { href: "/#pricing", label: "價格" },
   { href: "/blog", label: "部落格" },
   { href: "/faq", label: "常見問題" },
-  { href: "/tools/invoice-helper", label: "手開發票小幫手" },
-  { href: "/auth/login", label: "登入" },
 ];
 
 export function MobileNav() {
@@ -32,17 +31,48 @@ export function MobileNav() {
       </SheetTrigger>
       <SheetContent side="right" className="w-64 pt-10">
         <SheetTitle className="sr-only">導覽選單</SheetTitle>
-        <nav className="flex flex-col gap-4 text-base font-medium text-slate-600">
+        <nav className="flex flex-col gap-1 text-base font-medium text-slate-600">
           {navLinks.map((link) => (
             <Link
               key={link.href}
               href={link.href}
               onClick={() => setOpen(false)}
-              className="hover:text-slate-900 transition-colors py-1"
+              className="hover:text-slate-900 transition-colors py-2"
             >
               {link.label}
             </Link>
           ))}
+
+          {/* 小工具 section */}
+          <div className="pt-2 border-t border-slate-100 mt-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              小工具
+            </span>
+            <div className="mt-1 flex flex-col gap-1">
+              {tools.map((tool) => (
+                <Link
+                  key={tool.href}
+                  href={tool.href}
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2 hover:text-slate-900 transition-colors py-2 pl-1"
+                >
+                  <tool.icon className="h-4 w-4 text-slate-400" />
+                  {tool.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          {/* 登入 */}
+          <div className="pt-2 border-t border-slate-100 mt-2">
+            <Link
+              href="/auth/login"
+              onClick={() => setOpen(false)}
+              className="hover:text-slate-900 transition-colors py-2 inline-block"
+            >
+              登入
+            </Link>
+          </div>
         </nav>
       </SheetContent>
     </Sheet>

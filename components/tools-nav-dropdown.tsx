@@ -1,21 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown, FileText } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-const tools = [
-  {
-    href: "/tools/invoice-helper",
-    label: "手開發票小幫手",
-    icon: FileText,
-  },
-];
+import { tools } from "@/lib/nav-links";
 
 export function ToolsNavDropdown() {
   return (

@@ -123,6 +123,12 @@ export default function LandingLayout({
               >
                 手開發票小幫手
               </Link>
+              <Link
+                href="/tools/company-setup-check"
+                className="hover:text-slate-900 transition-colors"
+              >
+                公司設立健檢
+              </Link>
             </div>
 
             <div className="text-sm text-slate-400">

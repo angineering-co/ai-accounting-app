@@ -340,7 +340,7 @@ export function CompanySetupCheckClient() {
             填寫小提示
           </p>
           <Accordion type="single" collapsible className="rounded-xl border border-slate-200 bg-white">
-            {currentQuestion.faq.map((item, i) => (
+            {currentQuestion.faq.map((item) => (
               <AccordionItem
                 key={item.q}
                 value={item.q}

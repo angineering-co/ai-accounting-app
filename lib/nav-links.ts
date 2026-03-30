@@ -1,4 +1,4 @@
-import { FileText, ClipboardCheck, type LucideIcon } from "lucide-react";
+import { FileText, ClipboardCheck, Calculator, type LucideIcon } from "lucide-react";
 
 export interface NavLink {
   href: string;
@@ -28,5 +28,10 @@ export const tools: ToolLink[] = [
     href: "/tools/company-setup-check",
     label: "公司設立健檢",
     icon: ClipboardCheck,
+  },
+  {
+    href: "/tools/tax-calculator",
+    label: "創業節稅試算",
+    icon: Calculator,
   },
 ];

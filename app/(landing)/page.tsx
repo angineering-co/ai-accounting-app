@@ -525,6 +525,10 @@ export default function Home() {
                 </AccordionItem>
               ))}
             </Accordion>
+
+            <p className="mt-10 text-center text-sm text-slate-500">
+              還有其他問題？查看<a href="/faq#snapbooks-service" className="font-medium text-emerald-600 hover:text-emerald-500 transition-colors">完整常見問題</a>
+            </p>
           </div>
         </section>
 

@@ -176,15 +176,10 @@ export default function Home() {
               </div>
             </div>
             <blockquote className="text-center font-display text-xl leading-relaxed text-slate-700 italic md:text-2xl md:leading-[1.8] font-normal">
-              我們深知台灣中小企業在記帳與報稅上面臨的痛點。傳統流程繁瑣，而純軟體工具又缺乏專業稅務的最終把關。
+              <span className="font-bold text-slate-900 not-italic">記帳像拍照一樣簡單，報稅像事務所一樣嚴謹。</span>
             </blockquote>
-            <p className="mt-8 text-center text-lg leading-relaxed text-slate-600 md:text-xl md:leading-relaxed">
-              SnapBooks.ai 的誕生，是因為我們相信：
-              <span className="font-display font-bold text-slate-900 not-italic">
-                記帳應該像拍照一樣簡單，而報稅必須像傳統事務所一樣嚴謹。
-              </span>
-              我們結合了前沿的 AI 自動化技術與深厚的稅法實務經驗，打造出新型態的
-              AI 記帳事務所，致力於成為企業主最可靠的後盾。
+            <p className="mt-6 text-center text-lg leading-relaxed text-slate-600 md:text-xl md:leading-relaxed">
+              AI 自動化 + 專業稅務把關 = 專為台灣中小企業打造的新型態記帳事務所。
             </p>
           </div>
 
@@ -263,25 +258,25 @@ export default function Home() {
                 <li className="flex gap-3">
                   <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500 mt-0.5" />
                   <span className="leading-relaxed">
-                    審計雲 (AuditEasy) 創辦人
+                    AI 自動化顧問、深耕事務所自動化
                   </span>
                 </li>
                 <li className="flex gap-3">
                   <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500 mt-0.5" />
                   <span className="leading-relaxed">
-                    矽谷科技公司技術主管 (Google, Square, Carousell)
+                    Fintech 矽谷工程師 (Block, Google)
                   </span>
                 </li>
                 <li className="flex gap-3">
                   <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500 mt-0.5" />
                   <span className="leading-relaxed">
-                    擁有深厚的金融科技 (FinTech) 與大型系統架構經驗
+                    擁有深厚的金融科技與大型系統架構經驗
                   </span>
                 </li>
                 <li className="flex gap-3">
                   <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500 mt-0.5" />
                   <span className="leading-relaxed">
-                    專注於將企業級的 AI 數據處理能力，帶入中小企業日常
+                    專注於將企業級的 AI 帶入中小企業日常
                   </span>
                 </li>
               </ul>

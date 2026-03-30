@@ -56,7 +56,7 @@ export default function LandingLayout({
               className="rounded-full bg-emerald-500 text-white hover:bg-slate-800 font-medium"
             >
               <CtaLink href={ctaHref} location="nav">
-                免費評估適用方案
+                免費諮詢
               </CtaLink>
             </Button>
           </div>

@@ -260,7 +260,7 @@ export default function Home() {
               <h2 className="font-display text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
                 為什麼選擇 SnapBooks
               </h2>
-              <p className="mx-auto mt-4 max-w-xl text-slate-600">
+              <p className="mx-auto mt-4 max-w-xl text-lg text-slate-600">
                 記帳事務所的服務品質，加上科技的便利
               </p>
             </div>
@@ -332,12 +332,12 @@ export default function Home() {
               <div className="grid grid-cols-[1.2fr_1fr_1fr] sm:grid-cols-[1.5fr_1fr_1fr]">
                 <div className="p-4 sm:p-5" />
                 <div className="flex items-center justify-center border-l border-slate-100 bg-slate-50 p-4 sm:p-5">
-                  <span className="text-center text-sm font-semibold text-slate-500">
+                  <span className="text-center text-sm sm:text-base font-semibold text-slate-500">
                     傳統事務所
                   </span>
                 </div>
                 <div className="flex items-center justify-center border-l border-emerald-100 bg-emerald-50 p-4 sm:p-5 border-t-2 border-t-emerald-500">
-                  <span className="text-center text-sm font-bold text-emerald-700">
+                  <span className="text-center text-sm sm:text-base font-bold text-emerald-700">
                     SnapBooks.ai
                   </span>
                 </div>
@@ -350,17 +350,17 @@ export default function Home() {
                   className="grid grid-cols-[1.2fr_1fr_1fr] sm:grid-cols-[1.5fr_1fr_1fr] border-t border-slate-100"
                 >
                   <div className="flex items-center p-4 sm:p-5">
-                    <span className="text-sm font-medium text-slate-700">
+                    <span className="text-sm sm:text-base font-medium text-slate-700">
                       {row.label}
                     </span>
                   </div>
                   <div className="flex items-center justify-center border-l border-slate-100 bg-slate-50/50 p-4 sm:p-5">
-                    <span className="text-center text-sm text-slate-500">
+                    <span className="text-center text-sm sm:text-base text-slate-500">
                       {row.traditional}
                     </span>
                   </div>
                   <div className="flex items-center justify-center border-l border-emerald-100 bg-emerald-50/30 p-4 sm:p-5">
-                    <span className="text-center text-sm font-medium text-slate-900">
+                    <span className="text-center text-sm sm:text-base font-medium text-slate-900">
                       {row.snapbooks}
                     </span>
                   </div>
@@ -413,7 +413,7 @@ export default function Home() {
                   <h2 className="font-display text-2xl font-bold text-slate-900">
                     黃勝平 Joe
                   </h2>
-                  <p className="mt-1 text-sm font-semibold text-emerald-600">
+                  <p className="mt-1 text-base font-semibold text-emerald-600">
                     共同創辦人暨稅務主理人
                   </p>
                 </div>
@@ -462,7 +462,7 @@ export default function Home() {
                   <h2 className="font-display text-2xl font-bold text-slate-900">
                     王致昂 Ang
                   </h2>
-                  <p className="mt-1 text-sm font-semibold text-emerald-600">
+                  <p className="mt-1 text-base font-semibold text-emerald-600">
                     共同創辦人暨技術負責人
                   </p>
                 </div>
@@ -516,7 +516,7 @@ export default function Home() {
                   value={value}
                   className="rounded-2xl border border-slate-200 bg-white px-6 shadow-sm"
                 >
-                  <AccordionTrigger className="text-base font-semibold text-slate-900 hover:no-underline">
+                  <AccordionTrigger className="text-base md:text-lg font-semibold text-slate-900 hover:no-underline">
                     {question}
                   </AccordionTrigger>
                   <AccordionContent className="text-base leading-relaxed text-slate-600">
@@ -588,7 +588,7 @@ export default function Home() {
                     <h3 className="mb-2 text-lg font-bold text-slate-900">
                       {title}
                     </h3>
-                    <p className="text-sm leading-relaxed text-slate-600">
+                    <p className="text-sm sm:text-base leading-relaxed text-slate-600">
                       {desc}
                     </p>
                   </div>

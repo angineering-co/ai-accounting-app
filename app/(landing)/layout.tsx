@@ -31,7 +31,7 @@ export default function LandingLayout({
             />
           </Link>
           <div className="flex items-center gap-4 md:gap-6">
-            <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600">
+            <nav className="hidden md:flex items-center gap-6 text-base font-medium text-slate-600">
               {navLinks.map((link) => (
                 <Link
                   key={link.href}

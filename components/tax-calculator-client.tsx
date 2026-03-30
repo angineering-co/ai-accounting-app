@@ -506,7 +506,7 @@ export function TaxCalculatorClient() {
                     {r ? formatMoney(r.sole.iit.tax) : "-"}
                   </TableCell>
                   <TableCell className="text-right">
-                    {r ? formatMoney(r.company.iitFinal) : "-"}
+                    {r ? formatMoney(r.company.iit.tax) : "-"}
                   </TableCell>
                 </TableRow>
 

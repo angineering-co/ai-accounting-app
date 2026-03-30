@@ -13,6 +13,7 @@ import {
   ClipboardCheck,
   PenLine,
   Camera,
+  Quote,
 } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -284,6 +285,101 @@ export default function Home() {
                   </span>
                 </li>
               </ul>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Testimonials ── */}
+        <section className="bg-gradient-to-br from-emerald-50/50 via-white to-sky-50/50 py-24 md:py-36">
+          <div className="mx-auto max-w-5xl px-5">
+            <div className="mb-20 text-center">
+              <p className="mb-4 text-sm font-semibold uppercase tracking-widest text-emerald-600">
+                Testimonials
+              </p>
+              <h2 className="font-display text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
+                他們都選擇了 SnapBooks
+              </h2>
+              <p className="mx-auto mt-4 max-w-xl text-slate-600">
+                從一人公司到連鎖企業，聽聽真實客戶怎麼說
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3">
+              {[
+                {
+                  name: "小凱",
+                  title: "自由視覺設計師",
+                  quote: "一張照片，搞定我的數位遊民生活！",
+                  body: "我是自媒體經營者，常常忙著忙著就忘了時間，SnapBooks會自動提醒我報稅的時間，而且也只要上傳圖片就可以完成報稅，很適合我這種常常在外面跑來跑去的工作者。",
+                },
+                {
+                  name: "Emma",
+                  title: "程式設計師",
+                  quote: "合理的價格，超值的服務",
+                  body: "一人公司預算有限，再也不用為了幾張憑證付昂貴記帳費。價格直接砍半，CP 值高到讓我懷疑以前是不是多付了？",
+                },
+                {
+                  name: "蔡桃貴",
+                  title: "手作甜點工作室",
+                  quote: "報稅只要 30 秒？憑證不會丟！",
+                  body: "每次常常都找不到發票，怕漏掉少抵稅，後來都拍拍照好了，原始憑證在我這邊，不擔心弄丟，要跟廠商對帳也不用等事務所回復！",
+                },
+              ].map(({ name, title, quote, body }) => (
+                <div
+                  key={name}
+                  className="group rounded-3xl border border-slate-100 bg-gradient-to-b from-slate-50/80 to-white p-8 transition-all duration-300 hover:border-emerald-100 hover:shadow-lg hover:shadow-emerald-50"
+                >
+                  <Quote className="mb-4 h-6 w-6 text-emerald-200" />
+                  <p className="font-display text-xl font-bold leading-snug text-slate-900">
+                    {quote}
+                  </p>
+                  <p className="mt-3 text-base leading-relaxed text-slate-600">
+                    {body}
+                  </p>
+                  <div className="mt-6 border-t border-slate-100 pt-4">
+                    <p className="text-sm font-bold text-slate-900">{name}</p>
+                    <p className="text-sm font-medium text-emerald-600">
+                      {title}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mx-auto mt-6 grid max-w-3xl grid-cols-1 gap-6 sm:grid-cols-2">
+              {[
+                {
+                  name: "Mary",
+                  title: "餐飲連鎖店",
+                  quote: "相信數據分析，省下更多錢。",
+                  body: "爬文爬了很久還是看不懂公司跟行號的差別，還好透過SnapBooks的線上試算表，讓我知道原來我適合開設行號，光是稅金一年就省了快20萬，小朋友的學費都夠付了。",
+                },
+                {
+                  name: "Leo",
+                  title: "水電工程行",
+                  quote: "比導航還準！專家幫我避開稅務坑洞，現省 10 萬。",
+                  body: "本來擔心線上服務會像冷冰冰的機器人，沒想到諮詢超級親切！客服講解超級親切，隨便問都能知道我要問甚麼。",
+                },
+              ].map(({ name, title, quote, body }) => (
+                <div
+                  key={name}
+                  className="group rounded-3xl border border-slate-100 bg-gradient-to-b from-slate-50/80 to-white p-8 transition-all duration-300 hover:border-emerald-100 hover:shadow-lg hover:shadow-emerald-50"
+                >
+                  <Quote className="mb-4 h-6 w-6 text-emerald-200" />
+                  <p className="font-display text-xl font-bold leading-snug text-slate-900">
+                    {quote}
+                  </p>
+                  <p className="mt-3 text-base leading-relaxed text-slate-600">
+                    {body}
+                  </p>
+                  <div className="mt-6 border-t border-slate-100 pt-4">
+                    <p className="text-sm font-bold text-slate-900">{name}</p>
+                    <p className="text-sm font-medium text-emerald-600">
+                      {title}
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </section>

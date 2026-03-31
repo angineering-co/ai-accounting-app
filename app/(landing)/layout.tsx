@@ -129,6 +129,12 @@ export default function LandingLayout({
               >
                 公司設立健檢
               </Link>
+              <Link
+                href="/tools/withholding-tax-calculator"
+                className="hover:text-slate-900 transition-colors"
+              >
+                扣繳計算機
+              </Link>
             </div>
 
             <div className="text-sm text-slate-400">

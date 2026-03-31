@@ -139,8 +139,7 @@ function calculateTaxes(inputs: TaxInputs): TaxResult {
   const companyNetIncome = Math.max(0, companyDividend - deductionTotal);
   const compIIT = calculateIIT(companyNetIncome);
   const dividendCredit = Math.min(companyDividend * 0.085, 80000);
-  // 股利可抵減稅額僅能扣抵綜所稅，不可抵減營所稅，且不退還差額
-  const iitFinal = Math.max(0, compIIT.tax - dividendCredit);
+  const iitFinal = compIIT.tax - dividendCredit;
   const companyTotalTax = cit + iitFinal;
 
   return {
@@ -241,19 +240,16 @@ export function TaxCalculatorClient() {
               <div className="relative">
                 <Input
                   id="dependents"
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={inputs.dependents || ""}
-                  onChange={(e) =>
+                  type="text"
+                  inputMode="numeric"
+                  value={String(inputs.dependents)}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, "");
                     setInputs((prev) => ({
                       ...prev,
-                      dependents: Math.max(0, parseInt(e.target.value) || 0),
-                    }))
-                  }
-                  onBlur={() =>
-                    setInputs((prev) => ({ ...prev, dependents: prev.dependents || 0 }))
-                  }
+                      dependents: digits === "" ? 0 : parseInt(digits, 10),
+                    }));
+                  }}
                 />
                 <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">
                   人
@@ -506,7 +502,11 @@ export function TaxCalculatorClient() {
                     {r ? formatMoney(r.sole.iit.tax) : "-"}
                   </TableCell>
                   <TableCell className="text-right">
-                    {r ? formatMoney(r.company.iit.tax) : "-"}
+                    {r
+                      ? r.company.iitFinal < 0
+                        ? `應繳: 0 元 (可退稅 ${fmt(Math.abs(r.company.iitFinal))} 元)`
+                        : formatMoney(r.company.iitFinal)
+                      : "-"}
                   </TableCell>
                 </TableRow>
 
@@ -516,7 +516,7 @@ export function TaxCalculatorClient() {
                     (扣除股利可抵減稅額)
                     <InfoTip>
                       <p>股利 {r ? fmt(r.company.dividend) : "—"} x 8.5%{r && r.company.dividend * 0.085 > 80000 ? "，上限 80,000" : ""}</p>
-                      <p className="mt-1">僅能扣抵綜所稅，不可抵減營所稅，且超過綜所稅額的部分不退還。</p>
+                      <p className="mt-1">僅適用公司組織 (合併計稅)，可抵減綜所稅及營所稅。</p>
                     </InfoTip>
                   </TableCell>
                   <TableCell className="text-right text-xs text-muted-foreground">

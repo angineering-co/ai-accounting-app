@@ -369,7 +369,7 @@ function StepDetail({ step, index }: { step: Step; index: number }) {
         <p className="mt-1.5 text-sm text-slate-500">{step.description}</p>
       </div>
       <CardContent className="divide-y p-0">
-        {step.qa.map((item, i) => (
+        {step.qa.map((item) => (
           <div key={item.q} className="px-6 py-5">
             <p className="font-medium text-slate-800">{item.q}</p>
             <p className="mt-2 text-sm leading-relaxed text-slate-600">

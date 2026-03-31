@@ -141,6 +141,12 @@ export default function LandingLayout({
               >
                 開公司流程圖
               </Link>
+              <Link
+                href="/tools/insurance-calculator"
+                className="hover:text-slate-900 transition-colors"
+              >
+                勞健保計算機
+              </Link>
             </div>
 
             <div className="text-sm text-slate-400">

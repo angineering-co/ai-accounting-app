@@ -1,4 +1,4 @@
-import { FileText, ClipboardCheck, Calculator, GitBranch, type LucideIcon } from "lucide-react";
+import { FileText, ClipboardCheck, Calculator, GitBranch, HeartPulse, type LucideIcon } from "lucide-react";
 
 export interface NavLink {
   href: string;
@@ -43,5 +43,10 @@ export const tools: ToolLink[] = [
     href: "/tools/incorporation-flow",
     label: "開公司流程圖",
     icon: GitBranch,
+  },
+  {
+    href: "/tools/insurance-calculator",
+    label: "勞健保計算機",
+    icon: HeartPulse,
   },
 ];

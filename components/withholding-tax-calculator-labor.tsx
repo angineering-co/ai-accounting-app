@@ -278,6 +278,39 @@ export function WithholdingTaxCalculatorLabor() {
               {generating ? "產生中..." : "下載勞務報酬單"}
             </Button>
           </div>
+
+          {/* Payment slip reminders */}
+          {(result.withholdingTax > 0 || result.healthInsurance > 0) && (
+            <div className="mt-4 rounded-xl bg-slate-50 border border-slate-200 px-5 py-4">
+              <p className="text-sm font-medium text-slate-700 mb-2">繳款書列印</p>
+              <ul className="flex flex-col gap-1.5 text-sm text-slate-600">
+                {result.withholdingTax > 0 && (
+                  <li>
+                    <a
+                      href="https://www.etax.nat.gov.tw/etwmain/etw144w/152"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-emerald-600 underline underline-offset-2 hover:text-emerald-700"
+                    >
+                      所得扣繳稅額繳款書
+                    </a>
+                  </li>
+                )}
+                {result.healthInsurance > 0 && (
+                  <li>
+                    <a
+                      href="https://eservice.nhi.gov.tw/2nd/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-emerald-600 underline underline-offset-2 hover:text-emerald-700"
+                    >
+                      二代健保繳款書
+                    </a>
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </div>

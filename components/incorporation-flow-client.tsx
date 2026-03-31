@@ -261,16 +261,16 @@ function FlowView({
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
       <div className="lg:col-span-2 space-y-0">
         <div className="relative">
-          <div className="absolute left-[19px] top-6 bottom-6 w-0.5 bg-slate-200" />
-          {activeIndex >= 0 && (
-            <div
-              className="absolute left-[19px] top-6 w-0.5 bg-emerald-500 transition-all duration-500 ease-out"
-              style={{
-                height: `${(activeIndex / Math.max(steps.length - 1, 1)) * 100}%`,
-                maxHeight: "calc(100% - 48px)",
-              }}
-            />
-          )}
+          <div className="absolute left-[19px] top-6 bottom-6 w-0.5 bg-slate-200">
+            {activeIndex >= 0 && (
+              <div
+                className="w-full bg-emerald-500 transition-all duration-500 ease-out"
+                style={{
+                  height: `${(activeIndex / Math.max(steps.length - 1, 1)) * 100}%`,
+                }}
+              />
+            )}
+          </div>
 
           <div className="relative space-y-1">
             {steps.map((step, index) => {
@@ -370,7 +370,7 @@ function StepDetail({ step, index }: { step: Step; index: number }) {
       </div>
       <CardContent className="divide-y p-0">
         {step.qa.map((item, i) => (
-          <div key={i} className="px-6 py-5">
+          <div key={item.q} className="px-6 py-5">
             <p className="font-medium text-slate-800">{item.q}</p>
             <p className="mt-2 text-sm leading-relaxed text-slate-600">
               {item.a}

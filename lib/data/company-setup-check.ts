@@ -38,6 +38,39 @@ export interface ResultSection {
 
 export type Answers = Record<string, string>;
 
+// ─── Conclusion Rules ───────────────────────────────────────────────────────
+
+export const conclusionRules: ResultRule[] = [
+  {
+    condition: (ans) => ans.q3 === "company" && ans.q1 === "tax_saving",
+    text: "您設立的目的主要考量是節稅，但偏好公司組織，建議改用行號，大部分的情況下，行號會比公司更有租稅優勢。",
+  },
+  {
+    condition: (ans) => ans.q3 === "firm" && ans.q1 === "tax_saving",
+    text: "您設立的目的主要考量是節稅，偏好組織是行號，這是正確的方向，行號在多數情況下比公司更有租稅優勢。",
+  },
+  {
+    condition: (ans) => ans.q1 === "tax_saving" && ans.q2 === "above_372",
+    text: "依照年營業額 372 萬以上的級距，行號相比公司每年可節省數萬元的稅金(實際情況請搭配本站的稅務計算工具試算)。",
+  },
+  {
+    condition: (ans) => ans.q8 === "rented",
+    text: "您地址選擇承租辦公室，如果單次給付超過 2 萬元，記得要扣繳 10% 及 2.11% 的補充保費給房東。以 3 萬元房租為例，房東實際會拿到 26,367 元(差額的 3,000 元扣繳稅額及 633 元補充保費，須由您繳納給政府)。",
+  },
+  {
+    condition: (ans) => ans.q8 === "self_owned",
+    text: "您地址選擇在自有房屋，雖然沒實際領取房租，除非是行號，否則仍要設算租金行情，當作您的個人所得併入個人所得稅，且房屋稅跟地價稅都會改用營業使用稅率。",
+  },
+  {
+    condition: (ans) => ans.q8 === "business_center",
+    text: "商務中心提供的發票可以作為報稅扣抵使用，但需要注意，所有的政府公文書都會寄送到該地址。",
+  },
+  {
+    condition: (ans) => ans.q9 === "no",
+    text: "身為負責人，最低採用 36,300 級距投保，並且若有撫養親屬，該撫養親屬的健保費均由您負擔。",
+  },
+];
+
 // ─── Questions ───────────────────────────────────────────────────────────────
 
 export const questions: AssessmentQuestion[] = [

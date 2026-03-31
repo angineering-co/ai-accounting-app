@@ -157,21 +157,21 @@ export function CompanySetupCheckClient() {
           <h2 className="font-display text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
             您的企業設立藍圖
           </h2>
-          <p className="mt-2 text-sm text-slate-500">
+          <p className="mt-2 text-base text-slate-600">
             根據您的選擇條件，我們為您整理了以下的架構與稅務建議
           </p>
 
           <div className="mt-6 rounded-xl bg-slate-50 p-4">
-            <p className="mb-3 text-xs font-medium uppercase tracking-wider text-slate-400">
+            <p className="mb-3 text-sm font-medium uppercase tracking-wider text-slate-500">
               您的作答清單
             </p>
             <ul className="space-y-2">
               {result.summary.map((item, i) => (
                 <li
                   key={i}
-                  className="flex items-center justify-between gap-4 border-b border-slate-100 pb-2 text-sm last:border-0 last:pb-0"
+                  className="flex items-center justify-between gap-4 border-b border-slate-100 pb-2 text-base last:border-0 last:pb-0"
                 >
-                  <span className="text-slate-500">{item.question}</span>
+                  <span className="text-slate-600">{item.question}</span>
                   <span className="whitespace-nowrap font-medium text-emerald-600">
                     {item.answer}
                   </span>
@@ -181,43 +181,70 @@ export function CompanySetupCheckClient() {
           </div>
         </div>
 
-        {result.sections.map((section, sIdx) => (
-          <div
-            key={sIdx}
-            className="animate-fade-up rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8"
-            style={{ animationDelay: `${(sIdx + 1) * 100}ms` }}
-          >
-            <h3 className="flex items-center gap-2 font-display text-lg font-bold text-slate-900">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-sm">
-                {section.emoji}
+        {result.conclusion.length > 0 && (
+          <div className="animate-fade-up rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 p-6 shadow-sm md:p-8">
+            <h3 className="flex items-center gap-2 font-display text-lg font-bold text-emerald-800">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-sm">
+                &#10024;
               </span>
-              {section.title}
+              您的專屬評估結論
             </h3>
-
-            <div className="mt-4 space-y-4">
-              {section.items.map((item, iIdx) => (
-                <div
-                  key={iIdx}
-                  className="rounded-xl border-l-4 border-emerald-400 bg-slate-50 p-4"
+            <div className="mt-4 space-y-3">
+              {result.conclusion.map((text, i) => (
+                <p
+                  key={i}
+                  className="text-base leading-relaxed text-slate-800"
                 >
-                  <p className="text-sm leading-relaxed text-slate-700">
-                    {item.text}
-                  </p>
-                  {item.qa && (
-                    <div className="mt-3 rounded-lg bg-white p-3">
-                      <p className="text-xs font-semibold text-slate-400">
-                        {item.qa.q}
-                      </p>
-                      <p className="mt-1 text-sm leading-relaxed text-slate-600">
-                        {item.qa.a}
-                      </p>
-                    </div>
-                  )}
-                </div>
+                  {text}
+                </p>
               ))}
             </div>
           </div>
-        ))}
+        )}
+
+        <Accordion type="multiple" className="space-y-4">
+          {result.sections.map((section, sIdx) => (
+            <AccordionItem
+              key={sIdx}
+              value={`section-${sIdx}`}
+              className="animate-fade-up rounded-2xl border border-slate-200 bg-white shadow-sm"
+              style={{ animationDelay: `${(sIdx + 1) * 100}ms` }}
+            >
+              <AccordionTrigger className="px-6 py-5 hover:no-underline md:px-8">
+                <h3 className="flex items-center gap-2 font-display text-lg font-bold text-slate-900">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-sm">
+                    {section.emoji}
+                  </span>
+                  {section.title}
+                </h3>
+              </AccordionTrigger>
+              <AccordionContent className="px-6 pb-6 md:px-8 md:pb-8">
+                <div className="space-y-4">
+                  {section.items.map((item, iIdx) => (
+                    <div
+                      key={iIdx}
+                      className="rounded-xl border-l-4 border-emerald-400 bg-slate-50 p-4"
+                    >
+                      <p className="text-base leading-relaxed text-slate-800">
+                        {item.text}
+                      </p>
+                      {item.qa && (
+                        <div className="mt-3 rounded-lg bg-white p-3">
+                          <p className="text-sm font-semibold text-slate-600">
+                            {item.qa.q}
+                          </p>
+                          <p className="mt-1 text-base leading-relaxed text-slate-700">
+                            {item.qa.a}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          ))}
+        </Accordion>
 
         <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 p-8 text-center shadow-lg md:p-10">
           <h3 className="text-xl font-bold text-white md:text-2xl">

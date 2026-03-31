@@ -34,4 +34,9 @@ export const tools: ToolLink[] = [
     label: "創業節稅試算",
     icon: Calculator,
   },
+  {
+    href: "/tools/withholding-tax-calculator",
+    label: "扣繳計算機",
+    icon: Calculator,
+  },
 ];

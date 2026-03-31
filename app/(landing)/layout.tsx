@@ -135,6 +135,12 @@ export default function LandingLayout({
               >
                 扣繳計算機
               </Link>
+              <Link
+                href="/tools/incorporation-flow"
+                className="hover:text-slate-900 transition-colors"
+              >
+                開公司流程圖
+              </Link>
             </div>
 
             <div className="text-sm text-slate-400">

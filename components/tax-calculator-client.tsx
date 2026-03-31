@@ -90,7 +90,8 @@ function fmt(num: number): string {
 }
 
 function formatMoney(num: number): string {
-  return fmt(num) + " 元";
+  const prefix = num < 0 ? "- " : "";
+  return prefix + fmt(num) + " 元";
 }
 
 function calculateIIT(netIncome: number): IITResult {

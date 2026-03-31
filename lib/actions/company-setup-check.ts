@@ -3,6 +3,7 @@
 import {
   questions,
   resultSections,
+  conclusionRules,
   type Answers,
   type AssessmentFaq,
 } from "@/lib/data/company-setup-check";
@@ -44,6 +45,7 @@ export interface AnswerSummaryItem {
 }
 
 export interface ResultPayload {
+  conclusion: string[];
   summary: AnswerSummaryItem[];
   sections: ResultSectionPayload[];
 }
@@ -148,5 +150,9 @@ export async function getResults(answers: Answers): Promise<ResultPayload> {
     }
   }
 
-  return { summary, sections };
+  const conclusion: string[] = conclusionRules
+    .filter((rule) => rule.condition(answers))
+    .map((rule) => rule.text);
+
+  return { conclusion, summary, sections };
 }

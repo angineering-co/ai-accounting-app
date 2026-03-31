@@ -1,4 +1,4 @@
-import { FileText, ClipboardCheck, Calculator, type LucideIcon } from "lucide-react";
+import { FileText, ClipboardCheck, Calculator, GitBranch, type LucideIcon } from "lucide-react";
 
 export interface NavLink {
   href: string;
@@ -38,5 +38,10 @@ export const tools: ToolLink[] = [
     href: "/tools/withholding-tax-calculator",
     label: "扣繳計算機",
     icon: Calculator,
+  },
+  {
+    href: "/tools/incorporation-flow",
+    label: "開公司流程圖",
+    icon: GitBranch,
   },
 ];

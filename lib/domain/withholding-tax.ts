@@ -277,21 +277,19 @@ export function calculateLabor(input: LaborInput): LaborResult {
 
   const wRate = getWithholdingRate(input.nationality);
   const applyThreshold = hasThreshold(input.nationality);
+  // 非居住者非健保投保對象，不扣補充保費
+  const healthExempt =
+    input.healthInsuranceExempt || input.nationality === "foreign_non_resident";
 
   const gross = input.isNetAmount
-    ? reverseGross(
-        input.amount,
-        wRate,
-        applyThreshold,
-        input.healthInsuranceExempt,
-      )
+    ? reverseGross(input.amount, wRate, applyThreshold, healthExempt)
     : input.amount;
 
   const { withholdingTax, healthInsurance } = computeDeductions(
     gross,
     wRate,
     applyThreshold,
-    input.healthInsuranceExempt,
+    healthExempt,
   );
 
   return {

@@ -69,13 +69,13 @@ describe("calculateLabor", () => {
     expect(r.netAmount).toBe(8_000);
   });
 
-  it("non-resident 60,000 → 20% tax + health", () => {
+  it("non-resident 60,000 → 20% tax, no health insurance", () => {
     const r = calculateLabor(
       labor({ nationality: "foreign_non_resident", amount: 60_000 }),
     );
     expect(r.withholdingTax).toBe(12_000);
-    expect(r.healthInsurance).toBe(1_266);
-    expect(r.netAmount).toBe(46_734);
+    expect(r.healthInsurance).toBe(0);
+    expect(r.netAmount).toBe(48_000);
   });
 
   it("foreign resident → same rules as domestic", () => {

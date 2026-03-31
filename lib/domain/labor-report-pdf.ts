@@ -1,3 +1,4 @@
+import { format } from "date-fns";
 import {
   getNationalityLabel,
   fmtCurrency as fmt,
@@ -147,7 +148,7 @@ export async function generateLaborReportPdf(
 
     pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = format(new Date(), "yyyy-MM-dd");
     pdf.save(`勞務報酬單_${today}.pdf`);
   } finally {
     document.body.removeChild(container);

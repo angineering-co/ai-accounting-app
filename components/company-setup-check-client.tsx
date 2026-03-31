@@ -211,12 +211,12 @@ export function CompanySetupCheckClient() {
               style={{ animationDelay: `${(sIdx + 1) * 100}ms` }}
             >
               <AccordionTrigger className="px-6 py-5 hover:no-underline md:px-8">
-                <h3 className="flex items-center gap-2 font-display text-lg font-bold text-slate-900">
+                <span className="flex items-center gap-2 font-display text-lg font-bold text-slate-900">
                   <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-sm">
                     {section.emoji}
                   </span>
                   {section.title}
-                </h3>
+                </span>
               </AccordionTrigger>
               <AccordionContent className="px-6 pb-6 md:px-8 md:pb-8">
                 <div className="space-y-4">

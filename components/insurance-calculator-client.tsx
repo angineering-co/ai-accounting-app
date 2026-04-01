@@ -279,6 +279,12 @@ export function InsuranceCalculatorClient() {
           </div>
         </div>
       )}
+
+      {/* Notes */}
+      <div className="text-sm text-slate-500 leading-relaxed">
+        <p>註1：以上計算適用於一般正職員工，部分工時人員不適用；勞健保計算結果僅供參考，實際繳納仍依勞健保局結果為準</p>
+        <p>註2：職業災害保險為依照一般行業0.11%計算，不同行業可能有不同費率</p>
+      </div>
     </div>
   );
 }

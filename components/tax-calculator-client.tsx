@@ -327,7 +327,7 @@ export function TaxCalculatorClient() {
             </Button>
 
             <p className="text-center text-xs text-muted-foreground inline-flex items-center justify-center w-full">
-              以 113 年度 (2024) 稅率計算
+              以 114 年度 (2025) 稅率計算
               <InfoTip>
                 <p className="font-medium mb-1">本工具使用之稅率常數:</p>
                 <p>個人免稅額: 每人 97,000 元</p>

@@ -15,6 +15,7 @@ import {
   trackAssessmentStep,
   trackAssessmentComplete,
 } from "@/lib/analytics";
+import { renderLinkedText } from "@/lib/render-linked-text";
 import {
   getQuestion,
   advanceStep,
@@ -195,7 +196,7 @@ export function CompanySetupCheckClient() {
                   key={i}
                   className="text-base leading-relaxed text-slate-800"
                 >
-                  {text}
+                  {renderLinkedText(text)}
                 </p>
               ))}
             </div>
@@ -226,7 +227,7 @@ export function CompanySetupCheckClient() {
                       className="rounded-xl border-l-4 border-emerald-400 bg-slate-50 p-4"
                     >
                       <p className="text-base leading-relaxed text-slate-800">
-                        {item.text}
+                        {renderLinkedText(item.text)}
                       </p>
                       {item.qa && (
                         <div className="mt-3 rounded-lg bg-white p-3">
@@ -234,7 +235,7 @@ export function CompanySetupCheckClient() {
                             {item.qa.q}
                           </p>
                           <p className="mt-1 text-base leading-relaxed text-slate-700">
-                            {item.qa.a}
+                            {renderLinkedText(item.qa.a)}
                           </p>
                         </div>
                       )}

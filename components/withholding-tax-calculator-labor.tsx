@@ -126,8 +126,6 @@ export function WithholdingTaxCalculatorLabor() {
                     <TooltipContent side="bottom" className="max-w-xs text-sm leading-relaxed">
                       <p className="font-semibold mb-1">符合免扣條件：</p>
                       <ul className="list-disc pl-4 space-y-0.5">
-                        <li>兼職所得人於本單位有投保健保</li>
-                        <li>所得人為公務人員</li>
                         <li>給付金額未達基本工資</li>
                       </ul>
                     </TooltipContent>
@@ -253,14 +251,13 @@ export function WithholdingTaxCalculatorLabor() {
                 <Row
                   label="費用率"
                   value={pct(result.expenseRate)}
-                  muted
                 />
                 <Row
                   label="所得淨額"
                   value={fmt(
                     Math.round(result.grossAmount * (1 - result.expenseRate)),
                   )}
-                  muted
+                  tooltip="國稅局依照所得類別給予不同程度之減免費用，因此所得淨額是所得人實際要報稅的金額"
                 />
               </div>
             )}

@@ -275,11 +275,17 @@ export function calculateLabor(input: LaborInput): LaborResult {
     professions.find((p) => p.code === input.professionCode) ?? professions[0];
   const expenseRate = profession.expenseRate;
 
-  const wRate = getWithholdingRate(input.nationality);
-  const applyThreshold = hasThreshold(input.nationality);
+  // 92 其他所得: 本國人及居住者免扣繳、免補充保費；非居住者照常扣繳
+  const isOtherIncomeExempt =
+    input.incomeCategory === "92" && input.nationality !== "foreign_non_resident";
+
+  const wRate = isOtherIncomeExempt ? 0 : getWithholdingRate(input.nationality);
+  const applyThreshold = isOtherIncomeExempt ? false : hasThreshold(input.nationality);
   // 非居住者非健保投保對象，不扣補充保費
   const healthExempt =
-    input.healthInsuranceExempt || input.nationality === "foreign_non_resident";
+    isOtherIncomeExempt ||
+    input.healthInsuranceExempt ||
+    input.nationality === "foreign_non_resident";
 
   const gross = input.isNetAmount
     ? reverseGross(input.amount, wRate, applyThreshold, healthExempt)

@@ -27,6 +27,9 @@ export default function TaxCalculatorPage() {
       {/* Tool */}
       <section className="mx-auto max-w-5xl px-5 py-10 md:py-14">
         <TaxCalculatorClient />
+        <p className="mt-6 text-center text-sm text-slate-500">
+          (免責聲明)本計算表僅供參考，實際情況可能依照股利分配政策、撫養親屬狀況等有所不同
+        </p>
       </section>
     </main>
   );

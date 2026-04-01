@@ -261,7 +261,7 @@ function FlowView({
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
       <div className="lg:col-span-2 space-y-0">
         <div className="relative">
-          <div className="absolute left-[19px] top-6 bottom-6 w-0.5 bg-slate-200">
+          <div className="absolute left-[31px] top-6 bottom-6 w-0.5 bg-slate-200">
             {activeIndex >= 0 && (
               <div
                 className="w-full bg-emerald-500 transition-all duration-500 ease-out"

@@ -129,12 +129,26 @@ describe("calculateLabor", () => {
     expect(profs[1].expenseRate).toBe(0.75);
   });
 
-  it("92 income category → 0% expense rate", () => {
+  it("92 income category domestic → 0% expense rate, no withholding, no health", () => {
     const r = calculateLabor(
       labor({ incomeCategory: "92", professionCode: "00", amount: 30_000 }),
     );
     expect(r.expenseRate).toBe(0);
-    expect(r.withholdingTax).toBe(3_000);
+    expect(r.withholdingTax).toBe(0);
+    expect(r.healthInsurance).toBe(0);
+    expect(r.netAmount).toBe(30_000);
+  });
+
+  it("92 income category non-resident → still withholds 20%", () => {
+    const r = calculateLabor(
+      labor({
+        incomeCategory: "92",
+        professionCode: "00",
+        nationality: "foreign_non_resident",
+        amount: 30_000,
+      }),
+    );
+    expect(r.withholdingTax).toBe(6_000);
   });
 });
 

@@ -7,6 +7,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { renderLinkedTextWithBreaks } from "@/lib/render-linked-text";
 
 import { faqCategories } from "./data";
 
@@ -71,7 +72,7 @@ export default function FaqPage() {
                     {item.question}
                   </AccordionTrigger>
                   <AccordionContent className="text-base leading-relaxed text-slate-600">
-                    {item.answer}
+                    {renderLinkedTextWithBreaks(item.answer)}
                   </AccordionContent>
                 </AccordionItem>
               ))}

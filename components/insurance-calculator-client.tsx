@@ -127,7 +127,7 @@ export function InsuranceCalculatorClient() {
                 type="number"
                 inputMode="numeric"
                 min={0}
-                step={100}
+                step={1}
                 value={salaryStr}
                 onChange={(e) => setSalaryStr(e.target.value)}
                 placeholder="例如: 35000"

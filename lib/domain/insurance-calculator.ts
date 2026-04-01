@@ -125,11 +125,11 @@ export function calculate(params: {
   const healthLevel = fmt(hWage);
 
   if (status === "employer") {
-    healthCompany = hWage * 0.0517;
+    healthCompany = Math.round(hWage * 0.0517);
     healthEmployee = 0;
   } else {
-    healthEmployee = hWage * 0.0517 * 0.3;
-    healthCompany = hWage * 0.0517 * 0.6 * 1.56;
+    healthEmployee = Math.round(hWage * 0.0517 * 0.3);
+    healthCompany = Math.round(hWage * 0.0517 * 0.6 * 1.56);
   }
 
   // Labor & Pension & Occupational accident
@@ -139,8 +139,8 @@ export function calculate(params: {
   const pensionLevel = fmt(pWage);
 
   if (empCount !== "zero") {
-    pensionCompany = pWage * 0.06;
-    occupationalCompany = lWage * 0.0011;
+    pensionCompany = Math.round(pWage * 0.06);
+    occupationalCompany = Math.round(lWage * 0.0011);
   }
   if (status === "foreign") pensionCompany = 0;
 
@@ -151,11 +151,11 @@ export function calculate(params: {
       laborEmployee = 0;
       laborCompany = 0;
     } else if (status === "employer") {
-      laborCompany = lWage * laborRate * 0.9;
+      laborCompany = Math.round(lWage * laborRate * 0.9);
       laborEmployee = 0;
     } else {
-      laborEmployee = lWage * laborRate * 0.2;
-      laborCompany = lWage * laborRate * 0.7;
+      laborEmployee = Math.round(lWage * laborRate * 0.2);
+      laborCompany = Math.round(lWage * laborRate * 0.7);
     }
   }
 

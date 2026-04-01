@@ -17,6 +17,7 @@ export interface BlogPost {
  * Order doesn't matter — getPublishedPosts() sorts by date descending.
  */
 export const blogSlugs: string[] = [
+  "owner-labor-health-insurance",
   "what-is-labor-report",
   "company-taxes-2026-guide",
   "why-ai-accounting-firm-not-saas",

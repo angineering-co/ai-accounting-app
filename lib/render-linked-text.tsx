@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 
 const LINK_SPLIT = /(\[[^\]]+\]\([^)]+\))/g;
 const LINK_MATCH = /^\[([^\]]+)\]\(([^)]+)\)$/;
@@ -20,7 +20,7 @@ export function renderLinkedText(text: string): string | ReactNode[] {
         </Link>
       );
     }
-    return part;
+    return <Fragment key={i}>{part}</Fragment>;
   });
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -12,6 +13,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  formCard,
+  conclusionBox,
+  formStack,
+  fieldGroup,
+  labelText,
+  body,
+  secondary,
+  secondaryRelaxed,
+  selectTriggerSize,
+  salaryInput,
+  currencyPrefix,
+} from "@/lib/styles/tools";
 import {
   calculate,
   getConclusion,
@@ -44,7 +58,7 @@ export function InsuranceCalculatorClient() {
   const [year, setYear] = useState<YearKey>("114");
   const [empCount, setEmpCount] = useState<EmpCount>("under5");
   const [status, setStatus] = useState<EmployeeStatus>("employee");
-  const [salaryStr, setSalaryStr] = useState("30000");
+  const [salaryStr, setSalaryStr] = useState("");
   const [laborOn, setLaborOn] = useState(true);
 
   const salary = Number(salaryStr) || 0;
@@ -72,11 +86,11 @@ export function InsuranceCalculatorClient() {
   return (
     <div className="flex flex-col gap-6">
       {/* Form */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 md:p-8 shadow-sm">
-        <div className="flex flex-col gap-6">
+      <div className={formCard}>
+        <div className={formStack}>
           {/* Year */}
-          <div className="flex flex-col gap-2.5">
-            <Label className="text-lg font-semibold text-slate-700">年度</Label>
+          <div className={fieldGroup}>
+            <Label className={labelText}>年度</Label>
             <RadioGroup
               value={year}
               onValueChange={(v) => setYear(v as YearKey)}
@@ -95,8 +109,8 @@ export function InsuranceCalculatorClient() {
           </div>
 
           {/* Employee count */}
-          <div className="flex flex-col gap-2.5">
-            <Label className="text-lg font-semibold text-slate-700">
+          <div className={fieldGroup}>
+            <Label className={labelText}>
               員工人數 (不含雇主自己)
             </Label>
             <RadioGroup
@@ -117,10 +131,10 @@ export function InsuranceCalculatorClient() {
           </div>
 
           {/* Salary */}
-          <div className="flex flex-col gap-2.5">
-            <Label className="text-lg font-semibold text-slate-700">薪資</Label>
+          <div className={fieldGroup}>
+            <Label className={labelText}>薪資</Label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-base">
+              <span className={currencyPrefix}>
                 NT$
               </span>
               <Input
@@ -131,14 +145,14 @@ export function InsuranceCalculatorClient() {
                 value={salaryStr}
                 onChange={(e) => setSalaryStr(e.target.value)}
                 placeholder="例如: 35000"
-                className="h-14 pl-14 text-right text-xl font-mono"
+                className={salaryInput}
               />
             </div>
           </div>
 
           {/* Status */}
-          <div className="flex flex-col gap-2.5">
-            <Label className="text-lg font-semibold text-slate-700">
+          <div className={fieldGroup}>
+            <Label className={labelText}>
               計算身分
             </Label>
             <Select
@@ -146,7 +160,7 @@ export function InsuranceCalculatorClient() {
               onValueChange={(v) => setStatus(v as EmployeeStatus)}
               disabled={isStatusDisabled}
             >
-              <SelectTrigger className="h-12 text-base">
+              <SelectTrigger className={selectTriggerSize}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -160,11 +174,11 @@ export function InsuranceCalculatorClient() {
           </div>
 
           {/* Insurance toggles */}
-          <div className="flex flex-col gap-2.5">
-            <Label className="text-lg font-semibold text-slate-700">
+          <div className={fieldGroup}>
+            <Label className={labelText}>
               投保選項
             </Label>
-            <p className="text-sm text-slate-500">強制項目系統會自動鎖定</p>
+            <p className={secondary}>強制項目系統會自動鎖定</p>
             <div className="flex flex-col gap-3 mt-1">
               <label className="flex items-center gap-2.5 cursor-not-allowed opacity-70">
                 <Checkbox checked disabled />
@@ -189,8 +203,8 @@ export function InsuranceCalculatorClient() {
 
       {/* Results */}
       {salary > 0 && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 md:p-8 shadow-sm animate-fade-up">
-          <h3 className="text-lg font-semibold text-slate-700 mb-5">
+        <div className={cn(formCard, "animate-fade-up")}>
+          <h3 className={cn(labelText, "mb-5")}>
             計算結果 ({YEAR_OPTIONS.find((o) => o.value === year)?.label})
           </h3>
 
@@ -227,7 +241,7 @@ export function InsuranceCalculatorClient() {
           </div>
 
           {/* Header */}
-          <div className="grid grid-cols-3 gap-2 text-base font-medium text-slate-500 mb-3">
+          <div className="grid grid-cols-3 gap-2 mb-3 text-base font-medium text-slate-500">
             <span>項目</span>
             <span className="text-right">個人負擔</span>
             <span className="text-right">雇主負擔</span>
@@ -258,20 +272,20 @@ export function InsuranceCalculatorClient() {
 
           {/* Grand total */}
           <div className="border-t border-slate-100 pt-4 mt-4">
-            <p className="text-sm text-slate-500 mb-2">(薪資+保費+勞退+職災)</p>
+            <p className={cn(secondary, "mb-2")}>(薪資+保費+勞退+職災)</p>
             <Row label="每月公司總支出" value={fmt(result.grandTotal)} bold />
           </div>
 
           {/* Take home */}
           <div className="border-t border-slate-100 pt-4 mt-4">
-            <p className="text-sm text-slate-500 mb-2">
+            <p className={cn(secondary, "mb-2")}>
               薪資 - (個人健保 + 個人勞保) = 實領薪資
             </p>
             <Row label="個人實領" value={fmt(result.takeHome)} bold />
           </div>
 
           {/* Conclusion */}
-          <div className="mt-5 rounded-xl bg-slate-50 border border-slate-200 px-5 py-4">
+          <div className={cn(conclusionBox, "mt-5")}>
             <p className="text-base font-medium text-slate-700 mb-1">專家總結</p>
             <p className="text-base text-slate-600 leading-relaxed">
               {conclusion}
@@ -281,7 +295,7 @@ export function InsuranceCalculatorClient() {
       )}
 
       {/* Notes */}
-      <div className="text-sm text-slate-500 leading-relaxed">
+      <div className={secondaryRelaxed}>
         <p>註1：以上計算適用於一般正職員工，部分工時人員不適用；勞健保計算結果僅供參考，實際繳納仍依勞健保局結果為準</p>
         <p>註2：職業災害保險為依照一般行業0.11%計算，不同行業可能有不同費率</p>
       </div>
@@ -300,7 +314,7 @@ function InsuranceRow({
 }) {
   return (
     <div className="grid grid-cols-3 gap-2 items-baseline">
-      <span className="text-base text-slate-600">{label}</span>
+      <span className={body}>{label}</span>
       <span className="text-right text-lg font-mono text-slate-700">
         {fmt(empValue)}
       </span>

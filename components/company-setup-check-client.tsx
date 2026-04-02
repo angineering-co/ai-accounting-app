@@ -10,6 +10,8 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { cn } from "@/lib/utils";
+import { secondary, bodyRelaxed } from "@/lib/styles/tools";
 import {
   trackAssessmentStart,
   trackAssessmentStep,
@@ -116,8 +118,8 @@ export function CompanySetupCheckClient() {
     return (
       <div className="animate-fade-up mx-auto max-w-2xl">
         <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm md:p-10">
-          <h2 className="font-display text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
-            台灣公司設立智慧健檢系統
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
+            找出最適合您的公司型態
           </h2>
           <p className="mt-4 text-base leading-relaxed text-slate-600 md:text-lg">
             花 1 分鐘回答幾個簡單問題，系統將自動為您媒合最適合的企業設立藍圖與專業建議，幫助您安心踏出創業第一步。
@@ -140,7 +142,7 @@ export function CompanySetupCheckClient() {
       <div className="mx-auto max-w-2xl">
         <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white p-12 shadow-sm">
           <div className="h-12 w-12 animate-spin rounded-full border-4 border-slate-200 border-t-emerald-500" />
-          <h2 className="mt-6 font-display text-xl font-bold text-slate-900">
+          <h2 className="mt-6 text-xl font-bold text-slate-900">
             正在生成您的專屬設立藍圖...
           </h2>
           <p className="mt-2 text-sm text-slate-500">
@@ -155,7 +157,7 @@ export function CompanySetupCheckClient() {
     return (
       <div className="animate-fade-up mx-auto max-w-2xl space-y-6">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
-          <h2 className="font-display text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
             您的企業設立藍圖
           </h2>
           <p className="mt-2 text-base text-slate-600">
@@ -184,7 +186,7 @@ export function CompanySetupCheckClient() {
 
         {result.conclusion.length > 0 && (
           <div className="animate-fade-up rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 p-6 shadow-sm md:p-8">
-            <h3 className="flex items-center gap-2 font-display text-lg font-bold text-emerald-800">
+            <h3 className="flex items-center gap-2 text-lg font-bold text-emerald-800">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-sm">
                 &#10024;
               </span>
@@ -212,7 +214,7 @@ export function CompanySetupCheckClient() {
               style={{ animationDelay: `${(sIdx + 1) * 100}ms` }}
             >
               <AccordionTrigger className="px-6 py-5 hover:no-underline md:px-8">
-                <span className="flex items-center gap-2 font-display text-lg font-bold text-slate-900">
+                <span className="flex items-center gap-2 text-lg font-bold text-slate-900">
                   <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-sm">
                     {section.emoji}
                   </span>
@@ -283,7 +285,7 @@ export function CompanySetupCheckClient() {
   return (
     <div className="mx-auto max-w-2xl" key={currentQuestion.id}>
       <div className="mb-6">
-        <div className="mb-2 flex items-center justify-between text-xs text-slate-400">
+        <div className={cn(secondary, "mb-2 flex items-center justify-between")}>
           <span>
             第 {currentStepIndex + 1} 題，共 {totalSteps} 題
           </span>
@@ -298,7 +300,7 @@ export function CompanySetupCheckClient() {
       </div>
 
       <div className="animate-fade-up rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
-        <h2 className="font-display text-xl font-bold tracking-tight text-slate-900 md:text-2xl">
+        <h2 className="text-xl font-bold tracking-tight text-slate-900 md:text-2xl">
           {currentQuestion.title}
         </h2>
         {currentQuestion.subtitle && (
@@ -364,7 +366,7 @@ export function CompanySetupCheckClient() {
 
       {currentQuestion.faq.length > 0 && (
         <div className="animate-fade-up mt-6 delay-100">
-          <p className="mb-3 text-sm font-medium text-slate-400">
+          <p className="mb-3 text-sm font-medium text-slate-500">
             填寫小提示
           </p>
           <Accordion type="single" collapsible className="rounded-xl border border-slate-200 bg-white">
@@ -374,10 +376,10 @@ export function CompanySetupCheckClient() {
                 value={item.q}
                 className="border-b border-slate-100 px-4 last:border-0"
               >
-                <AccordionTrigger className="py-3 text-left text-sm font-medium text-slate-700 hover:no-underline">
+                <AccordionTrigger className="py-3 text-left text-base font-medium text-slate-700 hover:no-underline">
                   {item.q}
                 </AccordionTrigger>
-                <AccordionContent className="text-sm leading-relaxed text-slate-500">
+                <AccordionContent className={bodyRelaxed}>
                   {item.a}
                 </AccordionContent>
               </AccordionItem>

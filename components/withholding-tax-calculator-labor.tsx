@@ -30,6 +30,19 @@ import {
   type IncomeCategory,
   type LaborResult,
 } from "@/lib/domain/withholding-tax";
+import { cn } from "@/lib/utils";
+import {
+  formCard,
+  formStack,
+  fieldGroup,
+  labelText,
+  body,
+  conclusionBox,
+  selectTriggerSize,
+  salaryInput,
+  currencyPrefix,
+  tooltipContent,
+} from "@/lib/styles/tools";
 import { TaxResultRow as Row } from "./tax-result-row";
 
 export function WithholdingTaxCalculatorLabor() {
@@ -85,11 +98,11 @@ export function WithholdingTaxCalculatorLabor() {
   return (
     <div className="flex flex-col gap-6">
       {/* Form */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 md:p-8 shadow-sm">
-        <div className="flex flex-col gap-6">
+      <div className={formCard}>
+        <div className={formStack}>
           {/* Nationality */}
-          <div className="flex flex-col gap-2.5">
-            <Label className="text-lg font-semibold text-slate-700">
+          <div className={fieldGroup}>
+            <Label className={labelText}>
               國籍
             </Label>
             <RadioGroup
@@ -113,9 +126,9 @@ export function WithholdingTaxCalculatorLabor() {
 
           {/* Health insurance exemption */}
           {showHealthExempt && (
-            <div className="flex flex-col gap-2.5">
+            <div className={fieldGroup}>
               <div className="flex items-center gap-2">
-                <Label className="text-lg font-semibold text-slate-700">
+                <Label className={labelText}>
                   二代健保是否免扣
                 </Label>
                 <TooltipProvider delayDuration={200}>
@@ -123,7 +136,7 @@ export function WithholdingTaxCalculatorLabor() {
                     <TooltipTrigger asChild>
                       <CircleHelp className="h-5 w-5 text-slate-400 cursor-help" />
                     </TooltipTrigger>
-                    <TooltipContent side="bottom" className="max-w-xs text-sm leading-relaxed">
+                    <TooltipContent side="bottom" className={tooltipContent}>
                       <p className="font-semibold mb-1">符合免扣條件：</p>
                       <ul className="list-disc pl-4 space-y-0.5">
                         <li>給付金額未達基本工資</li>
@@ -150,15 +163,15 @@ export function WithholdingTaxCalculatorLabor() {
           )}
 
           {/* Income category */}
-          <div className="flex flex-col gap-2.5">
-            <Label className="text-lg font-semibold text-slate-700">
+          <div className={fieldGroup}>
+            <Label className={labelText}>
               所得類別
             </Label>
             <Select
               value={incomeCategory}
               onValueChange={(v) => handleCategoryChange(v as IncomeCategory)}
             >
-              <SelectTrigger className="h-12 text-base">
+              <SelectTrigger className={selectTriggerSize}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -171,15 +184,15 @@ export function WithholdingTaxCalculatorLabor() {
 
           {/* Profession (9A only) */}
           {showProfession && (
-            <div className="flex flex-col gap-2.5">
-              <Label className="text-lg font-semibold text-slate-700">
+            <div className={fieldGroup}>
+              <Label className={labelText}>
                 執行業務類別
               </Label>
               <Select
                 value={professionCode}
                 onValueChange={setProfessionCode}
               >
-                <SelectTrigger className="h-12 text-base">
+                <SelectTrigger className={selectTriggerSize}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="max-h-60">
@@ -194,12 +207,12 @@ export function WithholdingTaxCalculatorLabor() {
           )}
 
           {/* Amount */}
-          <div className="flex flex-col gap-2.5">
-            <Label className="text-lg font-semibold text-slate-700">
+          <div className={fieldGroup}>
+            <Label className={labelText}>
               金額
             </Label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-base">
+              <span className={currencyPrefix}>
                 NT$
               </span>
               <Input
@@ -209,7 +222,7 @@ export function WithholdingTaxCalculatorLabor() {
                 value={amountStr}
                 onChange={(e) => setAmountStr(e.target.value)}
                 placeholder="0"
-                className="h-14 pl-14 text-right text-xl font-mono"
+                className={salaryInput}
               />
             </div>
             <label className="flex items-center gap-2.5 cursor-pointer mt-1">
@@ -225,8 +238,8 @@ export function WithholdingTaxCalculatorLabor() {
 
       {/* Results */}
       {amount > 0 && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 md:p-8 shadow-sm animate-fade-up">
-          <h3 className="text-lg font-semibold text-slate-700 mb-5">
+        <div className={cn(formCard, "animate-fade-up")}>
+          <h3 className={cn(labelText, "mb-5")}>
             計算結果
           </h3>
           <div className="flex flex-col gap-4">
@@ -278,9 +291,9 @@ export function WithholdingTaxCalculatorLabor() {
 
           {/* Payment slip reminders */}
           {(result.withholdingTax > 0 || result.healthInsurance > 0) && (
-            <div className="mt-4 rounded-xl bg-slate-50 border border-slate-200 px-5 py-4">
-              <p className="text-sm font-medium text-slate-700 mb-2">繳款書列印</p>
-              <ul className="flex flex-col gap-1.5 text-sm text-slate-600">
+            <div className={cn(conclusionBox, "mt-4")}>
+              <p className="text-base font-medium text-slate-700 mb-2">繳款書列印</p>
+              <ul className={cn(body, "flex flex-col gap-1.5")}>
                 {result.withholdingTax > 0 && (
                   <li>
                     <a

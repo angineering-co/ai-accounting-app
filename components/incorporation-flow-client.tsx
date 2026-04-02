@@ -6,6 +6,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
+  body,
+  bodyRelaxed,
+  labelText,
+  secondary,
+} from "@/lib/styles/tools";
+import {
   Check,
   Clock,
   ChevronRight,
@@ -308,14 +314,14 @@ function FlowView({
                   <div className="min-w-0 pt-1">
                     <div
                       className={cn(
-                        "font-medium transition-colors",
+                        "text-base font-medium transition-colors",
                         isActive ? "text-slate-900" : "text-slate-600"
                       )}
                     >
                       {step.label}
                     </div>
-                    <div className="mt-0.5 flex items-center gap-1 text-xs text-slate-400">
-                      <Clock className="h-3 w-3" />
+                    <div className={cn(secondary, "mt-0.5 flex items-center gap-1")}>
+                      <Clock className="h-3.5 w-3.5" />
                       {step.duration}
                     </div>
                   </div>
@@ -335,7 +341,7 @@ function FlowView({
           <StepDetail step={activeStepData} index={activeIndex} />
         ) : (
           <Card className="flex h-full min-h-[320px] items-center justify-center border-dashed">
-            <CardContent className="text-center text-slate-400">
+            <CardContent className="text-center text-slate-500">
               <ChevronRight className="mx-auto mb-3 h-10 w-10" />
               <p className="text-base">點擊流程，查看詳細說明</p>
             </CardContent>
@@ -365,14 +371,14 @@ function StepDetail({ step, index }: { step: Step; index: number }) {
             {step.duration}
           </Badge>
         </div>
-        <h2 className="mt-3 text-xl font-bold text-slate-900">{step.label}</h2>
-        <p className="mt-1.5 text-sm text-slate-500">{step.description}</p>
+        <h2 className={cn(labelText, "mt-3")}>{step.label}</h2>
+        <p className={cn(body, "mt-1.5")}>{step.description}</p>
       </div>
       <CardContent className="divide-y p-0">
         {step.qa.map((item) => (
           <div key={item.q} className="px-6 py-5">
-            <p className="font-medium text-slate-800">{item.q}</p>
-            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+            <p className="text-base font-medium text-slate-700">{item.q}</p>
+            <p className={cn(bodyRelaxed, "mt-2")}>
               {item.a}
             </p>
           </div>

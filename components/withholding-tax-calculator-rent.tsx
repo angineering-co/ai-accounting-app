@@ -12,6 +12,17 @@ import {
   type LandlordType,
   type RentResult,
 } from "@/lib/domain/withholding-tax";
+import { cn } from "@/lib/utils";
+import {
+  formCard,
+  formStack,
+  fieldGroup,
+  labelText,
+  body,
+  conclusionBox,
+  salaryInput,
+  currencyPrefix,
+} from "@/lib/styles/tools";
 import { TaxResultRow as Row } from "./tax-result-row";
 
 export function WithholdingTaxCalculatorRent() {
@@ -31,11 +42,11 @@ export function WithholdingTaxCalculatorRent() {
   return (
     <div className="flex flex-col gap-6">
       {/* Form */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 md:p-8 shadow-sm">
-        <div className="flex flex-col gap-6">
+      <div className={formCard}>
+        <div className={formStack}>
           {/* Landlord type */}
-          <div className="flex flex-col gap-2.5">
-            <Label className="text-lg font-semibold text-slate-700">
+          <div className={fieldGroup}>
+            <Label className={labelText}>
               出租人身份
             </Label>
             <RadioGroup
@@ -61,12 +72,12 @@ export function WithholdingTaxCalculatorRent() {
           </div>
 
           {/* Amount */}
-          <div className="flex flex-col gap-2.5">
-            <Label className="text-lg font-semibold text-slate-700">
+          <div className={fieldGroup}>
+            <Label className={labelText}>
               金額
             </Label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-base">
+              <span className={currencyPrefix}>
                 NT$
               </span>
               <Input
@@ -76,7 +87,7 @@ export function WithholdingTaxCalculatorRent() {
                 value={amountStr}
                 onChange={(e) => setAmountStr(e.target.value)}
                 placeholder="0"
-                className="h-14 pl-14 text-right text-xl font-mono"
+                className={salaryInput}
               />
             </div>
             {!isCompany && (
@@ -94,8 +105,8 @@ export function WithholdingTaxCalculatorRent() {
 
       {/* Results */}
       {amount > 0 && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 md:p-8 shadow-sm animate-fade-up">
-          <h3 className="text-lg font-semibold text-slate-700 mb-5">
+        <div className={cn(formCard, "animate-fade-up")}>
+          <h3 className={cn(labelText, "mb-5")}>
             計算結果
           </h3>
 
@@ -128,9 +139,9 @@ export function WithholdingTaxCalculatorRent() {
               </div>
 
               {(result.withholdingTax > 0 || result.healthInsurance > 0) && (
-                <div className="mt-2 rounded-xl bg-slate-50 border border-slate-200 px-5 py-4">
-                  <p className="text-sm font-medium text-slate-700 mb-2">繳款書列印</p>
-                  <ul className="flex flex-col gap-1.5 text-sm text-slate-600">
+                <div className={cn(conclusionBox, "mt-2")}>
+                  <p className="text-base font-medium text-slate-700 mb-2">繳款書列印</p>
+                  <ul className={cn(body, "flex flex-col gap-1.5")}>
                     {result.withholdingTax > 0 && (
                       <li>
                         <a

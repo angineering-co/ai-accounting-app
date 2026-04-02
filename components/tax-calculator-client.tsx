@@ -2,8 +2,19 @@
 
 import { useState, type ReactNode } from "react";
 import { Info } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  formCard,
+  formStack,
+  fieldGroup,
+  labelText,
+  body,
+  secondary,
+  selectTriggerSize,
+  inputSuffix,
+  tooltipContent,
+} from "@/lib/styles/tools";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -176,11 +187,11 @@ function InfoTip({ children }: { children: ReactNode }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Info className="ml-1 inline h-3.5 w-3.5 shrink-0 text-muted-foreground/60 cursor-help" />
+        <Info className="ml-1 inline h-3.5 w-3.5 shrink-0 text-slate-400 cursor-help" />
       </TooltipTrigger>
       <TooltipContent
         side="top"
-        className="max-w-xs text-xs leading-relaxed"
+        className={tooltipContent}
       >
         {children}
       </TooltipContent>
@@ -210,13 +221,11 @@ export function TaxCalculatorClient() {
     <TooltipProvider delayDuration={200}>
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-5">
         {/* Input Form */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>基礎資料設定</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="marital">婚姻狀態</Label>
+        <div className={cn(formCard, "lg:col-span-2")}>
+          <h3 className={cn(labelText, "mb-5")}>基礎資料設定</h3>
+          <div className={formStack}>
+            <div className={fieldGroup}>
+              <Label htmlFor="marital" className={labelText}>婚姻狀態</Label>
               <Select
                 value={inputs.maritalStatus}
                 onValueChange={(v) =>
@@ -226,7 +235,7 @@ export function TaxCalculatorClient() {
                   }))
                 }
               >
-                <SelectTrigger id="marital">
+                <SelectTrigger id="marital" className={selectTriggerSize}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -236,8 +245,8 @@ export function TaxCalculatorClient() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="dependents">扶養人數</Label>
+            <div className={fieldGroup}>
+              <Label htmlFor="dependents" className={labelText}>扶養人數</Label>
               <div className="relative">
                 <Input
                   id="dependents"
@@ -252,14 +261,14 @@ export function TaxCalculatorClient() {
                     }));
                   }}
                 />
-                <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">
+                <span className={inputSuffix}>
                   人
                 </span>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="revenue">預估年度營業額</Label>
+            <div className={fieldGroup}>
+              <Label htmlFor="revenue" className={labelText}>預估年度營業額</Label>
               <div className="relative">
                 <Input
                   id="revenue"
@@ -275,14 +284,14 @@ export function TaxCalculatorClient() {
                     }))
                   }
                 />
-                <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">
+                <span className={inputSuffix}>
                   元
                 </span>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="margin" className="inline-flex items-center">
+            <div className={fieldGroup}>
+              <Label htmlFor="margin" className={cn(labelText, "inline-flex items-center")}>
                 預估書審率 (淨利率)
                 <InfoTip>
                   <p>
@@ -316,7 +325,7 @@ export function TaxCalculatorClient() {
                     }))
                   }
                 />
-                <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">
+                <span className={inputSuffix}>
                   %
                 </span>
               </div>
@@ -326,7 +335,7 @@ export function TaxCalculatorClient() {
               立即計算比較
             </Button>
 
-            <p className="text-center text-xs text-muted-foreground inline-flex items-center justify-center w-full">
+            <p className={cn(secondary, "text-center inline-flex items-center justify-center w-full")}>
               以 114 年度 (2025) 稅率計算
               <InfoTip>
                 <p className="font-medium mb-1">本工具使用之稅率常數:</p>
@@ -337,15 +346,12 @@ export function TaxCalculatorClient() {
                 <p>股利可抵減: 8.5%，上限 80,000</p>
               </InfoTip>
             </p>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* Results */}
-        <Card className="lg:col-span-3">
-          <CardHeader>
-            <CardTitle>稅額試算比較表</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <div className={cn(formCard, "lg:col-span-3")}>
+          <h3 className={cn(labelText, "mb-5")}>稅額試算比較表</h3>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -361,7 +367,7 @@ export function TaxCalculatorClient() {
               <TableBody>
                 {/* 核定營利所得 */}
                 <TableRow>
-                  <TableCell className="font-medium text-muted-foreground">
+                  <TableCell className={body}>
                     核定營利所得
                     {r && (
                       <InfoTip>
@@ -379,14 +385,14 @@ export function TaxCalculatorClient() {
 
                 {/* 營利事業所得稅 */}
                 <TableRow>
-                  <TableCell className="font-medium text-muted-foreground">
+                  <TableCell className={body}>
                     營利事業所得稅
                     <InfoTip>
                       <p>行號免課營所稅，全額歸入個人所得。</p>
                       <p className="mt-1">公司: 12萬以下免稅、12~20萬減半課徵、20萬以上稅率 20%</p>
                     </InfoTip>
                   </TableCell>
-                  <TableCell className="text-right text-muted-foreground">
+                  <TableCell className={cn(secondary, "text-right")}>
                     無
                   </TableCell>
                   <TableCell className="text-right">
@@ -394,7 +400,7 @@ export function TaxCalculatorClient() {
                       <>
                         {formatMoney(r.company.cit)}
                         {r.company.citNote && (
-                          <span className="ml-1 text-xs text-slate-500">
+                          <span className="ml-1 text-sm text-slate-500">
                             ({r.company.citNote})
                           </span>
                         )}
@@ -407,7 +413,7 @@ export function TaxCalculatorClient() {
 
                 {/* 稅後盈餘/股利分配 */}
                 <TableRow>
-                  <TableCell className="font-medium text-muted-foreground">
+                  <TableCell className={body}>
                     稅後盈餘/股利分配
                     {r && r.company.cit > 0 && (
                       <InfoTip>
@@ -425,7 +431,7 @@ export function TaxCalculatorClient() {
 
                 {/* 個人免稅與扣除額 */}
                 <TableRow>
-                  <TableCell className="font-medium text-muted-foreground">
+                  <TableCell className={body}>
                     個人免稅與扣除額
                     {r && (
                       <InfoTip>
@@ -445,7 +451,7 @@ export function TaxCalculatorClient() {
 
                 {/* 適用綜所稅率 */}
                 <TableRow>
-                  <TableCell className="font-medium text-muted-foreground">
+                  <TableCell className={body}>
                     適用綜所稅率
                     <InfoTip>
                       <p className="mb-1">113年度綜所稅累進稅率:</p>
@@ -466,7 +472,7 @@ export function TaxCalculatorClient() {
 
                 {/* 累進差額 */}
                 <TableRow>
-                  <TableCell className="font-medium text-muted-foreground">
+                  <TableCell className={body}>
                     累進差額
                     <InfoTip>
                       依所得淨額所屬級距對應之累進差額，用於簡化累進稅率計算。
@@ -490,7 +496,7 @@ export function TaxCalculatorClient() {
 
                 {/* 個人綜合所得稅 */}
                 <TableRow>
-                  <TableCell className="font-medium text-muted-foreground">
+                  <TableCell className={body}>
                     個人綜合所得稅
                     {r && r.sole.iit.rate > 0 && (
                       <InfoTip>
@@ -513,17 +519,17 @@ export function TaxCalculatorClient() {
 
                 {/* 股利可抵減稅額 */}
                 <TableRow>
-                  <TableCell className="text-xs font-medium text-slate-500">
+                  <TableCell className={secondary}>
                     (扣除股利可抵減稅額)
                     <InfoTip>
                       <p>股利 {r ? fmt(r.company.dividend) : "—"} x 8.5%{r && r.company.dividend * 0.085 > 80000 ? "，上限 80,000" : ""}</p>
                       <p className="mt-1">僅適用公司組織 (合併計稅)，可抵減綜所稅及營所稅。</p>
                     </InfoTip>
                   </TableCell>
-                  <TableCell className="text-right text-xs text-muted-foreground">
+                  <TableCell className={cn(secondary, "text-right")}>
                     不適用
                   </TableCell>
-                  <TableCell className="text-right text-xs">
+                  <TableCell className="text-right text-sm">
                     {r
                       ? `- ${formatMoney(r.company.dividendCredit)}`
                       : "-"}
@@ -541,10 +547,10 @@ export function TaxCalculatorClient() {
                       </InfoTip>
                     )}
                   </TableCell>
-                  <TableCell className="text-right text-lg font-bold text-amber-600">
+                  <TableCell className="text-right text-lg font-bold text-emerald-600">
                     {r ? formatMoney(r.sole.totalTax) : "0 元"}
                   </TableCell>
-                  <TableCell className="text-right text-lg font-bold text-amber-600">
+                  <TableCell className="text-right text-lg font-bold text-emerald-600">
                     {r ? formatMoney(r.company.totalTax) : "0 元"}
                   </TableCell>
                 </TableRow>
@@ -558,8 +564,7 @@ export function TaxCalculatorClient() {
                 companyTax={r.company.totalTax}
               />
             )}
-          </CardContent>
-        </Card>
+        </div>
       </div>
     </TooltipProvider>
   );

@@ -12,7 +12,7 @@ export default function CompanySetupCheckPage() {
   return (
     <main className="flex-1">
       {/* Hero */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-emerald-50 via-slate-50 to-sky-50 pt-20 pb-12 md:pt-28 md:pb-16">
+      <section className="relative overflow-hidden bg-gradient-to-br from-emerald-50 via-slate-50 to-sky-50 pt-14 pb-8 md:pt-20 md:pb-10">
         <div className="absolute inset-0 bg-[url('/noise.png')] opacity-[0.03]" />
         <div className="relative mx-auto max-w-5xl px-5">
           <h1 className="font-display text-3xl font-extrabold tracking-tight text-slate-900 md:text-4xl">

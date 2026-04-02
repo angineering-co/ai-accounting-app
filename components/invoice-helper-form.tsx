@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
+import { labelText } from "@/lib/styles/tools";
 import type {
   InvoiceFormData,
   InvoiceVariant,
@@ -96,7 +98,7 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
     <div className="space-y-6">
       {/* Invoice Variant Toggle */}
       <div>
-        <Label className="text-base font-medium text-slate-700 mb-2 block">
+        <Label className={cn(labelText, "mb-2 block")}>
           發票類型
         </Label>
         <Tabs
@@ -119,7 +121,7 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
       {/* Buyer Info - 三聯式 only */}
       {data.variant === "三聯式" && (
         <div className="space-y-3">
-          <Label className="text-base font-medium text-slate-700 block">
+          <Label className={cn(labelText, "block")}>
             買受人
           </Label>
           <div className="grid gap-3 sm:grid-cols-[180px_1fr]">
@@ -159,7 +161,7 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
 
       {/* Tax Type */}
       <div>
-        <Label className="text-base font-medium text-slate-700 mb-2 block">
+        <Label className={cn(labelText, "mb-2 block")}>
           課稅別
         </Label>
         <RadioGroup
@@ -183,12 +185,12 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
 
       {/* Line Items */}
       <div>
-        <Label className="text-base font-medium text-slate-700 mb-2 block">
+        <Label className={cn(labelText, "mb-2 block")}>
           品名明細
         </Label>
         <div className="space-y-3">
           {/* Header row — hidden on mobile */}
-          <div className="hidden sm:flex gap-2 items-center text-sm text-slate-600 font-medium">
+          <div className="hidden sm:flex gap-2 items-center text-base text-slate-500 font-medium">
             <div className="flex-1 min-w-0">品名</div>
             <div className="w-16 text-center">數量</div>
             <div className="w-24 text-right">單價</div>
@@ -238,7 +240,7 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
                   <Input {...unitPriceProps} className="text-right font-mono" />
                 </div>
                 <div className="w-24 flex items-center">
-                  <span className="w-full text-right font-mono text-sm text-slate-700 tabular-nums px-2 py-2">
+                  <span className="w-full text-right font-mono text-base text-slate-700 tabular-nums px-2 py-2">
                     {item.amount ? item.amount.toLocaleString() : ""}
                   </span>
                 </div>

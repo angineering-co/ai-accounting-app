@@ -192,6 +192,12 @@ const faqItems = [
   },
 ];
 
+const startupGuideSteps = [
+  { step: "1", label: "設立健檢", icon: ClipboardCheck },
+  { step: "2", label: "稅負試算", icon: Calculator },
+  { step: "3", label: "流程總覽", icon: GitBranch },
+];
+
 export default function Home() {
   const earlyAdopterFormUrl = process.env.NEXT_PUBLIC_EARLY_ADOPTER_FORM_URL;
   const hasFormUrl = Boolean(earlyAdopterFormUrl);
@@ -335,11 +341,7 @@ export default function Home() {
               </div>
 
               <div className="mt-8 grid grid-cols-3 gap-4 md:gap-6">
-                {[
-                  { step: "1", label: "設立健檢", icon: ClipboardCheck },
-                  { step: "2", label: "稅負試算", icon: Calculator },
-                  { step: "3", label: "流程總覽", icon: GitBranch },
-                ].map(({ step, label, icon: Icon }) => (
+                {startupGuideSteps.map(({ step, label, icon: Icon }) => (
                   <div key={step} className="flex flex-col items-center gap-2 text-center">
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 md:h-12 md:w-12">
                       <Icon className="h-5 w-5 md:h-6 md:w-6" />

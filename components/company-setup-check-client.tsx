@@ -366,7 +366,7 @@ export function CompanySetupCheckClient() {
 
       {currentQuestion.faq.length > 0 && (
         <div className="animate-fade-up mt-6 delay-100">
-          <p className="mb-3 text-sm font-medium text-slate-500">
+          <p className={cn(secondary, "mb-3 font-medium")}>
             填寫小提示
           </p>
           <Accordion type="single" collapsible className="rounded-xl border border-slate-200 bg-white">

@@ -62,6 +62,15 @@ export function StartupGuideHub() {
 
   useEffect(() => {
     setProgress(readProgress());
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY) {
+        setProgress(readProgress());
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
 
   const completedCount = steps.filter((s) => progress[s.slug]).length;

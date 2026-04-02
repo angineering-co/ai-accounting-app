@@ -400,7 +400,7 @@ export function TaxCalculatorClient() {
                       <>
                         {formatMoney(r.company.cit)}
                         {r.company.citNote && (
-                          <span className="ml-1 text-sm text-slate-500">
+                          <span className={cn(secondary, "ml-1")}>
                             ({r.company.citNote})
                           </span>
                         )}

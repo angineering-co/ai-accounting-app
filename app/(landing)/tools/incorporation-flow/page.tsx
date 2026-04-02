@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { heroTitle } from "@/lib/styles/tools";
 import { IncorporationFlowClient } from "@/components/incorporation-flow-client";
 
 export const metadata: Metadata = {
@@ -29,7 +30,7 @@ export default function IncorporationFlowPage() {
       <section className="relative overflow-hidden bg-gradient-to-br from-amber-50 via-slate-50 to-emerald-50 pt-14 pb-8 md:pt-20 md:pb-10">
         <div className="absolute inset-0 bg-[url('/noise.png')] opacity-[0.03]" />
         <div className="relative mx-auto max-w-5xl px-5">
-          <h1 className="font-display text-3xl font-extrabold tracking-tight text-slate-900 md:text-4xl">
+          <h1 className={heroTitle}>
             開公司流程圖
           </h1>
           <p className="mt-3 text-lg text-slate-600">

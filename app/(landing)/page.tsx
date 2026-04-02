@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { CtaLink } from "@/components/cta-link";
 import { LandingPricingSection } from "@/components/landing-pricing-section";
@@ -19,6 +20,8 @@ import {
   PenLine,
   Camera,
   Eye,
+  Calculator,
+  GitBranch,
 } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -311,6 +314,58 @@ export default function Home() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Startup Guide Banner ── */}
+        <section className="bg-gradient-to-br from-emerald-50/50 via-white to-sky-50/50 py-16 md:py-24">
+          <div className="mx-auto max-w-4xl px-5">
+            <div className="overflow-hidden rounded-3xl border border-emerald-200/50 bg-white/80 p-8 shadow-sm backdrop-blur-sm md:p-12">
+              <div className="text-center">
+                <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-emerald-600">
+                  創業必看
+                </p>
+                <h2 className="font-display text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
+                  準備開公司？三步搞懂創業大小事
+                </h2>
+                <p className="mx-auto mt-3 max-w-xl text-base text-slate-600 md:text-lg">
+                  免費互動工具，從設立評估到流程總覽一次到位
+                </p>
+              </div>
+
+              <div className="mt-8 grid grid-cols-3 gap-4 md:gap-6">
+                {[
+                  { step: "1", label: "設立健檢", icon: ClipboardCheck },
+                  { step: "2", label: "稅負試算", icon: Calculator },
+                  { step: "3", label: "流程總覽", icon: GitBranch },
+                ].map(({ step, label, icon: Icon }) => (
+                  <div key={step} className="flex flex-col items-center gap-2 text-center">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 md:h-12 md:w-12">
+                      <Icon className="h-5 w-5 md:h-6 md:w-6" />
+                    </div>
+                    <span className="text-xs font-medium text-slate-700 md:text-sm">
+                      Step {step}
+                    </span>
+                    <span className="text-sm font-semibold text-slate-900 md:text-base">
+                      {label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-8 text-center">
+                <Button
+                  asChild
+                  size="lg"
+                  className="group rounded-full bg-emerald-600 text-white hover:bg-emerald-500 border-0 h-12 px-8 text-base font-semibold shadow-lg shadow-emerald-600/25 transition-all duration-300 hover:shadow-xl hover:shadow-emerald-600/30 hover:-translate-y-0.5"
+                >
+                  <Link href="/startup-guide">
+                    開始創業攻略
+                    <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+                  </Link>
+                </Button>
+              </div>
             </div>
           </div>
         </section>

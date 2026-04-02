@@ -118,6 +118,12 @@ export default function LandingLayout({
                 常見問題
               </Link>
               <Link
+                href="/startup-guide"
+                className="hover:text-slate-900 transition-colors"
+              >
+                創業必看
+              </Link>
+              <Link
                 href="/tools/invoice-helper"
                 className="hover:text-slate-900 transition-colors"
               >

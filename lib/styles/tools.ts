@@ -11,6 +11,8 @@ export const formStack = "flex flex-col gap-6";
 export const fieldGroup = "flex flex-col gap-2.5";
 
 // ── Typography ──────────────────────────────────────────────────────
+export const heroTitle =
+  "font-display text-3xl font-extrabold tracking-tight text-slate-900 md:text-4xl lg:text-5xl";
 export const labelText = "text-lg font-semibold text-slate-700";
 export const body = "text-base text-slate-600";
 export const bodyRelaxed = "text-base text-slate-600 leading-relaxed";

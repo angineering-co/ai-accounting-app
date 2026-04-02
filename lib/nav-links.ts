@@ -14,6 +14,7 @@ export interface ToolLink {
 export const navLinks: NavLink[] = [
   { href: "/#features", label: "服務介紹" },
   { href: "/#pricing", label: "價格" },
+  { href: "/startup-guide", label: "創業必看" },
   { href: "/blog", label: "部落格" },
   { href: "/faq", label: "常見問題" },
 ];
@@ -34,15 +35,15 @@ export const tools: ToolLink[] = [
     label: "創業節稅試算",
     icon: Calculator,
   },
+    {
+    href: "/tools/incorporation-flow",
+    label: "開公司流程圖",
+    icon: GitBranch,
+  },
   {
     href: "/tools/withholding-tax-calculator",
     label: "扣繳計算機",
     icon: Calculator,
-  },
-  {
-    href: "/tools/incorporation-flow",
-    label: "開公司流程圖",
-    icon: GitBranch,
   },
   {
     href: "/tools/insurance-calculator",

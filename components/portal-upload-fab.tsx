@@ -78,6 +78,12 @@ export function PortalUploadFab({
   const [isOpen, setIsOpen] = useState(false);
   const [selectedDocType, setSelectedDocType] =
     useState<DocumentTypeOption | null>(null);
+
+  // Reset to document type picker whenever the sheet opens
+  const handleOpenChange = (open: boolean) => {
+    if (open) setSelectedDocType(null);
+    setIsOpen(open);
+  };
   const cameraInputId = useId();
   const libraryInputId = useId();
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -128,14 +134,14 @@ export function PortalUploadFab({
     <>
       <button
         type="button"
-        onClick={() => setIsOpen(true)}
+        onClick={() => handleOpenChange(true)}
         className="fixed bottom-20 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 transition-transform active:scale-95 md:hidden"
         aria-label="上傳憑證"
       >
         <Camera className="h-6 w-6" />
       </button>
 
-      <Sheet open={isOpen} onOpenChange={setIsOpen}>
+      <Sheet open={isOpen} onOpenChange={handleOpenChange}>
         <SheetContent side="bottom" className="rounded-t-2xl px-6 pb-8">
           <SheetHeader className="mb-4">
             <SheetTitle>

@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { CtaLink } from "@/components/cta-link";
+import { CouponDialog } from "@/components/coupon-dialog";
 import { PRICES } from "@/lib/pricing";
 import {
   Accordion,
@@ -22,6 +23,7 @@ import {
   Eye,
   Calculator,
   GitBranch,
+  TicketPercent,
 } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -258,6 +260,15 @@ export default function Home() {
                   諮詢表單即將開放，敬請期待。
                 </p>
               )}
+              <CouponDialog
+                location="hero_promo"
+                trigger={
+                  <button className="inline-flex items-center gap-2 rounded-full border border-amber-200/80 bg-white/70 px-5 py-2 text-sm font-medium text-amber-800 shadow-sm backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
+                    <TicketPercent className="h-4 w-4 text-amber-600" />
+                    加入 Line 好友，享設立登記 NT$1,000 折扣
+                  </button>
+                }
+              />
             </div>
           </div>
         </section>

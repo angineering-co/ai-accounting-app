@@ -25,3 +25,25 @@ export function trackAssessmentStep(step: number) {
 export function trackAssessmentComplete() {
   sendGAEvent("event", "assessment_complete", {});
 }
+
+export function trackCouponGeneration(location: string, code: string) {
+  sendGAEvent("event", "coupon_generated", {
+    coupon_location: location,
+    coupon_code: code,
+    coupon_type: "incorporation_discount",
+  });
+}
+
+export function trackCouponCopy(location: string, code: string) {
+  sendGAEvent("event", "coupon_code_copied", {
+    coupon_code: code,
+    coupon_location: location,
+  });
+}
+
+export function trackCouponLineClick(location: string, code: string) {
+  sendGAEvent("event", "coupon_line_clicked", {
+    coupon_code: code,
+    coupon_location: location,
+  });
+}

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, TicketPercent } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { CouponDialog } from "@/components/coupon-dialog";
 import { CtaLink } from "@/components/cta-link";
 import { PricingSection } from "@/components/pricing-comparison-table";
 import { PRICES } from "@/lib/pricing";
@@ -58,7 +59,7 @@ export default function PricingPage() {
 
       {/* CTA */}
       <section className="pb-24 pt-8 md:pb-36 md:pt-12">
-        <div className="text-center">
+        <div className="flex flex-col items-center gap-5 text-center">
           <Button
             asChild
             size="lg"
@@ -69,6 +70,15 @@ export default function PricingPage() {
               <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
             </CtaLink>
           </Button>
+          <CouponDialog
+            location="pricing_cta"
+            trigger={
+              <button className="inline-flex items-center gap-2 rounded-full border border-amber-200/80 bg-amber-50/70 px-5 py-2 text-sm font-medium text-amber-800 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
+                <TicketPercent className="h-4 w-4 text-amber-600" />
+                加入 Line 好友，享設立登記 NT$1,000 折扣
+              </button>
+            }
+          />
         </div>
       </section>
     </main>

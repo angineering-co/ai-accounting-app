@@ -3,7 +3,7 @@ import { ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { CtaLink } from "@/components/cta-link";
-import { PricingSection } from "@/components/pricing-comparison-table";
+import { PRICES, PricingSection } from "@/components/pricing-comparison-table";
 
 export const metadata: Metadata = {
   title: "服務價格｜SnapBooks.ai 速博 - 記帳報稅 NT$1,200/月起",
@@ -48,7 +48,7 @@ export default function PricingPage() {
       {/* Notes */}
       <section className="mx-auto w-full max-w-3xl px-5 py-8">
         <div className="space-y-3 rounded-2xl bg-slate-50 p-6 text-sm leading-relaxed text-slate-500 md:p-8">
-          <p>※ 年繳方案 NT$1,200/月，一年收取 13 個月費用（第 13 個月為年度營所稅結算申報費用）；月繳方案 NT$1,400/月。</p>
+          <p>※ 年繳方案 NT${PRICES.annual.toLocaleString("zh-TW")}/月，一年收取 13 個月費用（第 13 個月為年度營所稅結算申報費用）；月繳方案 NT${PRICES.monthly.toLocaleString("zh-TW")}/月。</p>
           <p>※ 本方案專為「年營業額 3,000 萬以下」之中小企業/一人公司設計。</p>
           <p>※ 紙本發票若超過 50 張，每 50 張額外酌收 NT$400 處理費。</p>
           <p>※ 不含勞健保投保、公司法 22-1 申報。</p>

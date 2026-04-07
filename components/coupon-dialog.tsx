@@ -32,6 +32,7 @@ export function CouponDialog({
   const [code, setCode] = useState("");
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const trackedCodeRef = useRef<string>("");
 
   useEffect(() => {
     return () => {
@@ -43,11 +44,18 @@ export function CouponDialog({
     if (open) {
       const c = getCouponCode();
       setCode(c);
-      trackCouponGeneration(location, c);
+      if (trackedCodeRef.current !== c) {
+        trackedCodeRef.current = c;
+        trackCouponGeneration(location, c);
+      }
     }
   }
 
   function handleCopy() {
+    if (!navigator.clipboard) {
+      toast.error("您的瀏覽器不支援自動複製，請手動複製");
+      return;
+    }
     navigator.clipboard.writeText(code).then(
       () => {
         setCopied(true);
@@ -87,6 +95,7 @@ export function CouponDialog({
           <Button
             variant="ghost"
             size="icon"
+            aria-label="複製優惠碼"
             className="shrink-0 text-amber-700 hover:bg-amber-100 hover:text-amber-900"
             onClick={handleCopy}
           >

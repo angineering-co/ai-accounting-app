@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { CheckCircle2, Ban, CircleHelp } from "lucide-react";
 
 import {
@@ -10,12 +10,15 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-type BillingCycle = "annual" | "monthly";
+export type BillingCycle = "annual" | "monthly";
 
-const PRICES: Record<BillingCycle, number> = {
+export const PRICES: Record<BillingCycle, number> = {
   annual: 1200,
   monthly: 1400,
 };
+
+const REGISTRATION_PRICING_NOTE =
+  "有限公司 NT$8,000 / 股份有限公司 NT$9,000 / 商行 NT$6,000";
 
 type FeatureValue = true | false | string | { optional: true; price: string };
 
@@ -54,8 +57,7 @@ const featureCategories: FeatureCategory[] = [
     rows: [
       {
         label: "公司/商行設立登記",
-        tooltip:
-          "費用依公司型態而定：有限公司 NT$8,000 / 股份有限公司 NT$9,000 / 商行 NT$6,000",
+        tooltip: `費用依公司型態而定：${REGISTRATION_PRICING_NOTE}`,
         pure: false,
         bundle: "NT$6,000 起",
       },
@@ -148,7 +150,7 @@ function BillingToggle({
 
 export function PricingSection() {
   const [billing, setBilling] = useState<BillingCycle>("annual");
-  const price = PRICES[billing].toLocaleString("zh-TW");
+  const price = useMemo(() => PRICES[billing].toLocaleString("zh-TW"), [billing]);
 
   return (
     <TooltipProvider delayDuration={120}>
@@ -198,7 +200,7 @@ export function PricingSection() {
                     </button>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs text-xs leading-relaxed">
-                    有限公司 NT$8,000 / 股份有限公司 NT$9,000 / 商行 NT$6,000
+                    {REGISTRATION_PRICING_NOTE}
                   </TooltipContent>
                 </Tooltip>
               </span>

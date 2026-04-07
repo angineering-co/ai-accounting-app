@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { CtaLink } from "@/components/cta-link";
+import { PRICES } from "@/components/pricing-comparison-table";
 import {
   Accordion,
   AccordionContent,
@@ -440,7 +441,7 @@ export default function Home() {
             <div className="rounded-[2.5rem] bg-white p-10 shadow-2xl shadow-slate-200/50 ring-1 ring-slate-200 md:p-12">
               <div className="mb-2 flex items-baseline justify-center gap-2">
                 <span className="font-display text-5xl font-extrabold tracking-tight text-slate-900">
-                  NT$ 1,200
+                  NT$ {PRICES.annual.toLocaleString("zh-TW")}
                 </span>
                 <span className="text-lg font-medium text-slate-500">/ 月（起）</span>
               </div>

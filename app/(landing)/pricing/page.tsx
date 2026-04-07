@@ -3,7 +3,8 @@ import { ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { CtaLink } from "@/components/cta-link";
-import { PRICES, PricingSection } from "@/components/pricing-comparison-table";
+import { PricingSection } from "@/components/pricing-comparison-table";
+import { PRICES } from "@/lib/pricing";
 
 export const metadata: Metadata = {
   title: "服務價格｜SnapBooks.ai 速博 - 記帳報稅 NT$1,200/月起",

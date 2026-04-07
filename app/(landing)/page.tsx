@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { CtaLink } from "@/components/cta-link";
-import { PRICES } from "@/components/pricing-comparison-table";
+import { PRICES } from "@/lib/pricing";
 import {
   Accordion,
   AccordionContent,

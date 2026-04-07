@@ -13,7 +13,7 @@ export interface ToolLink {
 
 export const navLinks: NavLink[] = [
   { href: "/#features", label: "服務介紹" },
-  { href: "/#pricing", label: "價格" },
+  { href: "/pricing", label: "價格" },
   { href: "/startup-guide", label: "創業必看" },
   { href: "/blog", label: "部落格" },
   { href: "/faq", label: "常見問題" },

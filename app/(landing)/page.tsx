@@ -3,7 +3,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { CtaLink } from "@/components/cta-link";
-import { LandingPricingSection } from "@/components/landing-pricing-section";
 import {
   Accordion,
   AccordionContent,
@@ -427,8 +426,40 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── Pricing ── */}
-        <LandingPricingSection />
+        {/* ── Pricing teaser ── */}
+        <section id="pricing" className="mx-auto max-w-5xl px-5 py-24 md:py-32">
+          <div className="mx-auto max-w-2xl text-center">
+            <h2 className="font-display mb-6 text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
+              顛覆業界的透明定價
+            </h2>
+            <p className="text-lg text-slate-600 leading-relaxed">
+              因為 AI 大幅提升了內部效率，我們得以將省下的成本回饋給您。
+            </p>
+          </div>
+          <div className="mx-auto mt-12 max-w-md text-center">
+            <div className="rounded-[2.5rem] bg-white p-10 shadow-2xl shadow-slate-200/50 ring-1 ring-slate-200 md:p-12">
+              <div className="mb-2 flex items-baseline justify-center gap-2">
+                <span className="font-display text-5xl font-extrabold tracking-tight text-slate-900">
+                  NT$ 1,200
+                </span>
+                <span className="text-lg font-medium text-slate-500">/ 月（起）</span>
+              </div>
+              <p className="mt-4 text-sm leading-relaxed text-slate-500">
+                記帳報稅全包，設立登記可加購
+              </p>
+              <Button
+                asChild
+                size="lg"
+                className="group mt-8 rounded-full bg-emerald-600 text-white hover:bg-emerald-500 border-0 h-12 px-8 text-base font-semibold shadow-lg shadow-emerald-600/25 transition-all duration-300 hover:shadow-xl hover:shadow-emerald-600/30 hover:-translate-y-0.5"
+              >
+                <Link href="/pricing">
+                  查看完整價格方案
+                  <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </section>
 
         {/* ── Founders & Vision ── */}
         <section className="mx-auto max-w-5xl px-5 py-24 md:py-36">

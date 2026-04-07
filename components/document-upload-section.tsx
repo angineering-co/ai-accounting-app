@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
+import type { FileError } from "react-dropzone";
 import { toast } from "sonner";
 import { createInvoice } from "@/lib/services/invoice";
 import { createAllowance } from "@/lib/services/allowance";
@@ -35,17 +43,28 @@ export type DocumentUploadSectionProps = {
   onUploaded: () => Promise<unknown>;
 };
 
-export function DocumentUploadSection({
-  title,
-  firmId,
-  clientId,
-  periodId,
-  periodYYYMM,
-  type,
-  inOrOut,
-  isLocked,
-  onUploaded,
-}: DocumentUploadSectionProps) {
+export type DocumentUploadSectionHandle = {
+  addFiles: (files: File[]) => void;
+};
+
+export const DocumentUploadSection = forwardRef<
+  DocumentUploadSectionHandle,
+  DocumentUploadSectionProps
+>(function DocumentUploadSection(
+  {
+    title,
+    firmId,
+    clientId,
+    periodId,
+    periodYYYMM,
+    type,
+    inOrOut,
+    isLocked,
+    onUploaded,
+  },
+  ref,
+) {
+  const autoUploadPending = useRef(false);
   const [isProcessingUpload, setIsProcessingUpload] = useState(false);
   const [queueItemToDelete, setQueueItemToDelete] =
     useState<DeleteTarget | null>(null);
@@ -80,6 +99,34 @@ export function DocumentUploadSection({
     setFiles: setUploadFiles,
     setUploadedFiles: setUploadedFilesList,
   } = uploadProps;
+
+  useImperativeHandle(ref, () => ({
+    addFiles: (newFiles: File[]) => {
+      const prepared = newFiles.map((f) => {
+        const uf = f as File & {
+          preview?: string;
+          errors: readonly FileError[];
+        };
+        uf.preview = URL.createObjectURL(f);
+        uf.errors = [];
+        return uf;
+      });
+      setUploadFiles((prev) => [...prev, ...prepared]);
+      autoUploadPending.current = true;
+    },
+  }));
+
+  // Auto-trigger upload when files are injected via the FAB
+  useEffect(() => {
+    if (
+      autoUploadPending.current &&
+      uploadProps.files.length > 0 &&
+      !uploadProps.loading
+    ) {
+      autoUploadPending.current = false;
+      uploadProps.onUpload();
+    }
+  }, [uploadProps.files.length, uploadProps.loading, uploadProps.onUpload]);
 
   const handleUploadComplete = useCallback(async () => {
     if (isProcessingUpload || uploadedFiles.length === 0) return;
@@ -215,4 +262,4 @@ export function DocumentUploadSection({
       )}
     </>
   );
-}
+});

@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useCallback, useState } from "react";
+import { use, useCallback, useRef, useState } from "react";
 import useSWR from "swr";
 import dynamic from "next/dynamic";
 import { ArrowLeft, FileText, Loader2, Receipt } from "lucide-react";
@@ -13,7 +13,10 @@ import {
   allowanceSchema,
 } from "@/lib/domain/models";
 import { getTaxPeriodByYYYMM } from "@/lib/services/tax-period";
-import { DocumentUploadSection } from "@/components/document-upload-section";
+import {
+  DocumentUploadSection,
+  type DocumentUploadSectionHandle,
+} from "@/components/document-upload-section";
 import { InvoiceDeleteDialog } from "@/components/invoice/invoice-delete-dialog";
 import { AllowanceDeleteDialog } from "@/components/allowance-delete-dialog";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
@@ -90,6 +93,10 @@ export default function PortalPeriodDetailPage({
     null,
   );
   const [activeTab, setActiveTab] = useState("overview");
+  const inInvoiceRef = useRef<DocumentUploadSectionHandle>(null);
+  const outInvoiceRef = useRef<DocumentUploadSectionHandle>(null);
+  const inAllowanceRef = useRef<DocumentUploadSectionHandle>(null);
+  const outAllowanceRef = useRef<DocumentUploadSectionHandle>(null);
 
   const handleReview = useCallback(
     (
@@ -173,10 +180,18 @@ export default function PortalPeriodDetailPage({
   );
 
   const handleFabFilesSelected = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    (_files: File[], inOrOut: "in" | "out", _type: "invoice" | "allowance") => {
-      // Navigate to the correct tab
+    (files: File[], inOrOut: "in" | "out", type: "invoice" | "allowance") => {
       setActiveTab(inOrOut === "in" ? "input" : "output");
+      const refs: Record<
+        string,
+        React.RefObject<DocumentUploadSectionHandle | null>
+      > = {
+        "in-invoice": inInvoiceRef,
+        "out-invoice": outInvoiceRef,
+        "in-allowance": inAllowanceRef,
+        "out-allowance": outAllowanceRef,
+      };
+      refs[`${inOrOut}-${type}`]?.current?.addFiles(files);
     },
     [],
   );
@@ -348,6 +363,7 @@ export default function PortalPeriodDetailPage({
           forceMount
         >
           <DocumentUploadSection
+            ref={inInvoiceRef}
             title="進項發票"
             firmId={firmId}
             clientId={clientId}
@@ -377,6 +393,7 @@ export default function PortalPeriodDetailPage({
           </div>
 
           <DocumentUploadSection
+            ref={inAllowanceRef}
             title="進項折讓"
             firmId={firmId}
             clientId={clientId}
@@ -415,6 +432,7 @@ export default function PortalPeriodDetailPage({
           forceMount
         >
           <DocumentUploadSection
+            ref={outInvoiceRef}
             title="銷項發票"
             firmId={firmId}
             clientId={clientId}
@@ -444,6 +462,7 @@ export default function PortalPeriodDetailPage({
           </div>
 
           <DocumentUploadSection
+            ref={outAllowanceRef}
             title="銷項折讓"
             firmId={firmId}
             clientId={clientId}

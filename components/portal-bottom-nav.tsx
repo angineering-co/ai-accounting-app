@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
-import { Home, LogOut, Upload } from "lucide-react";
+import { Home, LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 export function PortalBottomNav() {
@@ -15,13 +15,15 @@ export function PortalBottomNav() {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/auth/login");
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      router.push("/auth/login");
+    }
   };
 
   const portalHome = `/firm/${firmId}/client/${clientId}/portal`;
   const isHome = pathname === portalHome;
-  const isPeriod = pathname.includes("/portal/period/");
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white/95 backdrop-blur-sm md:hidden">
@@ -39,18 +41,6 @@ export function PortalBottomNav() {
         >
           <Home className="h-5 w-5" />
           <span>首頁</span>
-        </Link>
-
-        <Link
-          href={portalHome}
-          className={`flex flex-col items-center gap-1 px-4 py-2 text-xs font-medium transition-colors ${
-            isPeriod
-              ? "text-emerald-600"
-              : "text-slate-500 active:text-emerald-600"
-          }`}
-        >
-          <Upload className="h-5 w-5" />
-          <span>上傳</span>
         </Link>
 
         <button

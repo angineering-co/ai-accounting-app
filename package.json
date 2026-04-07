@@ -2,7 +2,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build --webpack",
+    "build": "next build",
     "start": "next start",
     "supabase:start": "npx supabase@latest start",
     "supabase:stop": "npx supabase@latest stop",

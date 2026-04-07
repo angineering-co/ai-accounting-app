@@ -82,7 +82,7 @@ export default function FirmIdLayout({
         </HydrationSafe>
       </Suspense>
       <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4" style={{ paddingTop: "env(safe-area-inset-top)" }}>
           <SidebarTrigger className="-ml-1 hidden md:flex" />
           <Separator
             orientation="vertical"

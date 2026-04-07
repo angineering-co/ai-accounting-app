@@ -30,9 +30,9 @@ const COMPANY_TYPE_LABELS: Record<CompanyType, string> = {
 };
 
 const COMPANY_TYPE_PRICES: Record<CompanyType, number> = {
-  limited: 8000,
-  corporation: 9000,
-  soleProprietorship: 6000,
+  limited: 8500,
+  corporation: 9500,
+  soleProprietorship: 6500,
 };
 
 const formatCurrency = (amount: number) =>
@@ -94,16 +94,13 @@ export function LandingPricingSection() {
   const [withEnglishName, setWithEnglishName] = useState(false);
   const [withBusinessCertificate, setWithBusinessCertificate] = useState(false);
   const [withInsuranceUnit, setWithInsuranceUnit] = useState(false);
-  const [withSeal, setWithSeal] = useState(false);
-
   const addonTotal = useMemo(() => {
     return (
       COMPANY_TYPE_PRICES[companyType] +
       (withBusinessCertificate ? 500 : 0) +
-      (withInsuranceUnit ? 1000 : 0) +
-      (withSeal ? 300 : 0)
+      (withInsuranceUnit ? 1000 : 0)
     );
-  }, [companyType, withBusinessCertificate, withInsuranceUnit, withSeal]);
+  }, [companyType, withBusinessCertificate, withInsuranceUnit]);
 
   const breakdown = useMemo(() => {
     return [
@@ -124,8 +121,8 @@ export function LandingPricingSection() {
         amount: withInsuranceUnit ? 1000 : 0,
       },
       {
-        title: `代刻印章（${withSeal ? "Yes" : "No"}）`,
-        amount: withSeal ? 300 : 0,
+        title: "代刻印章（included）",
+        amount: 0,
       },
     ];
   }, [
@@ -133,7 +130,6 @@ export function LandingPricingSection() {
     withEnglishName,
     withBusinessCertificate,
     withInsuranceUnit,
-    withSeal,
   ]);
 
   return (
@@ -151,12 +147,13 @@ export function LandingPricingSection() {
         <div className="mx-auto flex max-w-md flex-col gap-6">
           <div className="overflow-hidden rounded-[2.5rem] bg-white ring-1 ring-slate-200 shadow-2xl shadow-slate-200/50 transition-all hover:-translate-y-1 hover:shadow-emerald-100">
             <div className="p-10 md:p-12">
-              <div className="mb-4 flex items-baseline gap-2">
-                <span className="font-display text-5xl font-extrabold tracking-tight text-slate-900">
+              <div className="mb-1 flex items-baseline gap-2">
+                <span className="font-display whitespace-nowrap text-5xl font-extrabold tracking-tight text-slate-900">
                   NT$ 1,200
                 </span>
-                <span className="text-lg font-medium text-slate-500">/ 月（起）</span>
+                <span className="text-lg font-medium text-slate-500">/ 月起</span>
               </div>
+              <p className="mb-4 text-sm text-slate-400">以上為未稅價，加 5% 營業稅</p>
 
               {isAddonOpen ? (
                 <>
@@ -317,13 +314,6 @@ export function LandingPricingSection() {
                   value={withInsuranceUnit}
                   onValueChange={setWithInsuranceUnit}
                 />
-                <YesNoOption
-                  title="代刻印章"
-                  tooltip="若選擇自行準備，須郵寄或快遞印章給本公司使用；若選擇代刻印章，將由本公司設立登記完成後，連同核准公文寄回。"
-                  value={withSeal}
-                  onValueChange={setWithSeal}
-                />
-
                 <div className="space-y-4 rounded-2xl bg-slate-50 p-6">
                   <div className="flex items-end justify-between gap-4 border-b border-slate-200 pb-3">
                     <span className="text-sm font-semibold text-slate-600">

@@ -450,12 +450,13 @@ export default function Home() {
           </div>
           <div className="mx-auto mt-12 max-w-md text-center">
             <div className="rounded-[2.5rem] bg-white p-10 shadow-2xl shadow-slate-200/50 ring-1 ring-slate-200 md:p-12">
-              <div className="mb-2 flex items-baseline justify-center gap-2">
-                <span className="font-display text-5xl font-extrabold tracking-tight text-slate-900">
+              <div className="flex items-baseline justify-center gap-2">
+                <span className="font-display whitespace-nowrap text-5xl font-extrabold tracking-tight text-slate-900">
                   NT$ {PRICES.annual.toLocaleString("zh-TW")}
                 </span>
-                <span className="text-lg font-medium text-slate-500">/ 月（起）</span>
+                <span className="text-lg font-medium text-slate-500">/ 月起</span>
               </div>
+              <p className="mt-1 mb-2 text-sm text-slate-400">以上為未稅價，加 5% 營業稅</p>
               <p className="mt-4 text-sm leading-relaxed text-slate-500">
                 記帳報稅全包，設立登記可加購
               </p>

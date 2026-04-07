@@ -50,7 +50,7 @@ const featureCategories: FeatureCategory[] = [
         label: "公司/商行設立登記",
         tooltip: `費用依公司型態而定：${REGISTRATION_PRICING_NOTE}`,
         pure: false,
-        bundle: "NT$6,000 起",
+        bundle: "NT$6,500 起",
       },
       { label: "英文名稱登記", pure: false, bundle: "免費" },
       {
@@ -68,9 +68,9 @@ const featureCategories: FeatureCategory[] = [
       {
         label: "代刻印章",
         tooltip:
-          "若選擇自行準備，須郵寄或快遞印章給本公司使用；若選擇代刻印章，將由本公司設立登記完成後，連同核准公文寄回。",
+          "設立登記皆含代刻印章，完成後連同核准公文寄回。",
         pure: false,
-        bundle: { optional: true, price: "NT$300" },
+        bundle: "免費",
       },
     ],
   },
@@ -122,6 +122,9 @@ function BillingToggle({
           }`}
         >
           年繳
+          <span className="ml-1.5 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700">
+            -15%
+          </span>
         </button>
         <button
           type="button"
@@ -155,14 +158,14 @@ export function PricingSection() {
         <div className="grid gap-6 md:grid-cols-2">
           {/* 純記帳 */}
           <div className="rounded-3xl bg-white p-8 ring-1 ring-slate-200 shadow-lg md:p-10">
-            <p className="mb-1 text-sm font-semibold uppercase tracking-widest text-slate-500">
+            <p className="mb-2 text-lg font-bold tracking-tight text-emerald-700">
               純記帳
             </p>
             <div className="mb-2 flex items-baseline gap-2">
               <span className="font-display text-4xl font-extrabold tracking-tight text-slate-900">
                 NT$ {price}
               </span>
-              <span className="text-base font-medium text-slate-500">/ 月</span>
+              <span className="text-base font-medium text-slate-500">/ 月（未稅）</span>
             </div>
             <p className="text-base leading-relaxed text-slate-500">
               已有公司，只需要記帳報稅服務
@@ -171,7 +174,7 @@ export function PricingSection() {
 
           {/* 記帳+設立 */}
           <div className="rounded-3xl bg-white p-8 ring-1 ring-slate-200 shadow-lg md:p-10">
-            <p className="mb-1 text-sm font-semibold uppercase tracking-widest text-slate-500">
+            <p className="mb-2 text-lg font-bold tracking-tight text-emerald-700">
               記帳+設立
             </p>
             <div className="mb-2 flex flex-wrap items-baseline gap-2">
@@ -179,7 +182,7 @@ export function PricingSection() {
                 NT$ {price}
               </span>
               <span className="inline-flex items-center gap-1 text-base font-medium text-slate-500">
-                / 月 + 設立 NT$6,000 起
+                / 月（未稅）+ 設立 NT$6,500 起
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button

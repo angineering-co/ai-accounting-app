@@ -48,7 +48,7 @@ export default function TermsPage() {
             </h2>
             <div className="space-y-5 text-lg leading-relaxed text-slate-600">
               <p>
-                本服務之基本方案為每月 NT$ 1,200，採一年收取 13
+                本服務之基本方案為每月 NT$ 1,200（未稅，另加 5% 營業稅），採一年收取 13
                 個月費用之方式計費（第 13
                 個月為年度營所稅結算申報費用）。若紙本發票超過每月 50 張，每 50
                 張將額外酌收 NT$ 400 處理費。

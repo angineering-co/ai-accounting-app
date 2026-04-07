@@ -135,7 +135,8 @@ export function PortalUploadFab({
       <button
         type="button"
         onClick={() => handleOpenChange(true)}
-        className="fixed bottom-20 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 transition-transform active:scale-95 md:hidden"
+        className="fixed right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 transition-transform active:scale-95 md:hidden"
+        style={{ bottom: "calc(4rem + env(safe-area-inset-bottom) + 0.75rem)" }}
         aria-label="上傳憑證"
       >
         <Camera className="h-6 w-6" />

@@ -1,11 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { createClient as createSupabaseClient } from "@/lib/supabase/client";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   useInfiniteQuery,
   type SupabaseQueryHandler,
 } from "@/hooks/use-infinite-query";
+import {
+  getSignedPreviewUrl,
+  QUEUE_PREVIEW_TRANSFORM,
+} from "@/lib/supabase/signed-preview-url-cache";
+import { mapWithConcurrency } from "@/lib/async/map-with-concurrency";
 import type { Database } from "@/supabase/database.types";
 
 type UploadQueueType = "invoice" | "allowance";
@@ -14,7 +18,7 @@ type QueueRow = Database["public"]["Tables"]["invoices"]["Row"] &
   Database["public"]["Tables"]["allowances"]["Row"];
 
 const PRE_AI_STATUSES = ["uploaded", "processing"] as const;
-const supabase = createSupabaseClient();
+const PREVIEW_SIGNING_CONCURRENCY = 6;
 
 const IMAGE_EXTENSIONS = new Set([
   "jpg",
@@ -59,6 +63,8 @@ export function usePreAiUploadQueue({
   pageSize = 12,
 }: UsePreAiUploadQueueOptions) {
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
+  const previewUrlsRef = useRef(previewUrls);
+  previewUrlsRef.current = previewUrls;
 
   const tableName = getTableName(type) as UploadQueueTableName;
 
@@ -107,7 +113,7 @@ export function usePreAiUploadQueue({
         !!row.filename &&
         !!row.storage_path &&
         isImageFilename(row.filename) &&
-        !previewUrls[row.id],
+        !previewUrlsRef.current[row.id],
     );
 
     if (missingPreviewRows.length === 0) {
@@ -117,32 +123,33 @@ export function usePreAiUploadQueue({
     let mounted = true;
 
     const loadPreviews = async () => {
-      const results = await Promise.all(
-        missingPreviewRows.map(async (row) => {
-          const { data: signedData, error: signedError } = await supabase.storage
-            .from("invoices")
-            .createSignedUrl(row.storage_path!, 60 * 30, {
-              transform: { width: 400, height: 400, resize: "contain" },
-            });
+      const results = await mapWithConcurrency(
+        missingPreviewRows,
+        PREVIEW_SIGNING_CONCURRENCY,
+        async (row) => {
+          const signedUrl = await getSignedPreviewUrl({
+            bucketName: "invoices",
+            storagePath: row.storage_path!,
+            expiresInSeconds: 60 * 30,
+            transform: QUEUE_PREVIEW_TRANSFORM,
+          });
 
-          if (signedError || !signedData?.signedUrl) {
-            return { id: row.id, url: null as string | null };
-          }
-
-          return { id: row.id, url: signedData.signedUrl };
-        }),
+          return { id: row.id, url: signedUrl };
+        },
       );
 
       if (!mounted) return;
 
       setPreviewUrls((prev) => {
         const next = { ...prev };
+        let changed = false;
         for (const result of results) {
-          if (result.url) {
+          if (result.url && !next[result.id]) {
             next[result.id] = result.url;
+            changed = true;
           }
         }
-        return next;
+        return changed ? next : prev;
       });
     };
 
@@ -151,7 +158,7 @@ export function usePreAiUploadQueue({
     return () => {
       mounted = false;
     };
-  }, [queueRows, previewUrls]);
+  }, [queueRows]);
 
   const items = useMemo(
     () =>

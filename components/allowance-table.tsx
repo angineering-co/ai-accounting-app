@@ -31,7 +31,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { mapWithConcurrency } from "@/lib/async/map-with-concurrency";
-import { getSignedPreviewUrl } from "@/lib/supabase/signed-preview-url-cache";
+import {
+  getSignedPreviewUrl,
+  THUMBNAIL_TRANSFORM,
+} from "@/lib/supabase/signed-preview-url-cache";
 import Image from "next/image";
 
 const SIGNED_URL_EXPIRATION_SECONDS = 60 * 30;
@@ -127,6 +130,7 @@ export function AllowanceTable({
             bucketName: "invoices",
             storagePath: allowance.storage_path,
             expiresInSeconds: SIGNED_URL_EXPIRATION_SECONDS,
+            transform: THUMBNAIL_TRANSFORM,
           });
 
           if (!signedUrl) {

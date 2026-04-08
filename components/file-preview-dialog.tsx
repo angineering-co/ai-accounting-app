@@ -75,6 +75,7 @@ export function FilePreviewDialog({
           bucketName,
           storagePath,
           expiresInSeconds: 3600,
+          transform: isImage ? { quality: 80 } : undefined,
         });
 
         if (cancelled) return;
@@ -101,6 +102,7 @@ export function FilePreviewDialog({
     storagePath,
     bucketName,
     isInlinePreviewSupported,
+    isImage,
     initialPreviewUrl,
   ]);
 

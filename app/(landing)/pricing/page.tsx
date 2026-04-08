@@ -47,12 +47,23 @@ export default function PricingPage() {
 
       {/* Notes */}
       <section className="mx-auto w-full max-w-3xl px-5 py-8">
-        <div className="space-y-3 rounded-2xl bg-slate-50 p-6 text-sm leading-relaxed text-slate-500 md:p-8">
-          <p>※ 設立：依公司型態而定：{REGISTRATION_PRICING_NOTE} </p>
-          <p>※ 記帳：不論年繳或月繳，皆收取 13 個月費用（第 13 個月為年度營所稅結算申報費用）。</p>
-          <p>※ 本方案專為「年營業額 3,000 萬以下」之中小企業設計。</p>
-          <p>※ 紙本發票若超過 50 張，每 50 張額外酌收 NT$420 處理費。</p>
-          <p>※ 不含勞健保投保、公司法 22-1 申報。</p>
+        <div className="space-y-5 rounded-2xl bg-slate-50 p-6 text-sm leading-relaxed text-slate-500 md:p-8">
+          <div>
+            <p className="mb-2 font-medium text-slate-700">設立登記</p>
+            <div className="space-y-1.5">
+              <p>※ 費用（含稅）依公司型態而定：{REGISTRATION_PRICING_NOTE}</p>
+              <p>※ 資本額 400 萬以內之規費皆已包含。超過 400 萬，（依法規）每 4,000 元規費 1 元需自行負擔。</p>
+              <p>※ 不含勞健保加退保、公司法 22-1 申報。</p>
+            </div>
+          </div>
+          <div>
+            <p className="mb-2 font-medium text-slate-700">記帳報稅</p>
+            <div className="space-y-1.5">
+              <p>※ 不論年繳或月繳，皆收取 13 個月費用（第 13 個月為年度營所稅結算申報費用）。</p>
+              <p>※ 紙本發票若超過 50 張，每 50 張額外酌收 NT$420 處理費。</p>
+              <p>※ 本方案專為書審/所得額標準客戶設計，如年度申報時改採查帳申報，將依照差額收費。</p>
+            </div>
+          </div>
         </div>
       </section>
 

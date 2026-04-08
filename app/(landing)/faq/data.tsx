@@ -15,6 +15,20 @@ export const faqCategories: FaqCategory[] = [
     name: "SnapBooks.ai 服務相關",
     items: [
       {
+        question: "什麼是憑證？",
+        answer: (
+          <>
+            公司日常營運產生的單據，例如統一發票、收據、車票、電子發票等，是記帳報稅所需的金流來源。
+            <br /><br />
+            依交易方向可分為兩種：
+            <ul className="mt-2 list-disc pl-5 space-y-1">
+              <li><strong>進項憑證</strong> — 買進來的（例如進貨、辦公用品採購）</li>
+              <li><strong>銷項憑證</strong> — 賣出去的（例如銷售商品、提供服務）</li>
+            </ul>
+          </>
+        )
+      },
+      {
         question: "憑證是無限上傳嗎？",
         answer:
           "每月 50 筆（不含電子發票），將會收費 1,260 元（含稅）。50 至 100 筆（不含電子發票），將會加收 420 元（含稅），也就是 1,680 元（含稅）。之後每多 50 筆，每月多收 420 元。",

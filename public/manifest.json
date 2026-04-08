@@ -2,7 +2,7 @@
   "name": "SnapBooks.ai 憑證上傳",
   "short_name": "SnapBooks",
   "description": "拍照上傳單據，AI 辨識、會計師把關",
-  "start_url": "/",
+  "start_url": "/dashboard",
   "display": "standalone",
   "orientation": "portrait",
   "theme_color": "#059669",

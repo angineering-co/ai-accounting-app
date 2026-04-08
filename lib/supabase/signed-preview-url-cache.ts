@@ -31,6 +31,12 @@ export const THUMBNAIL_TRANSFORM: ImageTransformOptions = {
   resize: "cover",
 } as const;
 
+export const QUEUE_PREVIEW_TRANSFORM: ImageTransformOptions = {
+  width: 400,
+  height: 400,
+  resize: "contain",
+} as const;
+
 const signedPreviewCache = new Map<string, SignedPreviewCacheEntry>();
 const inflightSignedPreviewRequests = new Map<
   string,
@@ -53,6 +59,15 @@ const isEntryValid = (
 ) => {
   if (!entry) return false;
   return entry.expiresAtMs > Date.now() + refreshBufferSeconds * 1000;
+};
+
+const evictExpiredEntries = () => {
+  const now = Date.now();
+  for (const [key, entry] of signedPreviewCache) {
+    if (entry.expiresAtMs <= now) {
+      signedPreviewCache.delete(key);
+    }
+  }
 };
 
 export async function getSignedPreviewUrl({
@@ -86,6 +101,8 @@ export async function getSignedPreviewUrl({
     if (error || !data?.signedUrl) {
       return null;
     }
+
+    evictExpiredEntries();
 
     signedPreviewCache.set(key, {
       signedUrl: data.signedUrl,

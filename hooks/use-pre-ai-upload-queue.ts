@@ -5,7 +5,10 @@ import {
   useInfiniteQuery,
   type SupabaseQueryHandler,
 } from "@/hooks/use-infinite-query";
-import { getSignedPreviewUrl } from "@/lib/supabase/signed-preview-url-cache";
+import {
+  getSignedPreviewUrl,
+  QUEUE_PREVIEW_TRANSFORM,
+} from "@/lib/supabase/signed-preview-url-cache";
 import { mapWithConcurrency } from "@/lib/async/map-with-concurrency";
 import type { Database } from "@/supabase/database.types";
 
@@ -128,7 +131,7 @@ export function usePreAiUploadQueue({
             bucketName: "invoices",
             storagePath: row.storage_path!,
             expiresInSeconds: 60 * 30,
-            transform: { width: 400, height: 400, resize: "contain" },
+            transform: QUEUE_PREVIEW_TRANSFORM,
           });
 
           return { id: row.id, url: signedUrl };

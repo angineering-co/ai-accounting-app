@@ -29,7 +29,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { mapWithConcurrency } from "@/lib/async/map-with-concurrency";
-import { getSignedPreviewUrl } from "@/lib/supabase/signed-preview-url-cache";
+import {
+  getSignedPreviewUrl,
+  THUMBNAIL_TRANSFORM,
+} from "@/lib/supabase/signed-preview-url-cache";
 
 const SIGNED_URL_EXPIRATION_SECONDS = 60 * 30;
 const PREVIEW_SIGNING_CONCURRENCY = 6;
@@ -134,6 +137,7 @@ export function InvoiceTable({
             bucketName: "invoices",
             storagePath: invoice.storage_path,
             expiresInSeconds: SIGNED_URL_EXPIRATION_SECONDS,
+            transform: THUMBNAIL_TRANSFORM,
           });
 
           if (!signedUrl) {

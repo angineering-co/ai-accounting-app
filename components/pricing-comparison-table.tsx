@@ -165,7 +165,7 @@ export function PricingSection() {
               <span className="font-display text-4xl font-extrabold tracking-tight text-slate-900">
                 NT$ {price}
               </span>
-              <span className="text-base font-medium text-slate-500">/ 月（未稅）</span>
+              <span className="text-base font-medium text-slate-500">/ 月（含稅）</span>
             </div>
             <p className="text-base leading-relaxed text-slate-500">
               已有公司，只需要記帳報稅服務
@@ -182,7 +182,7 @@ export function PricingSection() {
                 NT$ {price}
               </span>
               <span className="inline-flex items-center gap-1 text-base font-medium text-slate-500">
-                / 月（未稅）+ 設立 NT$6,500 起
+                / 月（含稅）+ 設立 NT$6,500 起
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button

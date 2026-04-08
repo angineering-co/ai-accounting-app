@@ -27,9 +27,9 @@ import {
 } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "AI 記帳事務所推薦｜速博 SnapBooks - 每月$1,200，專業會計師把關",
+  title: "AI 記帳事務所推薦｜速博 SnapBooks - 每月$1,260，專業會計師把關",
   description:
-    "速博 SnapBooks.ai — 專業會計師全程把關的記帳事務所，每月 NT$1,200 起。拍照上傳憑證就好，記帳報稅全程搞定。適合年營業額 3,000 萬以下中小企業。",
+    "速博 SnapBooks.ai — 專業會計師全程把關的記帳事務所，每月 NT$1,260 起。拍照上傳憑證就好，記帳報稅全程搞定。適合年營業額 3,000 萬以下中小企業。",
   keywords: [
     "snapbooks",
     "snapbooks.ai",
@@ -47,9 +47,9 @@ export const metadata: Metadata = {
     canonical: "https://snapbooks.ai",
   },
   openGraph: {
-    title: "AI 記帳事務所推薦｜速博 SnapBooks - 每月$1,200，專業會計師把關",
+    title: "AI 記帳事務所推薦｜速博 SnapBooks - 每月$1,260，專業會計師把關",
     description:
-      "速博 SnapBooks.ai — 專業會計師全程把關的記帳事務所，每月 NT$1,200 起。拍照上傳憑證就好，記帳報稅全程搞定。適合年營業額 3,000 萬以下中小企業。",
+      "速博 SnapBooks.ai — 專業會計師全程把關的記帳事務所，每月 NT$1,260 起。拍照上傳憑證就好，記帳報稅全程搞定。適合年營業額 3,000 萬以下中小企業。",
     url: "https://snapbooks.ai",
     siteName: "SnapBooks.ai",
     type: "website",
@@ -64,9 +64,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "AI 記帳事務所推薦｜速博 SnapBooks - 每月$1,200，專業會計師把關",
+    title: "AI 記帳事務所推薦｜速博 SnapBooks - 每月$1,260，專業會計師把關",
     description:
-      "速博 SnapBooks.ai — 專業會計師全程把關的記帳事務所，每月 NT$1,200 起。拍照上傳憑證就好，記帳報稅全程搞定。適合年營業額 3,000 萬以下中小企業。",
+      "速博 SnapBooks.ai — 專業會計師全程把關的記帳事務所，每月 NT$1,260 起。拍照上傳憑證就好，記帳報稅全程搞定。適合年營業額 3,000 萬以下中小企業。",
     images: ["https://snapbooks.ai/twitter-image.png"],
   },
 };
@@ -103,7 +103,7 @@ const comparisonRows = [
   {
     label: "月費",
     traditional: "NT$2,000 - 3,000+",
-    snapbooks: "NT$1,200",
+    snapbooks: "NT$1,260",
   },
   {
     label: "憑證處理",
@@ -183,7 +183,7 @@ const faqItems = [
   },
   {
     value: "included",
-    question: "每月 $1,200 包含哪些服務？",
+    question: "每月 $1,260 包含哪些服務？",
     answer:
       "包含電子發票無限量自動匯入、每月最多 50 張紙本發票拍照上傳、營業稅申報、年度營所稅申報、各類所得扣繳申報，以及 Line / Email 即時客服。",
   },
@@ -223,7 +223,7 @@ export default function Home() {
             <div className="animate-fade-up">
               <p className="mb-6 inline-flex items-center gap-2 rounded-full border border-emerald-200/60 bg-white/70 px-5 py-2 text-sm font-medium text-emerald-800 backdrop-blur-sm shadow-sm">
                 <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                創業友善價 $1,200 / 月，專業會計師 100% 審核把關
+                創業友善價 $1,260 / 月，專業會計師 100% 審核把關
               </p>
             </div>
 
@@ -456,7 +456,7 @@ export default function Home() {
                 </span>
                 <span className="text-lg font-medium text-slate-500">/ 月起</span>
               </div>
-              <p className="mt-1 mb-2 text-sm text-slate-400">以上為未稅價，加 5% 營業稅</p>
+              <p className="mt-1 mb-2 text-sm text-slate-400">含稅價</p>
               <p className="mt-4 text-sm leading-relaxed text-slate-500">
                 記帳報稅全包，設立登記可加購
               </p>

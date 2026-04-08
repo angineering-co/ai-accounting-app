@@ -1,8 +1,8 @@
 export type BillingCycle = "annual" | "monthly";
 
 export const PRICES: Record<BillingCycle, number> = {
-  annual: 1200,
-  monthly: 1400,
+  annual: 1260,
+  monthly: 1470,
 };
 
 export const REGISTRATION_PRICING_NOTE =

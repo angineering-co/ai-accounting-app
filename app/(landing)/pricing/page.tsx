@@ -64,10 +64,10 @@ export default function PricingPage() {
               <p>※ 紙本發票若超過 50 張，每 50 張額外酌收 NT$420 處理費。</p>
               <p>※ 本方案專為書審/所得額標準客戶設計，如年度申報時改採「查帳申報」，每月月費將加收 NT$1,000。</p>
               <div>
-                <p>※ 每年年度申報時，本所將主動為您比較「書審申報」與「查帳申報」何者較省稅，並評估國稅局抽查的可能性。</p>
+                <p>※ 每年年度申報時，本所將主動為您比較「書審申報」與「核實申報」何者較省稅，並評估國稅局抽查的可能性。</p>
                 <ul className="mt-1.5 list-disc pl-8 space-y-1">
-                  <li>不會強制採用查帳申報，最終由您決定。</li>
-                  <li>若確認改採查帳申報，將視情況補收與書審之間的<Link href="/faq#snapbooks-service" className="underline underline-offset-2 hover:text-slate-700">月費差額</Link>。</li>
+                  <li>不會強制採用核實申報，最終由您決定。</li>
+                  <li>若確認改採核實申報，將視情況補收與書審之間的<Link href="/faq#snapbooks-service" className="underline underline-offset-2 hover:text-slate-700">月費差額</Link>。</li>
                 </ul>
               </div>
             </div>

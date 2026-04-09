@@ -149,11 +149,11 @@ export function LandingPricingSection() {
             <div className="p-10 md:p-12">
               <div className="mb-1 flex items-baseline gap-2">
                 <span className="font-display whitespace-nowrap text-5xl font-extrabold tracking-tight text-slate-900">
-                  NT$ 1,200
+                  NT$ 1,260
                 </span>
                 <span className="text-lg font-medium text-slate-500">/ 月起</span>
               </div>
-              <p className="mb-4 text-sm text-slate-400">以上為未稅價，加 5% 營業稅</p>
+              <p className="mb-4 text-sm text-slate-400">含稅價</p>
 
               {isAddonOpen ? (
                 <>
@@ -230,7 +230,7 @@ export function LandingPricingSection() {
                       萬以下」之中小企業/一人公司設計。
                     </p>
                     <p>
-                      ※ 紙本發票若超過 50 張，每 50 張額外酌收 NT$ 400 處理費。
+                      ※ 紙本發票若超過 50 張，每 50 張額外酌收 NT$ 420 處理費。
                     </p>
                   </div>
                 </>

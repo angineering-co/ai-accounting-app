@@ -30,7 +30,7 @@ const featureCategories: FeatureCategory[] = [
     category: "記帳服務",
     rows: [
       { label: "電子發票/雲端載具自動下載申報", pure: true, bundle: true },
-      { label: "每月 50 張紙本憑證拍照上傳", pure: true, bundle: true },
+      { label: "每月 50 張紙本憑證拍照上傳", tooltip: "超過 50 張，每 50 張額外酌收 NT$420 處理費。", pure: true, bundle: true },
       { label: "營業稅每期申報", pure: true, bundle: true },
       { label: "年度營利事業所得稅結算申報", pure: true, bundle: true },
       { label: "各類所得扣繳申報", pure: true, bundle: true },
@@ -52,25 +52,25 @@ const featureCategories: FeatureCategory[] = [
         pure: false,
         bundle: "NT$6,500 起",
       },
-      { label: "英文名稱登記", pure: false, bundle: "免費" },
+      { label: "英文名稱登記", pure: false, bundle: true },
       {
         label: "商工憑證申請",
-        tooltip: "強烈建議，可以查詢所得資料不怕漏報，也能完成線上加退保。",
+        tooltip: "可以查詢所得資料不怕漏報，也能完成線上加退保。",
         pure: false,
-        bundle: { optional: true, price: "NT$500" },
-      },
-      {
-        label: "成立投保單位",
-        tooltip: "若日後需要投保勞健保，需要成立投保單位。",
-        pure: false,
-        bundle: { optional: true, price: "NT$1,000" },
+        bundle: true,
       },
       {
         label: "代刻印章",
         tooltip:
           "設立登記皆含代刻印章，完成後連同核准公文寄回。",
         pure: false,
-        bundle: "免費",
+        bundle: true,
+      },
+      {
+        label: "成立投保單位",
+        tooltip: "若日後需要投保勞健保，需要成立投保單位。",
+        pure: false,
+        bundle: { optional: true, price: "NT$1,000" },
       },
     ],
   },
@@ -165,7 +165,7 @@ export function PricingSection() {
               <span className="font-display text-4xl font-extrabold tracking-tight text-slate-900">
                 NT$ {price}
               </span>
-              <span className="text-base font-medium text-slate-500">/ 月（未稅）</span>
+              <span className="text-base font-medium text-slate-500">/ 月（含稅）</span>
             </div>
             <p className="text-base leading-relaxed text-slate-500">
               已有公司，只需要記帳報稅服務
@@ -182,7 +182,7 @@ export function PricingSection() {
                 NT$ {price}
               </span>
               <span className="inline-flex items-center gap-1 text-base font-medium text-slate-500">
-                / 月（未稅）+ 設立 NT$6,500 起
+                / 月（含稅）+ 設立 NT$6,500 起
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button

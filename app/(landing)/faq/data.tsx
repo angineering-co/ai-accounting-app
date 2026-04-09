@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export interface FaqItem {
   question: string;
   answer: string | React.ReactNode;
@@ -15,9 +17,68 @@ export const faqCategories: FaqCategory[] = [
     name: "SnapBooks.ai 服務相關",
     items: [
       {
+        question: "什麼是憑證？",
+        answer: (
+          <>
+            公司日常營運產生的單據，例如統一發票、收據、車票、電子發票等，是記帳報稅所需的金流來源。
+            <br /><br />
+            依交易方向可分為兩種：
+            <ul className="mt-2 list-disc pl-5 space-y-1">
+              <li><strong>進項憑證</strong> — 買進來的（例如進貨、辦公用品採購）</li>
+              <li><strong>銷項憑證</strong> — 賣出去的（例如銷售商品、提供服務）</li>
+            </ul>
+            <br />
+            進項憑證基本上可以抵稅，但依稅別有不同規定：
+            <ul className="mt-2 list-disc pl-5 space-y-1">
+              <li><strong>營業稅</strong> — 必須取得統一發票（手開或電子發票皆可），且不得為交際費、酬勞員工、或購買自用乘人小汽車之性質</li>
+              <li><strong>所得稅</strong> — 發票、收據等均可列報，但依費用性質會有抵稅上限</li>
+            </ul>
+          </>
+        )
+      },
+      {
         question: "憑證是無限上傳嗎？",
         answer:
-          "每月 50 筆（不含電子發票），將會收費 1,200 元（未稅）。50 至 100 筆（不含電子發票），將會加收 400 元（未稅），也就是 1,600 元（未稅）。之後每多 50 筆，每月多收 400 元。",
+          "每月 50 筆（不含電子發票），將會收費 1,260 元（含稅）。50 至 100 筆（不含電子發票），將會加收 420 元（含稅），也就是 1,680 元（含稅）。之後每多 50 筆，每月多收 420 元。",
+      },
+      {
+        question: "書審、所得額標準、核實申報 有什麼不同？",
+        answer: (
+          <>
+            <strong>書審</strong>：營收 3,000 萬以下適用，以財政部公告的純益率計算課稅所得，流程最簡便。
+            <br /><br />
+            <strong>所得額標準</strong>：營收超過 3,000 萬無法使用書審時，可採用類似的方式申報，但適用的淨利率通常會比書審高一些。
+            <br /><br />
+            <strong>核實申報</strong>：需備齊完整帳簿供國稅局查核。適合對費用憑證有充足信心的營業人，好處是虧損年度不用繳稅，但被查核的機率也相對較高。
+            <br /><br />
+            想了解更多細節，請參考{" "}
+            <Link
+              href="/blog/what-is-book-review-tax"
+              className="font-medium text-emerald-600 hover:text-emerald-700 underline underline-offset-2"
+            >
+              書審是什麼？擴大書審計算方式、適用條件與常見錯誤完整解析
+            </Link>
+            ，或查閱{" "}
+            <a
+              href="https://www.ntbna.gov.tw/singlehtml/5f5746a30ef04963823b2302b9146208?cntId=b1eb3b3cb1914390ab6a4be61cd9fc65#gsc.tab=0"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-emerald-600 hover:text-emerald-700 underline underline-offset-2"
+            >
+              財政部各業所得額暨同業利潤標準
+            </a>
+            。
+          </>
+        ),
+      },
+      {
+        question: "決定採用核實申報（查帳），會補收費用嗎？",
+        answer: (
+          <>
+            會的。核實申報（查帳）需逐筆檢核交易資料並進行額外審查，以確保申報的有效性、達到最大節稅效果。因此該年度每月費用將加收 NT$1,000，
+            <strong>整年度共額外收取 NT$12,000</strong>。
+          </>
+        ),
       },
       {
         question: "你們跟傳統事務所有什麼不一樣呢？",

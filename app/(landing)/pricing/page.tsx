@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { ArrowRight, TicketPercent } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -8,16 +9,16 @@ import { PricingSection } from "@/components/pricing-comparison-table";
 import { REGISTRATION_PRICING_NOTE } from "@/lib/pricing";
 
 export const metadata: Metadata = {
-  title: "服務價格｜SnapBooks.ai 速博 - 記帳報稅 NT$1,200/月起",
+  title: "服務價格｜SnapBooks.ai 速博 - 記帳報稅 NT$1,260/月起",
   description:
-    "SnapBooks.ai 記帳報稅每月 NT$1,200 起，設立登記 NT$6,500 起。透明定價，無隱藏費用。專為年營業額 3,000 萬以下中小企業設計。",
+    "SnapBooks.ai 記帳報稅每月 NT$1,260 起，設立登記 NT$6,500 起。透明定價，無隱藏費用。專為年營業額 3,000 萬以下中小企業設計。",
   alternates: {
     canonical: "https://snapbooks.ai/pricing",
   },
   openGraph: {
-    title: "服務價格｜SnapBooks.ai 速博 - 記帳報稅 NT$1,200/月起",
+    title: "服務價格｜SnapBooks.ai 速博 - 記帳報稅 NT$1,260/月起",
     description:
-      "SnapBooks.ai 記帳報稅每月 NT$1,200 起，設立登記 NT$6,500 起。透明定價，無隱藏費用。",
+      "SnapBooks.ai 記帳報稅每月 NT$1,260 起，設立登記 NT$6,500 起。透明定價，無隱藏費用。",
     url: "https://snapbooks.ai/pricing",
     siteName: "SnapBooks.ai",
     type: "website",
@@ -47,12 +48,30 @@ export default function PricingPage() {
 
       {/* Notes */}
       <section className="mx-auto w-full max-w-3xl px-5 py-8">
-        <div className="space-y-3 rounded-2xl bg-slate-50 p-6 text-sm leading-relaxed text-slate-500 md:p-8">
-          <p>※ 設立：依公司型態而定：{REGISTRATION_PRICING_NOTE} </p>
-          <p>※ 記帳：不論年繳或月繳，皆收取 13 個月費用（第 13 個月為年度營所稅結算申報費用）。</p>
-          <p>※ 本方案專為「年營業額 3,000 萬以下」之中小企業設計。</p>
-          <p>※ 紙本發票若超過 50 張，每 50 張額外酌收 NT$400 處理費。</p>
-          <p>※ 不含勞健保投保、公司法 22-1 申報。</p>
+        <div className="space-y-5 rounded-2xl bg-slate-50 p-6 text-sm leading-relaxed text-slate-500 md:p-8">
+          <div>
+            <p className="mb-2 font-medium text-slate-700">設立登記</p>
+            <div className="space-y-1.5">
+              <p>※ 費用（含稅）依公司型態而定：{REGISTRATION_PRICING_NOTE}</p>
+              <p>※ 資本額 400 萬以內之規費皆已包含。超過 400 萬，（依法規）每 4,000 元規費 1 元需自行負擔。</p>
+              <p>※ 不含勞健保加退保、公司法 22-1 申報。</p>
+            </div>
+          </div>
+          <div>
+            <p className="mb-2 font-medium text-slate-700">記帳報稅</p>
+            <div className="space-y-1.5">
+              <p>※ 不論年繳或月繳，皆收取 13 個月費用（第 13 個月為年度營所稅結算申報費用）。</p>
+              <p>※ 紙本發票若超過 50 張，每 50 張額外酌收 NT$420 處理費。</p>
+              <p>※ 本方案專為書審、所得額標準客戶設計，如年度申報時改採「核實申報」，每月月費將加收 NT$1,000。</p>
+              <div>
+                <p>※ 每年年度申報時，本所將主動為您比較「書審申報」與「核實申報」何者較省稅，並評估國稅局抽查的可能性。</p>
+                <ul className="mt-1.5 list-disc pl-8 space-y-1">
+                  <li>不會強制採用核實申報，最終由您決定。</li>
+                  <li>若確認改採核實申報，將視情況補收與書審之間的<Link href="/faq#snapbooks-service" className="underline underline-offset-2 hover:text-slate-700">月費差額</Link>。</li>
+                </ul>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 

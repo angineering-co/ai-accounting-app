@@ -48,7 +48,7 @@ import {
 } from "@/lib/domain/models";
 import { ACCOUNTS, ACCOUNT_LIST } from "@/lib/data/accounts";
 import { isValidUBN } from "@/lib/domain/tax-id";
-import { useTaxIdLookup } from "@/hooks/use-tax-id-lookup";
+import { useFormTaxIdLookup } from "@/hooks/use-tax-id-lookup";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { updateInvoice } from "@/lib/services/invoice";
 import { toast } from "sonner";
@@ -261,33 +261,8 @@ export function InvoiceReviewDialog({
     return !isValidUBN(buyerTaxId);
   }, [buyerTaxId]);
 
-  // Auto-lookup business names from FIA registry when tax IDs are present
-  const handleSellerNameLookup = useCallback(
-    (name: string) => {
-      form.setValue("sellerName", name);
-      const conf = form.getValues("confidence");
-      if (conf) form.setValue("confidence.sellerName", "high");
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
-  const handleBuyerNameLookup = useCallback(
-    (name: string) => {
-      form.setValue("buyerName", name);
-      const conf = form.getValues("confidence");
-      if (conf) form.setValue("confidence.buyerName", "high");
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
-  const { loading: isSellerNameLoading } = useTaxIdLookup(
-    sellerTaxId,
-    handleSellerNameLookup,
-  );
-  const { loading: isBuyerNameLoading } = useTaxIdLookup(
-    buyerTaxId ?? "",
-    handleBuyerNameLookup,
-  );
+  const { sellerLoading: isSellerNameLoading, buyerLoading: isBuyerNameLoading } =
+    useFormTaxIdLookup(form, sellerTaxId, buyerTaxId ?? "");
 
   const dateValue = form.watch("date");
   const inOrOutValue = form.watch("inOrOut");

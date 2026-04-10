@@ -39,7 +39,7 @@ import {
   CalendarIcon,
 } from "lucide-react";
 import { type Allowance } from "@/lib/domain/models";
-import { useTaxIdLookup } from "@/hooks/use-tax-id-lookup";
+import { useFormTaxIdLookup } from "@/hooks/use-tax-id-lookup";
 import { updateAllowance } from "@/lib/services/allowance";
 import { toast } from "sonner";
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -191,33 +191,8 @@ export function AllowanceReviewDialog({
   const sellerTaxId = form.watch("sellerTaxId");
   const buyerTaxId = form.watch("buyerTaxId");
 
-  // Auto-lookup business names from FIA registry when tax IDs are present
-  const handleSellerNameLookup = useCallback(
-    (name: string) => {
-      form.setValue("sellerName", name);
-      const conf = form.getValues("confidence");
-      if (conf) form.setValue("confidence.sellerName", "high");
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
-  const handleBuyerNameLookup = useCallback(
-    (name: string) => {
-      form.setValue("buyerName", name);
-      const conf = form.getValues("confidence");
-      if (conf) form.setValue("confidence.buyerName", "high");
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
-  const { loading: isSellerNameLoading } = useTaxIdLookup(
-    sellerTaxId ?? "",
-    handleSellerNameLookup,
-  );
-  const { loading: isBuyerNameLoading } = useTaxIdLookup(
-    buyerTaxId ?? "",
-    handleBuyerNameLookup,
-  );
+  const { sellerLoading: isSellerNameLoading, buyerLoading: isBuyerNameLoading } =
+    useFormTaxIdLookup(form, sellerTaxId ?? "", buyerTaxId ?? "");
 
   const dateValue = form.watch("date");
   const selectedAllowanceDate = useMemo(

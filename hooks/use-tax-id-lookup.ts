@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { type UseFormReturn } from "react-hook-form";
 
 /**
  * React hook that looks up a business name from Taiwan's FIA registry
@@ -43,4 +44,39 @@ export function useTaxIdLookup(
   }, [taxId, onResult]);
 
   return { loading };
+}
+
+/**
+ * Convenience hook that wires useTaxIdLookup into a react-hook-form instance.
+ * Looks up both seller and buyer names, skipping no-op updates.
+ */
+export function useFormTaxIdLookup(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  form: UseFormReturn<any>,
+  sellerTaxId: string,
+  buyerTaxId: string,
+): { sellerLoading: boolean; buyerLoading: boolean } {
+  const formRef = useRef(form);
+  formRef.current = form;
+
+  const handleSellerName = useCallback((name: string) => {
+    const f = formRef.current;
+    if (f.getValues("sellerName") === name) return;
+    f.setValue("sellerName", name);
+    const conf = f.getValues("confidence");
+    if (conf) f.setValue("confidence.sellerName", "high");
+  }, []);
+
+  const handleBuyerName = useCallback((name: string) => {
+    const f = formRef.current;
+    if (f.getValues("buyerName") === name) return;
+    f.setValue("buyerName", name);
+    const conf = f.getValues("confidence");
+    if (conf) f.setValue("confidence.buyerName", "high");
+  }, []);
+
+  const { loading: sellerLoading } = useTaxIdLookup(sellerTaxId, handleSellerName);
+  const { loading: buyerLoading } = useTaxIdLookup(buyerTaxId, handleBuyerName);
+
+  return { sellerLoading, buyerLoading };
 }

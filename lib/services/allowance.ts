@@ -194,7 +194,6 @@ export async function extractAllowanceCore(
 
     const validatedData = extractedAllowanceDataSchema.parse(normalizedData);
 
-    // Enrich business names from FIA registry (best-effort)
     const enrichedData = await enrichBusinessNames(validatedData, [
       {
         name: validatedData.sellerName,

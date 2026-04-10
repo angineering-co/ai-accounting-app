@@ -93,14 +93,23 @@ interface GeminiResponse {
 
 const FIA_API_BASE = "https://eip.fia.gov.tw/OAI/api/businessRegistration";
 
+// Batch-level cache — avoids redundant FIA lookups for the same tax ID
+// within a single invocation (common: multiple invoices from the same seller).
+// Cleared on each new Serve() invocation.
+let businessNameCache = new Map<string, string | null>();
+
 async function lookupBusinessName(taxId: string): Promise<string | null> {
   if (!/^\d{8}$/.test(taxId)) return null;
+  if (businessNameCache.has(taxId)) return businessNameCache.get(taxId)!;
   try {
     const res = await fetch(`${FIA_API_BASE}/${taxId}`);
-    if (!res.ok) return null;
+    if (!res.ok) { businessNameCache.set(taxId, null); return null; }
     const data = await res.json();
-    return data?.businessNm || null;
+    const name = data?.businessNm || null;
+    businessNameCache.set(taxId, name);
+    return name;
   } catch {
+    businessNameCache.set(taxId, null);
     return null;
   }
 }
@@ -284,7 +293,6 @@ async function extractInvoice(
       .replace(/－/g, "-").replace(/：/g, ":");
   }
 
-  // Enrich business names from FIA registry (best-effort)
   await enrichBusinessNames(extractedData, [
     { nameField: "sellerName", taxIdField: "sellerTaxId" },
     { nameField: "buyerName", taxIdField: "buyerTaxId" },
@@ -492,7 +500,6 @@ async function extractAllowance(
   // Add source
   extractedData.source = "scan";
 
-  // Enrich business names from FIA registry (best-effort)
   await enrichBusinessNames(extractedData, [
     { nameField: "sellerName", taxIdField: "sellerTaxId" },
     { nameField: "buyerName", taxIdField: "buyerTaxId" },
@@ -621,6 +628,7 @@ async function processOneMessage(
 }
 
 Deno.serve(async (req) => {
+  businessNameCache = new Map();
   const invocationStart = Date.now();
   try {
     // Verify authorization

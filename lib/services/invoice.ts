@@ -410,7 +410,6 @@ export async function extractInvoiceCore(
     // Validate extracted data against schema
     const validatedData = extractedInvoiceDataSchema.parse(extractedData);
 
-    // Enrich business names from FIA registry (best-effort)
     const enrichedData = await enrichBusinessNames(validatedData, [
       {
         name: validatedData.sellerName,

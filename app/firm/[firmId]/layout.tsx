@@ -90,9 +90,6 @@ export default function FirmIdLayout({
             className="mr-2 hidden h-4 md:block"
           />
           <div className="flex items-center gap-2 px-4">
-            <span className="text-sm font-medium text-muted-foreground">
-              用戶:
-            </span>
             <Suspense
               fallback={
                 <div className="h-4 w-32 bg-muted animate-pulse rounded" />

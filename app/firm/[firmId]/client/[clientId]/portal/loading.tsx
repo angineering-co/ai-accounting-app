@@ -11,6 +11,7 @@ export default function PortalDashboardLoading() {
         <Skeleton className="h-6 w-40" />
         <Skeleton className="h-4 w-64" />
         <Skeleton className="h-36 w-full rounded-2xl" />
+        <Skeleton className="h-12 w-full rounded-2xl" />
       </div>
 
       {/* Secondary periods */}

@@ -89,6 +89,69 @@ interface GeminiResponse {
   }>;
 }
 
+// ─── FIA business name lookup (best-effort) ────────────────────────────────
+
+const FIA_API_BASE = "https://eip.fia.gov.tw/OAI/api/businessRegistration";
+
+// Batch-level cache — avoids redundant FIA lookups for the same tax ID
+// within a single invocation (common: multiple invoices from the same seller).
+// Cleared on each new Serve() invocation.
+let businessNameCache = new Map<string, string | null>();
+
+async function lookupBusinessName(taxId: string): Promise<string | null> {
+  if (!/^\d{8}$/.test(taxId)) return null;
+  if (businessNameCache.has(taxId)) return businessNameCache.get(taxId)!;
+  try {
+    const res = await fetch(`${FIA_API_BASE}/${taxId}`);
+    if (!res.ok) { businessNameCache.set(taxId, null); return null; }
+    const data = await res.json();
+    const name = data?.businessNm || null;
+    businessNameCache.set(taxId, name);
+    return name;
+  } catch {
+    businessNameCache.set(taxId, null);
+    return null;
+  }
+}
+
+/**
+ * Enrich extracted data with business names from FIA registry.
+ * Skips lookup when taxId is missing/invalid, taxId confidence is "low",
+ * or name confidence is already "high".
+ */
+async function enrichBusinessNames(
+  data: Record<string, unknown>,
+  parties: Array<{ nameField: string; taxIdField: string }>,
+): Promise<void> {
+  const confidence = (data.confidence ?? {}) as Record<string, string | undefined>;
+
+  const lookups = parties.map(async (party) => {
+    const taxId = data[party.taxIdField] as string | undefined;
+    if (!taxId || !/^\d{8}$/.test(taxId)) return;
+
+    const taxIdConf = confidence[party.taxIdField];
+    if (taxIdConf === "low") return;
+
+    const nameConf = confidence[party.nameField];
+    if (nameConf === "high") return;
+
+    const currentName = data[party.nameField] as string | undefined;
+    if (currentName && !data.confidence) return;
+
+    const name = await lookupBusinessName(taxId);
+    if (name) {
+      data[party.nameField] = name;
+      confidence[party.nameField] = "high";
+    }
+  });
+
+  await Promise.all(lookups);
+
+  if (data.confidence) {
+    data.confidence = confidence;
+  }
+}
+
 // ─── Gemini API helpers ─────────────────────────────────────────────────────
 
 function getGeminiApiUrl(): string {
@@ -229,6 +292,11 @@ async function extractInvoice(
     extractedData.account = extractedData.account
       .replace(/－/g, "-").replace(/：/g, ":");
   }
+
+  await enrichBusinessNames(extractedData, [
+    { nameField: "sellerName", taxIdField: "sellerTaxId" },
+    { nameField: "buyerName", taxIdField: "buyerTaxId" },
+  ]);
 
   await saveInvoiceResult(supabase, invoiceId, extractedData);
 }
@@ -432,6 +500,11 @@ async function extractAllowance(
   // Add source
   extractedData.source = "scan";
 
+  await enrichBusinessNames(extractedData, [
+    { nameField: "sellerName", taxIdField: "sellerTaxId" },
+    { nameField: "buyerName", taxIdField: "buyerTaxId" },
+  ]);
+
   // Derive in_or_out from tax IDs
   let derivedInOrOut: string | undefined;
   if (clientTaxId) {
@@ -555,6 +628,7 @@ async function processOneMessage(
 }
 
 Deno.serve(async (req) => {
+  businessNameCache = new Map();
   const invocationStart = Date.now();
   try {
     // Verify authorization

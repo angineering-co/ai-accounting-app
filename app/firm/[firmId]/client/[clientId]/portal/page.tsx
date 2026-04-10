@@ -21,6 +21,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { TaxCalendarReminder } from "@/components/tax-calendar-reminder";
 
 export default function PortalDashboardPage({
   params,
@@ -197,6 +198,7 @@ export default function PortalDashboardPage({
                 variant="primary"
                 actionLabel="上傳本期資料"
               />
+              <TaxCalendarReminder />
             </section>
           ) : null}
 

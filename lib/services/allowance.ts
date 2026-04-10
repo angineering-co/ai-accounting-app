@@ -13,6 +13,7 @@ import { type Json, type TablesUpdate } from "@/supabase/database.types";
 import { tryLinkOriginalInvoice } from "@/lib/services/invoice-import";
 import { extractAllowanceData, type ClientInfo } from "@/lib/services/gemini";
 import { getImportFileMimeType } from "@/lib/utils/mime-type";
+import { enrichBusinessNames } from "@/lib/services/business-lookup";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ensurePeriodEditable } from "@/lib/services/tax-period";
 
@@ -193,12 +194,28 @@ export async function extractAllowanceCore(
 
     const validatedData = extractedAllowanceDataSchema.parse(normalizedData);
 
+    // Enrich business names from FIA registry (best-effort)
+    const enrichedData = await enrichBusinessNames(validatedData, [
+      {
+        name: validatedData.sellerName,
+        taxId: validatedData.sellerTaxId,
+        nameField: "sellerName",
+        taxIdField: "sellerTaxId",
+      },
+      {
+        name: validatedData.buyerName,
+        taxId: validatedData.buyerTaxId,
+        nameField: "buyerName",
+        taxIdField: "buyerTaxId",
+      },
+    ]);
+
     const clientTaxId = client?.tax_id || "";
     let derivedInOrOut: "in" | "out" | undefined;
     if (clientTaxId) {
-      if (validatedData.sellerTaxId === clientTaxId) {
+      if (enrichedData.sellerTaxId === clientTaxId) {
         derivedInOrOut = "out";
-      } else if (validatedData.buyerTaxId === clientTaxId) {
+      } else if (enrichedData.buyerTaxId === clientTaxId) {
         derivedInOrOut = "in";
       }
     }
@@ -206,10 +223,10 @@ export async function extractAllowanceCore(
     const fallbackInOrOut = allowance.in_or_out === "in" ? "in" : "out";
 
     return await updateAllowance(allowanceId, {
-      extracted_data: validatedData,
+      extracted_data: enrichedData,
       status: "processed",
       original_invoice_serial_code:
-        validatedData.originalInvoiceSerialCode || null,
+        enrichedData.originalInvoiceSerialCode || null,
       in_or_out: derivedInOrOut ?? fallbackInOrOut,
     });
   } catch (error) {

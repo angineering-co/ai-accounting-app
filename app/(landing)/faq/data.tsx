@@ -108,6 +108,11 @@ export const faqCategories: FaqCategory[] = [
         ),
       },
       {
+        question: "電子發票需要上傳嗎？",
+        answer:
+          "電子發票不需要拍照上傳。SnapBooks 會自動從財政部電子發票平台下載您的電子發票資料，您只需要上傳手開發票、收據等紙本憑證即可。",
+      },
+      {
         question: "會怎麼通知我相關事項呢？",
         answer:
           "我們會透過綁定 LINE 及 Email 的方式通知您，因此請留意相關訊息。",

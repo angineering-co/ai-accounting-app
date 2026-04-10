@@ -88,7 +88,11 @@ export function getUpcomingTaxEvents(
   upcoming.sort((a, b) => a.date.getTime() - b.date.getTime());
 
   if (upcoming.length > 0) {
-    upcoming[0].isNext = true;
+    const nextDate = upcoming[0].date.getTime();
+    for (const e of upcoming) {
+      if (e.date.getTime() !== nextDate) break;
+      e.isNext = true;
+    }
   }
 
   return upcoming;

@@ -28,12 +28,14 @@ function daysLabel(days: number) {
 }
 
 export function TaxCalendarReminder() {
-  const { events, nextEvent } = useMemo(() => {
+  const { events, nextEvents } = useMemo(() => {
     const all = getUpcomingTaxEvents();
-    return { events: all, nextEvent: all.find((e) => e.isNext) };
+    return { events: all, nextEvents: all.filter((e) => e.isNext) };
   }, []);
 
-  if (!nextEvent) return null;
+  if (nextEvents.length === 0) return null;
+
+  const nextEvent = nextEvents[0];
 
   return (
     <Accordion type="single" collapsible>
@@ -43,7 +45,10 @@ export function TaxCalendarReminder() {
             <div className="flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-slate-500" />
               <span className="text-sm font-medium text-slate-700">
-                下次截止：{formatDate(nextEvent)} {nextEvent.label}
+                下次截止：{formatDate(nextEvent)}{" "}
+                {nextEvents.length === 1
+                  ? nextEvent.label
+                  : `${nextEvent.label} 等 ${nextEvents.length} 項`}
               </span>
               <Badge
                 variant="outline"

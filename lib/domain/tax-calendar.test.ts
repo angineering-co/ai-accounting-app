@@ -70,11 +70,16 @@ describe("getUpcomingTaxEvents", () => {
     expect(todayEvent).toBeDefined();
   });
 
-  it("marks only one event as isNext", () => {
-    const ref = new Date(2026, 0, 15); // Jan 15 — multiple events on this day
+  it("marks all same-date events as isNext", () => {
+    // Jan 31 has 3 events: 各類所得扣繳, 補充保費, 股利憑單
+    // Jan 31 2026 is Saturday → adjusted to Feb 2 (Monday)
+    const ref = new Date(2026, 0, 31);
     const events = getUpcomingTaxEvents(ref);
 
     const nextEvents = events.filter((e) => e.isNext);
-    expect(nextEvents).toHaveLength(1);
+    expect(nextEvents).toHaveLength(3);
+    expect(
+      nextEvents.every((e) => e.date.getTime() === nextEvents[0].date.getTime()),
+    ).toBe(true);
   });
 });

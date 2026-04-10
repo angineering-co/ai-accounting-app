@@ -41,7 +41,7 @@ export function PortalSidebar() {
                   <LayoutDashboard className="size-4" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold text-lg">Client Portal</span>
+                  <span className="truncate font-semibold text-lg">客戶中心</span>
                 </div>
               </Link>
             </SidebarMenuButton>

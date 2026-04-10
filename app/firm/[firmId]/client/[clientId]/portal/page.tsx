@@ -155,6 +155,11 @@ export default function PortalDashboardPage({
         </div>
       </section>
 
+      <div className="flex items-start gap-2.5 rounded-xl border border-sky-200/80 bg-sky-50/60 px-4 py-3 text-sm text-sky-800">
+        <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" />
+        <p>電子發票不需上傳圖檔，SnapBooks 會自動從電子發票平台下載。</p>
+      </div>
+
       {periods.length === 0 ? (
         <Card className="h-40 animate-pulse border-slate-200 bg-slate-100/70" />
       ) : (

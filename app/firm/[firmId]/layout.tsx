@@ -22,7 +22,7 @@ async function FirmName({ params }: { params: Promise<{ firmId: string }> }) {
     .single();
 
   return (
-    <span className="text-sm font-semibold truncate max-w-[200px]">
+    <span className="text-base font-semibold truncate max-w-[200px]">
       {data?.name || "Unknown Firm"}
     </span>
   );

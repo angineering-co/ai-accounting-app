@@ -95,7 +95,7 @@ export function BulkExtractionProgress({
       {/* Progress indicator while active */}
       {isBulkActive && progress && (
         <div className="flex items-center gap-3 flex-1">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground whitespace-nowrap">
+          <div className="flex items-center gap-2 text-base text-muted-foreground whitespace-nowrap">
             <Loader2 className="h-4 w-4 animate-spin" />
             <span>
               AI 批次處理中 {doneCount}/{total}
@@ -117,7 +117,7 @@ export function BulkExtractionProgress({
 
       {/* Completion summary (shown briefly after done, if there were failures) */}
       {!isBulkActive && progress && processingCount === 0 && failedCount > 0 && (
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-2 text-base">
           <XCircle className="h-4 w-4 text-destructive" />
           <span className="text-destructive">
             {failedCount} 筆 AI 提取失敗

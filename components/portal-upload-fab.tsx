@@ -166,10 +166,10 @@ export function PortalUploadFab({
                     <div className="rounded-xl bg-emerald-100 p-2.5 text-emerald-700">
                       <Icon className="h-5 w-5" />
                     </div>
-                    <span className="text-sm font-medium text-slate-900">
+                    <span className="text-base font-medium text-slate-900">
                       {docType.label}
                     </span>
-                    <span className="text-xs text-slate-500">
+                    <span className="text-sm text-slate-500">
                       {docType.description}
                     </span>
                   </button>

@@ -115,6 +115,13 @@ Currently public:
 - Exact paths in `publicRoutes`: `/`, `/terms`, `/privacy`, `/company`, `/blog`
 - Prefix matches: `/auth`, `/login`, `/blog/`
 
+### Text Sizing Convention
+
+- **`text-base`** (16px) — default for all body text, labels, descriptions, form fields, table content, navigation items
+- **`text-sm`** (14px) — secondary/supplementary text only: captions, hints, metadata, muted helper text
+- **Never use `text-xs`** (12px) in app-owned components. The minimum readable size is `text-sm`
+- shadcn/ui primitives (`components/ui/`) keep their upstream defaults — override sizes at the usage site if needed
+
 ### Supabase
 
 - `supabase/database.types.ts` — Auto-generated TypeScript types from schema

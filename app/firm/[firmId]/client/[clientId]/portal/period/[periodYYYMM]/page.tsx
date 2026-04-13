@@ -267,7 +267,7 @@ export default function PortalPeriodDetailPage({
                 {isLocked ? "已鎖定" : "進行中"}
               </Badge>
             </h1>
-            <p className="mt-2 text-sm text-slate-600 md:text-base">
+            <p className="mt-2 text-base text-slate-600">
               {client.name}（統編: {client.tax_id}）
             </p>
           </div>
@@ -318,10 +318,10 @@ export default function PortalPeriodDetailPage({
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-sm text-slate-500">{item.label}</p>
+                        <p className="text-base text-slate-500">{item.label}</p>
                         <p className="mt-2 text-2xl font-semibold text-slate-900">
                           {item.value}
-                          <span className="ml-1 text-sm font-medium text-slate-500">
+                          <span className="ml-1 text-base font-medium text-slate-500">
                             張
                           </span>
                         </p>
@@ -340,7 +340,7 @@ export default function PortalPeriodDetailPage({
             <CardHeader className="border-b border-slate-100/80">
               <CardTitle className="text-slate-900">操作指引</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3 pt-6 text-sm text-slate-600">
+            <CardContent className="space-y-3 pt-6 text-base text-slate-600">
               <p>1. 在「進項」與「銷項」分頁上傳本期文件並確認資料。</p>
               <p>2. 若有購買紙本發票，請至「字軌」分頁輸入起訖號。</p>
               {isLocked ? (

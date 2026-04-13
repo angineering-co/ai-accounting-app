@@ -169,7 +169,7 @@ export function AllowanceTable({
     const barClass = inOrOut === "in" ? "bg-sky-500" : "bg-orange-500";
 
     return (
-      <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+      <span className="inline-flex items-center gap-2 text-base text-muted-foreground">
         <span className={`h-4 w-0.5 rounded-full ${barClass}`} />
         {label}
       </span>
@@ -243,7 +243,7 @@ export function AllowanceTable({
   return (
     <div className="relative w-full overflow-auto max-h-[60vh] border rounded-md">
       <TooltipProvider>
-        <table className="w-full caption-bottom text-sm table-fixed">
+        <table className="w-full caption-bottom text-base table-fixed">
           <TableHeader className="sticky top-0 z-10 bg-background">
             <TableRow>
               <TableHead className="w-[88px]">縮圖</TableHead>
@@ -344,7 +344,7 @@ export function AllowanceTable({
                     >
                       <div className="space-y-1">
                         <div>{getTypeIndicator(allowance.in_or_out)}</div>
-                        <p className="truncate text-xs text-muted-foreground">
+                        <p className="truncate text-sm text-muted-foreground">
                           {extractedData?.allowanceType || "尚未擷取"}
                         </p>
                       </div>

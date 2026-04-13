@@ -619,7 +619,7 @@ export function AllowanceReviewDialog({
             ) : (
               <div className="flex flex-col items-center gap-2 text-muted-foreground p-4 text-center">
                 <p>無文件預覽</p>
-                {previewText && <p className="text-sm">{previewText}</p>}
+                {previewText && <p className="text-base">{previewText}</p>}
               </div>
             )}
           </div>

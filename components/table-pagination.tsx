@@ -25,11 +25,11 @@ export function TablePagination({
 
   return (
     <div className="flex items-center justify-between px-2 py-3">
-      <p className="text-sm text-muted-foreground">
+      <p className="text-base text-muted-foreground">
         顯示 {start}-{end} 共 {totalItems} 筆
       </p>
       <div className="flex items-center gap-2">
-        <span className="text-sm text-muted-foreground">
+        <span className="text-base text-muted-foreground">
           第 {page + 1} / {totalPages} 頁
         </span>
         <Button

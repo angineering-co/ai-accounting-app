@@ -230,7 +230,7 @@ export default function InvoicePage({
         </CardHeader>
         <CardContent className="flex gap-4">
           <div className="flex-1">
-            <label className="text-sm font-medium mb-2 block">狀態</label>
+            <label className="text-base font-medium mb-2 block">狀態</label>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger>
                 <SelectValue />
@@ -246,7 +246,7 @@ export default function InvoicePage({
             </Select>
           </div>
           <div className="flex-1">
-            <label className="text-sm font-medium mb-2 block">類型</label>
+            <label className="text-base font-medium mb-2 block">類型</label>
             <Select value={typeFilter} onValueChange={setTypeFilter}>
               <SelectTrigger>
                 <SelectValue />

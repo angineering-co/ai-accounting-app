@@ -250,12 +250,12 @@ export function RangeManagement({
                         <Input placeholder="例如: RT33662450" {...field} />
                       </FormControl>
                       {isHandwrittenInvoiceType && (
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-sm text-muted-foreground">
                           手開發票起始號末兩碼需為 00 或 50，一本50張。
                         </p>
                       )}
                       {cashierInvoiceTypes.has(selectedInvoiceType) && (
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-sm text-muted-foreground">
                           收銀機發票一卷250張。
                         </p>
                       )}

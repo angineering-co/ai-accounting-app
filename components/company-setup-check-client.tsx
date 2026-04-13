@@ -335,7 +335,7 @@ export function CompanySetupCheckClient() {
                 {opt.label}
               </span>
               {opt.disabled && opt.disableMsg && (
-                <span className="mt-1 block text-xs text-red-400">
+                <span className="mt-1 block text-sm text-red-400">
                   ({opt.disableMsg})
                 </span>
               )}

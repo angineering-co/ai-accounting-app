@@ -88,7 +88,7 @@ const DropzoneContent = ({ className }: { className?: string }) => {
     return (
       <div className={cn('flex flex-row items-center gap-x-2 justify-center', className)}>
         <CheckCircle size={16} className="text-primary" />
-        <p className="text-primary text-sm">
+        <p className="text-primary text-base">
           Successfully uploaded {files.length} file{files.length > 1 ? 's' : ''}
         </p>
       </div>
@@ -125,11 +125,11 @@ const DropzoneContent = ({ className }: { className?: string }) => {
             )}
 
             <div className="shrink grow flex flex-col items-start truncate">
-              <p title={file.name} className="text-sm truncate max-w-full">
+              <p title={file.name} className="text-base truncate max-w-full">
                 {file.name}
               </p>
               {file.errors.length > 0 ? (
-                <p className="text-xs text-destructive">
+                <p className="text-sm text-destructive">
                   {file.errors
                     .map((e) =>
                       e.message.startsWith('File is larger than')
@@ -139,13 +139,13 @@ const DropzoneContent = ({ className }: { className?: string }) => {
                     .join(', ')}
                 </p>
               ) : loading && !isSuccessfullyUploaded ? (
-                <p className="text-xs text-muted-foreground">Uploading file...</p>
+                <p className="text-sm text-muted-foreground">Uploading file...</p>
               ) : !!fileError ? (
-                <p className="text-xs text-destructive">Failed to upload: {fileError.message}</p>
+                <p className="text-sm text-destructive">Failed to upload: {fileError.message}</p>
               ) : isSuccessfullyUploaded ? (
-                <p className="text-xs text-primary">Successfully uploaded file</p>
+                <p className="text-sm text-primary">Successfully uploaded file</p>
               ) : (
-                <p className="text-xs text-muted-foreground">{formatBytes(file.size, 2)}</p>
+                <p className="text-sm text-muted-foreground">{formatBytes(file.size, 2)}</p>
               )}
             </div>
 
@@ -163,7 +163,7 @@ const DropzoneContent = ({ className }: { className?: string }) => {
         )
       })}
       {exceedMaxFiles && (
-        <p className="text-sm text-left mt-2 text-destructive">
+        <p className="text-base text-left mt-2 text-destructive">
           You may upload only up to {maxFiles} files, please remove {files.length - maxFiles} file
           {files.length - maxFiles > 1 ? 's' : ''}.
         </p>
@@ -200,12 +200,12 @@ const DropzoneEmptyState = ({ className }: { className?: string }) => {
   return (
     <div className={cn('flex flex-col items-center gap-y-2', className)}>
       <Upload size={20} className="text-muted-foreground" />
-      <p className="text-sm">
+      <p className="text-base">
         Upload{!!maxFiles && maxFiles > 1 ? ` ${maxFiles}` : ''} file
         {!maxFiles || maxFiles > 1 ? 's' : ''}
       </p>
       <div className="flex flex-col items-center gap-y-1">
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Drag and drop or{' '}
           <a
             onClick={() => inputRef.current?.click()}
@@ -216,7 +216,7 @@ const DropzoneEmptyState = ({ className }: { className?: string }) => {
           to upload
         </p>
         {maxFileSize !== Number.POSITIVE_INFINITY && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Maximum file size: {formatBytes(maxFileSize, 2)}
           </p>
         )}

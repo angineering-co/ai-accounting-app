@@ -204,7 +204,7 @@ export const DocumentUploadSection = forwardRef<
         </CardHeader>
         <CardContent className="pt-6">
           {isLocked ? (
-            <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base text-slate-600">
               此期別已鎖定，無法上傳新檔案。
             </p>
           ) : (

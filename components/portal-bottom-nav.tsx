@@ -32,7 +32,7 @@ export function PortalBottomNav() {
       >
         <Link
           href={portalHome}
-          className={`flex flex-col items-center gap-1 px-4 py-2 text-xs font-medium transition-colors ${
+          className={`flex flex-col items-center gap-1 px-4 py-2 text-sm font-medium transition-colors ${
             isHome
               ? "text-emerald-600"
               : "text-slate-500 active:text-emerald-600"
@@ -45,7 +45,7 @@ export function PortalBottomNav() {
         <button
           type="button"
           onClick={handleLogout}
-          className="flex flex-col items-center gap-1 px-4 py-2 text-xs font-medium text-slate-500 transition-colors active:text-red-600"
+          className="flex flex-col items-center gap-1 px-4 py-2 text-sm font-medium text-slate-500 transition-colors active:text-red-600"
         >
           <LogOut className="h-5 w-5" />
           <span>登出</span>

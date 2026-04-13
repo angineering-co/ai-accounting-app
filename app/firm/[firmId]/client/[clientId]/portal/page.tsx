@@ -127,7 +127,7 @@ export default function PortalDashboardPage({
             <Badge className="rounded-full bg-emerald-600 px-3 py-1 text-white hover:bg-emerald-600">
               更輕鬆報稅
             </Badge>
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/70 bg-white/80 px-3 py-1 text-sm font-medium text-emerald-800 shadow-sm shadow-emerald-100/70">
+            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/70 bg-white/80 px-3 py-1 text-base font-medium text-emerald-800 shadow-sm shadow-emerald-100/70">
               <ShieldCheck className="h-4 w-4" />
               專業團隊覆核
             </div>
@@ -137,12 +137,12 @@ export default function PortalDashboardPage({
             <h1 className="text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
               憑證上傳中心
             </h1>
-            <p className="max-w-2xl text-sm leading-6 text-slate-600 md:text-base">
+            <p className="max-w-2xl text-base leading-6 text-slate-600">
               {client.name}（統編: {client.tax_id}）
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3 text-sm">
+          <div className="flex flex-wrap gap-3 text-base">
             <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-4 py-2 text-slate-600 shadow-sm">
               <Camera className="h-4 w-4 text-emerald-600" />
               拍照上傳、輕鬆補件
@@ -155,7 +155,7 @@ export default function PortalDashboardPage({
         </div>
       </section>
 
-      <div className="flex items-start gap-2.5 rounded-xl border border-sky-200/80 bg-sky-50/60 px-4 py-3 text-sm text-sky-800">
+      <div className="flex items-start gap-2.5 rounded-xl border border-sky-200/80 bg-sky-50/60 px-4 py-3 text-base text-sky-800">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" />
         <p>電子發票不需上傳圖檔，SnapBooks 會自動從電子發票平台下載。</p>
       </div>
@@ -191,7 +191,7 @@ export default function PortalDashboardPage({
                     </Tooltip>
                   </TooltipProvider>
                 </div>
-                <p className="text-sm text-slate-600">
+                <p className="text-base text-slate-600">
                   建議先完成本期憑證上傳，避免接近截止日期。
                 </p>
               </div>
@@ -213,7 +213,7 @@ export default function PortalDashboardPage({
                 <h2 className="text-lg font-semibold text-slate-900">
                   其他期別
                 </h2>
-                <p className="text-sm text-slate-600">
+                <p className="text-base text-slate-600">
                   可隨時切換查看過往或未完成期別。
                 </p>
               </div>

@@ -44,7 +44,7 @@ export function TaxCalendarReminder() {
           <AccordionTrigger className="px-4 py-3 hover:no-underline">
             <div className="flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-slate-500" />
-              <span className="text-sm font-medium text-slate-700">
+              <span className="text-base font-medium text-slate-700">
                 下次截止：{formatDate(nextEvent)}{" "}
                 {nextEvents.length === 1
                   ? nextEvent.label
@@ -53,7 +53,7 @@ export function TaxCalendarReminder() {
               <Badge
                 variant="outline"
                 className={cn(
-                  "rounded-full px-2 py-0 text-xs font-medium",
+                  "rounded-full px-2 py-0 text-sm font-medium",
                   urgencyColor(nextEvent.daysUntil),
                 )}
               >
@@ -68,7 +68,7 @@ export function TaxCalendarReminder() {
                 <div
                   key={`${event.month}-${event.day}-${event.label}`}
                   className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm",
+                    "flex items-center gap-3 rounded-lg px-3 py-2 text-base",
                     event.isNext
                       ? "border-l-2 border-emerald-500 bg-emerald-50/60 font-medium text-slate-900"
                       : "text-slate-600",
@@ -82,7 +82,7 @@ export function TaxCalendarReminder() {
                     <Badge
                       variant="outline"
                       className={cn(
-                        "rounded-full px-2 py-0 text-xs",
+                        "rounded-full px-2 py-0 text-sm",
                         urgencyColor(event.daysUntil),
                       )}
                     >

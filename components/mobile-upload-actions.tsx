@@ -133,7 +133,7 @@ export function MobileUploadActions({
 
   return (
     <div className="mb-3 flex flex-col gap-2">
-      <p className="text-xs text-muted-foreground">
+      <p className="text-sm text-muted-foreground">
         手機可直接拍照上傳，或從相簿選取檔案。
       </p>
       <div className="flex flex-wrap gap-2">

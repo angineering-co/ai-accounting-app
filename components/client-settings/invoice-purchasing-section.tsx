@@ -129,8 +129,7 @@ export function InvoicePurchasingSection({
                           </FormLabel>
                           <FormControl>
                             <Input
-                              type="number"
-                              min={0}
+                              inputMode="numeric"
                               className="w-24"
                               {...field}
                               onChange={(e) =>

@@ -42,7 +42,7 @@ export function LandlordSection({
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      landlord: client.landlord ?? null,
+      landlord: client.landlord ?? { type: undefined as unknown as "company" | "individual", rent_amount: undefined },
     },
   });
 
@@ -88,17 +88,7 @@ export function LandlordSection({
                   <FormControl>
                     <RadioGroup
                       value={field.value ?? ""}
-                      onValueChange={(value) => {
-                        if (!landlord) {
-                          form.setValue(
-                            "landlord",
-                            { type: value as "company" | "individual", rent_amount: undefined },
-                            { shouldDirty: true },
-                          );
-                        } else {
-                          field.onChange(value);
-                        }
-                      }}
+                      onValueChange={field.onChange}
                       className="flex gap-4"
                     >
                       <div className="flex items-center space-x-2">
@@ -116,7 +106,7 @@ export function LandlordSection({
               )}
             />
 
-            {landlord && (
+            {landlord?.type && (
               <FormField
                 control={form.control}
                 name="landlord.rent_amount"

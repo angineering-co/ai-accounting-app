@@ -242,9 +242,7 @@ export function PeopleSection({
                                     NT$
                                   </span>
                                   <Input
-                                    type="number"
                                     inputMode="numeric"
-                                    min={0}
                                     placeholder="0"
                                     className="pl-12"
                                     {...field}

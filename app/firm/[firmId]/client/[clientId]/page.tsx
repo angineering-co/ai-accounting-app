@@ -1,9 +1,9 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import useSWR from "swr";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, ArrowLeft, ShieldCheck } from "lucide-react";
@@ -67,14 +67,21 @@ export default function ClientDetailPage({
     mutate: fetchPortalUsers,
   } = useSWR(["client-portal-users", clientId], () => getClientUsers(clientId));
 
+  const [isRevoking, setIsRevoking] = useState(false);
+  const [revokeDialogOpen, setRevokeDialogOpen] = useState(false);
+
   const handleRevokeAccess = async (userId: string) => {
+    setIsRevoking(true);
     try {
       await revokeClientUserAccess(userId);
       toast.success("已撤銷入口網站帳號");
+      setRevokeDialogOpen(false);
       fetchPortalUsers();
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : "撤銷失敗");
+    } finally {
+      setIsRevoking(false);
     }
   };
 
@@ -207,7 +214,10 @@ export default function ClientDetailPage({
                           </p>
                           <Badge variant="secondary">啟用中</Badge>
                         </div>
-                        <AlertDialog>
+                        <AlertDialog
+                          open={revokeDialogOpen}
+                          onOpenChange={setRevokeDialogOpen}
+                        >
                           <AlertDialogTrigger asChild>
                             <Button variant="outline">撤銷存取</Button>
                           </AlertDialogTrigger>
@@ -222,12 +232,22 @@ export default function ClientDetailPage({
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                              <AlertDialogCancel>取消</AlertDialogCancel>
+                              <AlertDialogCancel disabled={isRevoking}>
+                                取消
+                              </AlertDialogCancel>
                               <AlertDialogAction
-                                className={buttonVariants({ variant: "destructive" })}
-                                onClick={() => handleRevokeAccess(user.id)}
+                                asChild
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleRevokeAccess(user.id);
+                                }}
                               >
-                                確定撤銷
+                                <Button variant="destructive" disabled={isRevoking}>
+                                  {isRevoking && (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  )}
+                                  確定撤銷
+                                </Button>
                               </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>

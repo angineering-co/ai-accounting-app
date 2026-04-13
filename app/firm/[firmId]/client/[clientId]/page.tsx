@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import useSWR from "swr";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,17 @@ import {
 } from "@/lib/services/client-user";
 import { InviteClientDialog } from "@/components/invite-client-dialog";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 
 export default function ClientDetailPage({
@@ -56,14 +67,21 @@ export default function ClientDetailPage({
     mutate: fetchPortalUsers,
   } = useSWR(["client-portal-users", clientId], () => getClientUsers(clientId));
 
+  const [isRevoking, setIsRevoking] = useState(false);
+  const [revokeDialogOpen, setRevokeDialogOpen] = useState(false);
+
   const handleRevokeAccess = async (userId: string) => {
+    setIsRevoking(true);
     try {
       await revokeClientUserAccess(userId);
       toast.success("已撤銷入口網站帳號");
+      setRevokeDialogOpen(false);
       fetchPortalUsers();
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : "撤銷失敗");
+    } finally {
+      setIsRevoking(false);
     }
   };
 
@@ -196,12 +214,43 @@ export default function ClientDetailPage({
                           </p>
                           <Badge variant="secondary">啟用中</Badge>
                         </div>
-                        <Button
-                          variant="outline"
-                          onClick={() => handleRevokeAccess(user.id)}
+                        <AlertDialog
+                          open={revokeDialogOpen}
+                          onOpenChange={setRevokeDialogOpen}
                         >
-                          撤銷存取
-                        </Button>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="outline">撤銷存取</Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>
+                                確定要撤銷此帳號的存取權限?
+                              </AlertDialogTitle>
+                              <AlertDialogDescription>
+                                撤銷後，{user.name || user.email || "此使用者"}
+                                將無法再登入入口網站。此操作無法復原。
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel disabled={isRevoking}>
+                                取消
+                              </AlertDialogCancel>
+                              <AlertDialogAction
+                                className="bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90"
+                                disabled={isRevoking}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleRevokeAccess(user.id);
+                                }}
+                              >
+                                {isRevoking && (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                )}
+                                確定撤銷
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     ))}
                   </div>

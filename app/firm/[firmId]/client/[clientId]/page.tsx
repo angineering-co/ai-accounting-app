@@ -2,13 +2,11 @@
 
 import { use, useState } from "react";
 import useSWR from "swr";
-import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, ArrowLeft, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { clientSchema } from "@/lib/domain/models";
 import { PeriodCard } from "@/components/period-card";
 import { NewPeriodDialog } from "@/components/new-period-dialog";
 import { getTaxPeriods } from "@/lib/services/tax-period";
@@ -16,7 +14,9 @@ import {
   getClientUsers,
   revokeClientUserAccess,
 } from "@/lib/services/client-user";
+import { getClientSettings } from "@/lib/services/client-settings";
 import { InviteClientDialog } from "@/components/invite-client-dialog";
+import { ClientSettingsSections } from "@/components/client-settings/client-settings-sections";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -38,20 +38,11 @@ export default function ClientDetailPage({
 }) {
   const { firmId, clientId } = use(params);
   const router = useRouter();
-  const supabase = createSupabaseClient();
 
-  // Fetch client details
-  const { data: client, isLoading: isClientLoading } = useSWR(
+  // Fetch client details (includes settings fields)
+  const { data: client, isLoading: isClientLoading, mutate: mutateClient } = useSWR(
     ["client", clientId],
-    async () => {
-      const { data, error } = await supabase
-        .from("clients")
-        .select("*")
-        .eq("id", clientId)
-        .single();
-      if (error) throw error;
-      return clientSchema.parse(data);
-    },
+    () => getClientSettings(clientId),
   );
 
   // Fetch tax periods
@@ -147,37 +138,11 @@ export default function ClientDetailPage({
 
         <TabsContent value="basic" className="mt-6">
           <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>基本資訊</CardTitle>
-              </CardHeader>
-              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-base font-medium text-muted-foreground">
-                    統一編號
-                  </p>
-                  <p>{client.tax_id}</p>
-                </div>
-                <div>
-                  <p className="text-base font-medium text-muted-foreground">
-                    稅籍編號
-                  </p>
-                  <p>{client.tax_payer_id}</p>
-                </div>
-                <div>
-                  <p className="text-base font-medium text-muted-foreground">
-                    負責人
-                  </p>
-                  <p>{client.contact_person || "-"}</p>
-                </div>
-                <div>
-                  <p className="text-base font-medium text-muted-foreground">
-                    產業
-                  </p>
-                  <p>{client.industry || "-"}</p>
-                </div>
-              </CardContent>
-            </Card>
+            <ClientSettingsSections
+              clientId={clientId}
+              client={client}
+              onSaveSuccess={() => mutateClient()}
+            />
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0">

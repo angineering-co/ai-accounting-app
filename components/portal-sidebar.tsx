@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { LayoutDashboard, LogOut } from "lucide-react";
+import { LayoutDashboard, LogOut, Settings } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
   Sidebar,
@@ -58,6 +58,14 @@ export function PortalSidebar() {
                   <Link href={dashboardUrl}>
                     <LayoutDashboard />
                     <span>首頁</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="設定">
+                  <Link href={`${dashboardUrl}/settings`}>
+                    <Settings />
+                    <span>設定</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

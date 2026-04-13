@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
-import { Home, LogOut } from "lucide-react";
+import { Home, LogOut, Settings } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 export function PortalBottomNav() {
@@ -24,6 +24,7 @@ export function PortalBottomNav() {
 
   const portalHome = `/firm/${firmId}/client/${clientId}/portal`;
   const isHome = pathname === portalHome;
+  const isSettings = pathname.startsWith(`${portalHome}/settings`);
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white/95 backdrop-blur-sm md:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
@@ -40,6 +41,18 @@ export function PortalBottomNav() {
         >
           <Home className="h-5 w-5" />
           <span>首頁</span>
+        </Link>
+
+        <Link
+          href={`${portalHome}/settings`}
+          className={`flex flex-col items-center gap-1 px-4 py-2 text-xs font-medium transition-colors ${
+            isSettings
+              ? "text-emerald-600"
+              : "text-slate-500 active:text-emerald-600"
+          }`}
+        >
+          <Settings className="h-5 w-5" />
+          <span>設定</span>
         </Link>
 
         <button

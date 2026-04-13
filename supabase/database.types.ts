@@ -150,32 +150,56 @@ export type Database = {
       }
       clients: {
         Row: {
+          address: string | null
           contact_person: string | null
           created_at: string | null
+          email: string | null
           firm_id: string | null
           id: string
           industry: string | null
+          invoice_purchasing: Json | null
+          landlord: Json | null
           name: string
+          phone: string | null
+          platform_credentials: Json | null
+          responsible_person: Json | null
+          shareholders: Json | null
           tax_id: string
           tax_payer_id: string
         }
         Insert: {
+          address?: string | null
           contact_person?: string | null
           created_at?: string | null
+          email?: string | null
           firm_id?: string | null
           id?: string
           industry?: string | null
+          invoice_purchasing?: Json | null
+          landlord?: Json | null
           name: string
+          phone?: string | null
+          platform_credentials?: Json | null
+          responsible_person?: Json | null
+          shareholders?: Json | null
           tax_id: string
           tax_payer_id: string
         }
         Update: {
+          address?: string | null
           contact_person?: string | null
           created_at?: string | null
+          email?: string | null
           firm_id?: string | null
           id?: string
           industry?: string | null
+          invoice_purchasing?: Json | null
+          landlord?: Json | null
           name?: string
+          phone?: string | null
+          platform_credentials?: Json | null
+          responsible_person?: Json | null
+          shareholders?: Json | null
           tax_id?: string
           tax_payer_id?: string
         }

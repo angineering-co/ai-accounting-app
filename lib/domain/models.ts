@@ -20,6 +20,47 @@ export const inviteClientUserSchema = z.object({
 export type Profile = z.infer<typeof profileSchema>;
 export type InviteClientUserInput = z.infer<typeof inviteClientUserSchema>;
 
+// ===== Client Settings Sub-Schemas =====
+
+export const responsiblePersonSchema = z.object({
+  name: z.string().min(1, "負責人姓名為必填"),
+  national_id: z.string().regex(/^[A-Z]\d{9}$/, "身分證字號格式錯誤（1個英文字母+9位數字）").or(z.literal("")).optional(),
+  address: z.string().optional(),
+  capital_contribution: z.number().int({ message: "請輸入整數金額" }).nonnegative().optional(),
+});
+
+export const shareholderSchema = z.object({
+  name: z.string().min(1, "股東姓名為必填"),
+  national_id: z.string().regex(/^[A-Z]\d{9}$/, "身分證字號格式錯誤（1個英文字母+9位數字）").or(z.literal("")).optional(),
+  address: z.string().optional(),
+  capital_contribution: z.number().int({ message: "請輸入整數金額" }).nonnegative().optional(),
+});
+
+export const platformCredentialsSchema = z.object({
+  einvoice_username: z.string().optional(),
+  einvoice_password: z.string().optional(),
+  tax_filing_password: z.string().optional(),
+});
+
+export const landlordSchema = z.object({
+  type: z.enum(["company", "individual"]),
+  rent_amount: z.number().int({ message: "請輸入整數金額" }).nonnegative().optional(),
+});
+
+export const invoicePurchasingSchema = z.object({
+  enabled: z.boolean().default(false),
+  two_part_manual: z.number().int({ message: "請輸入整數" }).nonnegative().default(0),
+  three_part_manual: z.number().int({ message: "請輸入整數" }).nonnegative().default(0),
+  two_part_register: z.number().int({ message: "請輸入整數" }).nonnegative().default(0),
+  three_part_register: z.number().int({ message: "請輸入整數" }).nonnegative().default(0),
+});
+
+export type ResponsiblePerson = z.infer<typeof responsiblePersonSchema>;
+export type Shareholder = z.infer<typeof shareholderSchema>;
+export type PlatformCredentials = z.infer<typeof platformCredentialsSchema>;
+export type Landlord = z.infer<typeof landlordSchema>;
+export type InvoicePurchasing = z.infer<typeof invoicePurchasingSchema>;
+
 // ===== Client Schemas =====
 export const clientSchema = z.object({
   id: z.string().uuid(),
@@ -29,6 +70,14 @@ export const clientSchema = z.object({
   tax_id: z.string().min(8, "統一編號格式錯誤").max(8, "統一編號格式錯誤"),
   tax_payer_id: z.string().min(1, "稅籍編號為必填"),
   industry: z.string().nullable().optional(),
+  address: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  email: z.string().nullable().optional(),
+  responsible_person: responsiblePersonSchema.nullable().optional(),
+  shareholders: z.array(shareholderSchema).nullable().optional(),
+  platform_credentials: platformCredentialsSchema.nullable().optional(),
+  landlord: landlordSchema.nullable().optional(),
+  invoice_purchasing: invoicePurchasingSchema.nullable().optional(),
 });
 
 export const updateClientSchema = clientSchema.pick({
@@ -48,9 +97,21 @@ export const createClientSchema = clientSchema.pick({
   industry: true,
 });
 
+export const updateClientSettingsSchema = z.object({
+  address: z.string().optional(),
+  phone: z.string().optional(),
+  email: z.string().email("信箱格式錯誤").or(z.literal("")).optional(),
+  responsible_person: responsiblePersonSchema.nullable().optional(),
+  shareholders: z.array(shareholderSchema).nullable().optional(),
+  platform_credentials: platformCredentialsSchema.nullable().optional(),
+  landlord: landlordSchema.nullable().optional(),
+  invoice_purchasing: invoicePurchasingSchema.nullable().optional(),
+});
+
 export type Client = z.infer<typeof clientSchema>;
 export type UpdateClientInput = z.infer<typeof updateClientSchema>;
 export type CreateClientInput = z.infer<typeof createClientSchema>;
+export type UpdateClientSettingsInput = z.infer<typeof updateClientSettingsSchema>;
 
 // ===== Invoice Schemas =====
 

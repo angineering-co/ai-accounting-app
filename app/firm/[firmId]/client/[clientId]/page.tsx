@@ -236,18 +236,17 @@ export default function ClientDetailPage({
                                 取消
                               </AlertDialogCancel>
                               <AlertDialogAction
-                                asChild
+                                className="bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90"
+                                disabled={isRevoking}
                                 onClick={(e) => {
                                   e.preventDefault();
                                   handleRevokeAccess(user.id);
                                 }}
                               >
-                                <Button variant="destructive" disabled={isRevoking}>
-                                  {isRevoking && (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  )}
-                                  確定撤銷
-                                </Button>
+                                {isRevoking && (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                )}
+                                確定撤銷
                               </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>

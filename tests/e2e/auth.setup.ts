@@ -348,7 +348,7 @@ setup("create test data and authenticate", async ({ page }) => {
   await page.fill('input#password', TEST_PASSWORD);
   await page.click('button[type="submit"]');
   await page.waitForURL("**/dashboard**", { timeout: 15000 });
-  await page.context().storageState({ path: path.join(authDir, "user.json") });
+  await page.context().storageState({ path: path.join(authDir, "admin-user.json") });
 
   // 9. Log in as client portal user
   await page.goto("/auth/login");

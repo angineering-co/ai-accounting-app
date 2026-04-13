@@ -60,7 +60,7 @@ export default async function globalTeardown() {
   // Clean up fixture files
   fs.unlinkSync(fixturePath);
   const authDir = path.join(__dirname, ".auth");
-  for (const f of ["user.json", "client-user.json"]) {
+  for (const f of ["admin-user.json", "client-user.json"]) {
     const p = path.join(authDir, f);
     if (fs.existsSync(p)) fs.unlinkSync(p);
   }

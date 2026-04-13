@@ -24,6 +24,7 @@ export const metadata: Metadata = {
     "SnapBooks.ai 協助一人公司與小型團隊，拍照上傳單據與 AI 整理流程，更快完成記帳與報稅。",
   manifest: "/manifest.json",
   icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
     apple: "/apple-touch-icon.png",
   },
   appleWebApp: {

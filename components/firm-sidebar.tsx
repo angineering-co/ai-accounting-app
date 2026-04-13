@@ -61,12 +61,12 @@ export function FirmSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>管理模組</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-sm">管理模組</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild tooltip={item.title}>
+                  <SidebarMenuButton asChild tooltip={item.title} className="text-base">
                     <Link href={item.url}>
                       <item.icon />
                       <span>{item.title}</span>
@@ -81,7 +81,7 @@ export function FirmSidebar() {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton onClick={handleLogout} className="text-destructive hover:text-destructive hover:bg-destructive/10">
+            <SidebarMenuButton onClick={handleLogout} className="text-base text-destructive hover:text-destructive hover:bg-destructive/10">
               <LogOut className="size-4" />
               <span>Logout</span>
             </SidebarMenuButton>

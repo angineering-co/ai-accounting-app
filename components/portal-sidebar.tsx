@@ -50,11 +50,11 @@ export function PortalSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>入口網站</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-sm">入口網站</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="首頁">
+                <SidebarMenuButton asChild tooltip="首頁" className="text-base">
                   <Link href={dashboardUrl}>
                     <LayoutDashboard />
                     <span>首頁</span>
@@ -70,7 +70,7 @@ export function PortalSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton
               onClick={handleLogout}
-              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              className="text-base text-destructive hover:text-destructive hover:bg-destructive/10"
             >
               <LogOut className="size-4" />
               <span>Logout</span>

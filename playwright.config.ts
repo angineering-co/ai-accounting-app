@@ -20,6 +20,16 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         storageState: "tests/e2e/.auth/user.json",
       },
+      testIgnore: /.*\.portal\.spec\.ts/,
+      dependencies: ["setup"],
+    },
+    {
+      name: "chromium-portal",
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: "tests/e2e/.auth/client-user.json",
+      },
+      testMatch: /.*\.portal\.spec\.ts/,
       dependencies: ["setup"],
     },
   ],

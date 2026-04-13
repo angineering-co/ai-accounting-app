@@ -48,13 +48,22 @@ export default async function globalTeardown() {
 
   await supabase.from("clients").delete().eq("id", fixture.clientId);
   await supabase.from("profiles").delete().eq("id", fixture.userId);
+  if (fixture.clientUserId) {
+    await supabase.from("profiles").delete().eq("id", fixture.clientUserId);
+  }
   await supabase.from("firms").delete().eq("id", fixture.firmId);
   await supabase.auth.admin.deleteUser(fixture.userId);
+  if (fixture.clientUserId) {
+    await supabase.auth.admin.deleteUser(fixture.clientUserId);
+  }
 
   // Clean up fixture files
   fs.unlinkSync(fixturePath);
-  const userStatePath = path.join(__dirname, ".auth", "user.json");
-  if (fs.existsSync(userStatePath)) fs.unlinkSync(userStatePath);
+  const authDir = path.join(__dirname, ".auth");
+  for (const f of ["user.json", "client-user.json"]) {
+    const p = path.join(authDir, f);
+    if (fs.existsSync(p)) fs.unlinkSync(p);
+  }
 
   console.log("E2E teardown complete.");
 }

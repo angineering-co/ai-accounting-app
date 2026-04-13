@@ -34,6 +34,8 @@ function getServiceClient() {
 export interface E2EFixture {
   userId: string;
   userEmail: string;
+  clientUserId: string;
+  clientUserEmail: string;
   firmId: string;
   clientId: string;
   periodId: string;
@@ -300,10 +302,32 @@ setup("create test data and authenticate", async ({ page }) => {
 
   const invoiceIds = insertedInvoices?.map((i) => i.id) ?? [];
 
+  // 7. Create client portal user
+  const clientEmail = `e2e-client-${testId}@example.com`;
+  const { data: clientUserData, error: clientUserError } =
+    await supabase.auth.admin.createUser({
+      email: clientEmail,
+      password: TEST_PASSWORD,
+      email_confirm: true,
+      user_metadata: { name: "E2E Client User", role: "client", firm_id: firm.id, client_id: client.id },
+    });
+  if (clientUserError || !clientUserData.user)
+    throw clientUserError ?? new Error("No client user");
+  const clientUserId = clientUserData.user.id;
+
+  // Link client user profile
+  const { error: clientProfileError } = await supabase
+    .from("profiles")
+    .update({ firm_id: firm.id, client_id: client.id, name: "E2E Client User", role: "client" })
+    .eq("id", clientUserId);
+  if (clientProfileError) throw clientProfileError;
+
   // Save fixture data for tests and teardown
   const fixture: E2EFixture = {
     userId,
     userEmail: email,
+    clientUserId,
+    clientUserEmail: clientEmail,
     firmId: firm.id,
     clientId: client.id,
     periodId: period.id,
@@ -318,15 +342,19 @@ setup("create test data and authenticate", async ({ page }) => {
     JSON.stringify(fixture, null, 2),
   );
 
-  // 7. Log in via the UI
+  // 8. Log in as admin via the UI
   await page.goto("/auth/login");
   await page.fill('input#email', email);
   await page.fill('input#password', TEST_PASSWORD);
   await page.click('button[type="submit"]');
-
-  // Wait for redirect to dashboard (successful login)
   await page.waitForURL("**/dashboard**", { timeout: 15000 });
-
-  // Save authenticated state
   await page.context().storageState({ path: path.join(authDir, "user.json") });
+
+  // 9. Log in as client portal user
+  await page.goto("/auth/login");
+  await page.fill('input#email', clientEmail);
+  await page.fill('input#password', TEST_PASSWORD);
+  await page.click('button[type="submit"]');
+  await page.waitForURL("**/firm/**", { timeout: 15000 });
+  await page.context().storageState({ path: path.join(authDir, "client-user.json") });
 });

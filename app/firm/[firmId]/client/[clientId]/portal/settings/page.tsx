@@ -43,6 +43,7 @@ export default function PortalSettingsPage({
       <ClientSettingsSections
         clientId={clientId}
         client={client}
+        isPortal
         onSaveSuccess={() => mutate()}
       />
     </div>

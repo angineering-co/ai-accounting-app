@@ -28,13 +28,18 @@ test.describe.configure({ mode: "serial" });
 // ─── Company basics section ─────────────────────────────────────────
 
 test.describe("Client settings — company basics", () => {
-  test("read-only fields are disabled", async ({ page }) => {
+  test("name, tax_id, tax_payer_id are editable on admin page", async ({ page }) => {
     await goToBasicTab(page);
 
     const section = page.locator("text=公司基本資料").locator("..").locator("..");
-    const inputs = section.locator("input[disabled]");
-    // 公司名稱, 統一編號, 稅籍編號 should be disabled
-    await expect(inputs).toHaveCount(3);
+    // All three identity fields should be enabled (not disabled) on admin
+    const nameInput = section.locator("label", { hasText: "公司名稱" }).locator("..").locator("input");
+    const taxIdInput = section.locator("label", { hasText: "統一編號" }).locator("..").locator("input");
+    const taxPayerIdInput = section.locator("label", { hasText: "稅籍編號" }).locator("..").locator("input");
+
+    await expect(nameInput).toBeEnabled();
+    await expect(taxIdInput).toBeEnabled();
+    await expect(taxPayerIdInput).toBeEnabled();
   });
 
   test("can save address, phone, email", async ({ page }) => {

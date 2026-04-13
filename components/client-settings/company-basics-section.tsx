@@ -8,7 +8,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Form,
   FormControl,
@@ -21,6 +20,9 @@ import { updateClientSettings } from "@/lib/services/client-settings";
 import type { Client } from "@/lib/domain/models";
 
 const formSchema = z.object({
+  name: z.string().min(1, "客戶名稱為必填"),
+  tax_id: z.string().min(8, "統一編號格式錯誤").max(8, "統一編號格式錯誤"),
+  tax_payer_id: z.string().min(1, "稅籍編號為必填"),
   address: z.string().optional(),
   phone: z.string().optional(),
   email: z.string().email("信箱格式錯誤").or(z.literal("")).optional(),
@@ -31,17 +33,22 @@ type FormValues = z.infer<typeof formSchema>;
 interface CompanyBasicsSectionProps {
   clientId: string;
   client: Client;
+  isPortal?: boolean;
   onSaveSuccess?: () => void;
 }
 
 export function CompanyBasicsSection({
   clientId,
   client,
+  isPortal = false,
   onSaveSuccess,
 }: CompanyBasicsSectionProps) {
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      name: client.name,
+      tax_id: client.tax_id,
+      tax_payer_id: client.tax_payer_id,
       address: client.address ?? "",
       phone: client.phone ?? "",
       email: client.email ?? "",
@@ -68,18 +75,45 @@ export function CompanyBasicsSection({
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label className="text-muted-foreground">公司名稱</Label>
-                <Input value={client.name} disabled />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-muted-foreground">統一編號</Label>
-                <Input value={client.tax_id} disabled />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-muted-foreground">稅籍編號</Label>
-                <Input value={client.tax_payer_id} disabled />
-              </div>
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>公司名稱</FormLabel>
+                    <FormControl>
+                      <Input {...field} disabled={isPortal} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="tax_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>統一編號</FormLabel>
+                    <FormControl>
+                      <Input {...field} disabled={isPortal} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="tax_payer_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>稅籍編號</FormLabel>
+                    <FormControl>
+                      <Input {...field} disabled={isPortal} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
 
             <FormField

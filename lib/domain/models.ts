@@ -98,6 +98,9 @@ export const createClientSchema = clientSchema.pick({
 });
 
 export const updateClientSettingsSchema = z.object({
+  name: z.string().min(1, "客戶名稱為必填").optional(),
+  tax_id: z.string().min(8, "統一編號格式錯誤").max(8, "統一編號格式錯誤").optional(),
+  tax_payer_id: z.string().min(1, "稅籍編號為必填").optional(),
   address: z.string().optional(),
   phone: z.string().optional(),
   email: z.string().email("信箱格式錯誤").or(z.literal("")).optional(),

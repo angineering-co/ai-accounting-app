@@ -10,12 +10,14 @@ import type { Client } from "@/lib/domain/models";
 interface ClientSettingsSectionsProps {
   clientId: string;
   client: Client;
+  isPortal?: boolean;
   onSaveSuccess?: () => void;
 }
 
 export function ClientSettingsSections({
   clientId,
   client,
+  isPortal,
   onSaveSuccess,
 }: ClientSettingsSectionsProps) {
   return (
@@ -23,6 +25,7 @@ export function ClientSettingsSections({
       <CompanyBasicsSection
         clientId={clientId}
         client={client}
+        isPortal={isPortal}
         onSaveSuccess={onSaveSuccess}
       />
       <PeopleSection

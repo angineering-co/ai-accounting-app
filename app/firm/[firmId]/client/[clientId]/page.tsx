@@ -3,7 +3,7 @@
 import { use } from "react";
 import useSWR from "swr";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, ArrowLeft, ShieldCheck } from "lucide-react";
@@ -18,6 +18,17 @@ import {
 } from "@/lib/services/client-user";
 import { InviteClientDialog } from "@/components/invite-client-dialog";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 
 export default function ClientDetailPage({
@@ -196,12 +207,31 @@ export default function ClientDetailPage({
                           </p>
                           <Badge variant="secondary">啟用中</Badge>
                         </div>
-                        <Button
-                          variant="outline"
-                          onClick={() => handleRevokeAccess(user.id)}
-                        >
-                          撤銷存取
-                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="outline">撤銷存取</Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>
+                                確定要撤銷此帳號的存取權限?
+                              </AlertDialogTitle>
+                              <AlertDialogDescription>
+                                撤銷後，{user.name || user.email || "此使用者"}
+                                將無法再登入入口網站。此操作無法復原。
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>取消</AlertDialogCancel>
+                              <AlertDialogAction
+                                className={buttonVariants({ variant: "destructive" })}
+                                onClick={() => handleRevokeAccess(user.id)}
+                              >
+                                確定撤銷
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     ))}
                   </div>

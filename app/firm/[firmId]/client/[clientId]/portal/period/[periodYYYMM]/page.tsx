@@ -7,12 +7,10 @@ import { ArrowLeft, FileText, Loader2, Receipt } from "lucide-react";
 import Link from "next/link";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { RocPeriod } from "@/lib/domain/roc-period";
-import {
-  clientSchema,
-  invoiceSchema,
-  allowanceSchema,
-} from "@/lib/domain/models";
+import { clientSchema } from "@/lib/domain/models";
 import { getTaxPeriodByYYYMM } from "@/lib/services/tax-period";
+import { usePaginatedPeriodInvoices } from "@/hooks/use-paginated-period-invoices";
+import { usePaginatedPeriodAllowances } from "@/hooks/use-paginated-period-allowances";
 import {
   DocumentUploadSection,
   type DocumentUploadSectionHandle,
@@ -21,6 +19,7 @@ import { InvoiceDeleteDialog } from "@/components/invoice/invoice-delete-dialog"
 import { AllowanceDeleteDialog } from "@/components/allowance-delete-dialog";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { PortalUploadFab } from "@/components/portal-upload-fab";
+import { TablePagination } from "@/components/table-pagination";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -59,6 +58,8 @@ const RangeManagement = dynamic(
   },
 );
 
+const PAGE_SIZE = 50;
+
 type DeleteTarget = {
   id: string;
   name: string;
@@ -79,11 +80,6 @@ export default function PortalPeriodDetailPage({
   const { firmId, clientId, periodYYYMM } = use(params);
   const supabase = createSupabaseClient();
   const rocPeriod = RocPeriod.fromYYYMM(periodYYYMM);
-  const { data: claims } = useSWR("portal-claims", async () => {
-    const { data } = await supabase.auth.getClaims();
-    return data?.claims;
-  });
-  const userId = claims?.sub;
   const [invoiceToDelete, setInvoiceToDelete] = useState<DeleteTarget | null>(
     null,
   );
@@ -93,6 +89,10 @@ export default function PortalPeriodDetailPage({
     null,
   );
   const [activeTab, setActiveTab] = useState("overview");
+  const [inInvoicePage, setInInvoicePage] = useState(0);
+  const [outInvoicePage, setOutInvoicePage] = useState(0);
+  const [inAllowancePage, setInAllowancePage] = useState(0);
+  const [outAllowancePage, setOutAllowancePage] = useState(0);
   const inInvoiceRef = useRef<DocumentUploadSectionHandle>(null);
   const outInvoiceRef = useRef<DocumentUploadSectionHandle>(null);
   const inAllowanceRef = useRef<DocumentUploadSectionHandle>(null);
@@ -142,42 +142,54 @@ export default function PortalPeriodDetailPage({
   );
 
   const {
-    data: invoices = [],
-    isLoading: isInvoicesLoading,
-    mutate: mutateInvoices,
-  } = useSWR(
-    period && userId ? ["portal-period-invoices", period.id, userId] : null,
-    async () => {
-      if (!period || !userId) return [];
-      const { data, error } = await supabase
-        .from("invoices")
-        .select("*")
-        .eq("tax_filing_period_id", period.id)
-        .eq("uploaded_by", userId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return invoiceSchema.array().parse(data || []);
-    },
-  );
+    invoices: inInvoices,
+    totalCount: inInvoiceTotalCount,
+    isLoading: isInInvoicesLoading,
+    mutate: mutateInInvoices,
+  } = usePaginatedPeriodInvoices({
+    periodId: period?.id ?? null,
+    inOrOut: "in",
+    page: inInvoicePage,
+    pageSize: PAGE_SIZE,
+  });
 
   const {
-    data: allowances = [],
-    isLoading: isAllowancesLoading,
-    mutate: mutateAllowances,
-  } = useSWR(
-    period && userId ? ["portal-period-allowances", period.id, userId] : null,
-    async () => {
-      if (!period || !userId) return [];
-      const { data, error } = await supabase
-        .from("allowances")
-        .select("*")
-        .eq("tax_filing_period_id", period.id)
-        .eq("uploaded_by", userId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return allowanceSchema.array().parse(data || []);
-    },
-  );
+    invoices: outInvoices,
+    totalCount: outInvoiceTotalCount,
+    isLoading: isOutInvoicesLoading,
+    mutate: mutateOutInvoices,
+  } = usePaginatedPeriodInvoices({
+    periodId: period?.id ?? null,
+    inOrOut: "out",
+    page: outInvoicePage,
+    pageSize: PAGE_SIZE,
+  });
+
+  const {
+    allowances: inAllowances,
+    totalCount: inAllowanceTotalCount,
+    isLoading: isInAllowancesLoading,
+    mutate: mutateInAllowances,
+  } = usePaginatedPeriodAllowances({
+    periodId: period?.id ?? null,
+    clientId,
+    inOrOut: "in",
+    page: inAllowancePage,
+    pageSize: PAGE_SIZE,
+  });
+
+  const {
+    allowances: outAllowances,
+    totalCount: outAllowanceTotalCount,
+    isLoading: isOutAllowancesLoading,
+    mutate: mutateOutAllowances,
+  } = usePaginatedPeriodAllowances({
+    periodId: period?.id ?? null,
+    clientId,
+    inOrOut: "out",
+    page: outAllowancePage,
+    pageSize: PAGE_SIZE,
+  });
 
   const handleFabFilesSelected = useCallback(
     (files: File[], inOrOut: "in" | "out", type: "invoice" | "allowance") => {
@@ -210,29 +222,25 @@ export default function PortalPeriodDetailPage({
 
   const isLocked = period.status === "locked" || period.status === "filed";
 
-  const inInvoices = invoices.filter((item) => item.in_or_out === "in");
-  const outInvoices = invoices.filter((item) => item.in_or_out === "out");
-  const inAllowances = allowances.filter((item) => item.in_or_out === "in");
-  const outAllowances = allowances.filter((item) => item.in_or_out === "out");
   const overviewItems = [
     {
       label: "進項發票",
-      value: inInvoices.length,
+      value: inInvoiceTotalCount,
       icon: FileText,
     },
     {
       label: "銷項發票",
-      value: outInvoices.length,
+      value: outInvoiceTotalCount,
       icon: Receipt,
     },
     {
       label: "進項折讓",
-      value: inAllowances.length,
+      value: inAllowanceTotalCount,
       icon: FileText,
     },
     {
       label: "銷項折讓",
-      value: outAllowances.length,
+      value: outAllowanceTotalCount,
       icon: Receipt,
     },
   ];
@@ -372,12 +380,12 @@ export default function PortalPeriodDetailPage({
             type="invoice"
             inOrOut="in"
             isLocked={isLocked}
-            onUploaded={mutateInvoices}
+            onUploaded={mutateInInvoices}
           />
           <div className="hidden md:block">
             <InvoiceTable
               invoices={inInvoices}
-              isLoading={isInvoicesLoading}
+              isLoading={isInInvoicesLoading}
               showClientColumn={false}
               onReview={handleReview}
               onDelete={
@@ -389,6 +397,13 @@ export default function PortalPeriodDetailPage({
                         name: invoice.filename,
                       })
               }
+            />
+            <TablePagination
+              page={inInvoicePage}
+              totalPages={Math.max(1, Math.ceil(inInvoiceTotalCount / PAGE_SIZE))}
+              totalItems={inInvoiceTotalCount}
+              pageSize={PAGE_SIZE}
+              onPageChange={setInInvoicePage}
             />
           </div>
 
@@ -402,12 +417,12 @@ export default function PortalPeriodDetailPage({
             type="allowance"
             inOrOut="in"
             isLocked={isLocked}
-            onUploaded={mutateAllowances}
+            onUploaded={mutateInAllowances}
           />
           <div className="hidden md:block">
             <AllowanceTable
               allowances={inAllowances}
-              isLoading={isAllowancesLoading}
+              isLoading={isInAllowancesLoading}
               onReview={handleReview}
               onDelete={
                 isLocked
@@ -421,6 +436,13 @@ export default function PortalPeriodDetailPage({
                           "-",
                       })
               }
+            />
+            <TablePagination
+              page={inAllowancePage}
+              totalPages={Math.max(1, Math.ceil(inAllowanceTotalCount / PAGE_SIZE))}
+              totalItems={inAllowanceTotalCount}
+              pageSize={PAGE_SIZE}
+              onPageChange={setInAllowancePage}
             />
           </div>
         </TabsContent>
@@ -441,12 +463,12 @@ export default function PortalPeriodDetailPage({
             type="invoice"
             inOrOut="out"
             isLocked={isLocked}
-            onUploaded={mutateInvoices}
+            onUploaded={mutateOutInvoices}
           />
           <div className="hidden md:block">
             <InvoiceTable
               invoices={outInvoices}
-              isLoading={isInvoicesLoading}
+              isLoading={isOutInvoicesLoading}
               showClientColumn={false}
               onReview={handleReview}
               onDelete={
@@ -458,6 +480,13 @@ export default function PortalPeriodDetailPage({
                         name: invoice.filename,
                       })
               }
+            />
+            <TablePagination
+              page={outInvoicePage}
+              totalPages={Math.max(1, Math.ceil(outInvoiceTotalCount / PAGE_SIZE))}
+              totalItems={outInvoiceTotalCount}
+              pageSize={PAGE_SIZE}
+              onPageChange={setOutInvoicePage}
             />
           </div>
 
@@ -471,12 +500,12 @@ export default function PortalPeriodDetailPage({
             type="allowance"
             inOrOut="out"
             isLocked={isLocked}
-            onUploaded={mutateAllowances}
+            onUploaded={mutateOutAllowances}
           />
           <div className="hidden md:block">
             <AllowanceTable
               allowances={outAllowances}
-              isLoading={isAllowancesLoading}
+              isLoading={isOutAllowancesLoading}
               onReview={handleReview}
               onDelete={
                 isLocked
@@ -490,6 +519,13 @@ export default function PortalPeriodDetailPage({
                           "-",
                       })
               }
+            />
+            <TablePagination
+              page={outAllowancePage}
+              totalPages={Math.max(1, Math.ceil(outAllowanceTotalCount / PAGE_SIZE))}
+              totalItems={outAllowanceTotalCount}
+              pageSize={PAGE_SIZE}
+              onPageChange={setOutAllowancePage}
             />
           </div>
         </TabsContent>
@@ -509,7 +545,7 @@ export default function PortalPeriodDetailPage({
         onOpenChange={(open) => !open && setInvoiceToDelete(null)}
         onSuccess={async () => {
           await mutatePeriod();
-          await mutateInvoices();
+          await Promise.all([mutateInInvoices(), mutateOutInvoices()]);
         }}
       />
 
@@ -526,7 +562,9 @@ export default function PortalPeriodDetailPage({
         allowance={allowanceToDelete}
         open={!!allowanceToDelete}
         onOpenChange={(open) => !open && setAllowanceToDelete(null)}
-        onSuccess={mutateAllowances}
+        onSuccess={async () => {
+          await Promise.all([mutateInAllowances(), mutateOutAllowances()]);
+        }}
       />
 
       <PortalUploadFab

@@ -10,6 +10,7 @@ interface UsePaginatedPeriodAllowancesProps {
   periodId: string | null;
   clientId: string;
   statusFilter?: string;
+  inOrOut?: "in" | "out";
   page?: number;
   pageSize?: number;
 }
@@ -18,6 +19,7 @@ export function usePaginatedPeriodAllowances({
   periodId,
   clientId,
   statusFilter = "all",
+  inOrOut,
   page = 0,
   pageSize = DEFAULT_PAGE_SIZE,
 }: UsePaginatedPeriodAllowancesProps) {
@@ -27,7 +29,7 @@ export function usePaginatedPeriodAllowances({
 
   const { data, isLoading, mutate } = useSWR(
     periodId
-      ? ["period-allowances", periodId, clientId, statusFilter, page, pageSize]
+      ? ["period-allowances", periodId, clientId, statusFilter, inOrOut ?? "all", page, pageSize]
       : null,
     async () => {
       if (!periodId) return { items: [], count: 0 };
@@ -41,6 +43,10 @@ export function usePaginatedPeriodAllowances({
 
       if (statusFilter !== "all") {
         query = query.eq("status", statusFilter);
+      }
+
+      if (inOrOut) {
+        query = query.eq("in_or_out", inOrOut);
       }
 
       query = query.range(start, end);

@@ -9,6 +9,7 @@ const DEFAULT_PAGE_SIZE = 50;
 interface UsePaginatedPeriodInvoicesProps {
   periodId: string | null;
   statusFilter?: string;
+  inOrOut?: "in" | "out";
   page?: number;
   pageSize?: number;
 }
@@ -16,6 +17,7 @@ interface UsePaginatedPeriodInvoicesProps {
 export function usePaginatedPeriodInvoices({
   periodId,
   statusFilter = "all",
+  inOrOut,
   page = 0,
   pageSize = DEFAULT_PAGE_SIZE,
 }: UsePaginatedPeriodInvoicesProps) {
@@ -25,7 +27,7 @@ export function usePaginatedPeriodInvoices({
 
   const { data, isLoading, mutate } = useSWR(
     periodId
-      ? ["period-invoices", periodId, statusFilter, page, pageSize]
+      ? ["period-invoices", periodId, statusFilter, inOrOut ?? "all", page, pageSize]
       : null,
     async () => {
       if (!periodId) return { items: [], count: 0 };
@@ -38,6 +40,10 @@ export function usePaginatedPeriodInvoices({
 
       if (statusFilter !== "all") {
         query = query.eq("status", statusFilter);
+      }
+
+      if (inOrOut) {
+        query = query.eq("in_or_out", inOrOut);
       }
 
       query = query.range(start, end);

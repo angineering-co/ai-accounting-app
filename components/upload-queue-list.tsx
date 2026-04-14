@@ -54,7 +54,7 @@ export function UploadQueueList({
           <CardTitle>{title}</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">目前沒有待辨識檔案。</p>
+          <p className="text-base text-muted-foreground">目前沒有待辨識檔案。</p>
         </CardContent>
       </Card>
     );
@@ -70,7 +70,7 @@ export function UploadQueueList({
           {items.map((item) => (
             <li
               key={item.id}
-              className="w-44 shrink-0 rounded-md border bg-muted/20 p-2 text-xs md:w-auto md:shrink"
+              className="w-44 shrink-0 rounded-md border bg-muted/20 p-2 text-sm md:w-auto md:shrink"
               title={item.filename}
             >
               <div className="mb-2 flex h-24 w-full items-center justify-center overflow-hidden rounded border bg-background">
@@ -94,10 +94,10 @@ export function UploadQueueList({
                       </button>
                     </DialogTrigger>
                     <DialogContent className="w-[95vw] max-w-3xl p-3 sm:p-4">
-                      <DialogTitle className="truncate text-sm sm:text-base">
+                      <DialogTitle className="truncate text-base">
                         {item.filename}
                       </DialogTitle>
-                      <DialogDescription className="text-xs">
+                      <DialogDescription className="text-sm">
                         點擊縮圖可放大預覽
                       </DialogDescription>
                       <div className="relative mt-1 h-[70vh] w-full overflow-hidden rounded-md border bg-background">
@@ -159,7 +159,7 @@ export function UploadQueueList({
             </Button>
           </div>
         ) : (
-          <p className="text-center text-xs text-muted-foreground">
+          <p className="text-center text-sm text-muted-foreground">
             已載入全部待辨識檔案
           </p>
         )}

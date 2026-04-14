@@ -325,7 +325,7 @@ export function ReportGeneration({
               </div>
 
               <div className="space-y-4 border rounded-md p-4">
-                <h3 className="font-medium text-sm">申報人資訊</h3>
+                <h3 className="font-medium text-base">申報人資訊</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={tetUForm.control}
@@ -393,7 +393,7 @@ export function ReportGeneration({
               </div>
 
               <div className="space-y-4 border rounded-md p-4">
-                <h3 className="font-medium text-sm">稅額調整欄位</h3>
+                <h3 className="font-medium text-base">稅額調整欄位</h3>
                 <div className="grid grid-cols-3 gap-4">
                   <FormField
                     control={tetUForm.control}

@@ -123,7 +123,7 @@ export function FilePreviewDialog({
               <span>載入預覽中...</span>
             </div>
           ) : !previewUrl ? (
-            <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
+            <div className="flex h-full w-full items-center justify-center text-base text-muted-foreground">
               {isInlinePreviewSupported
                 ? "無法載入預覽"
                 : "此檔案類型不支援內嵌預覽"}
@@ -144,7 +144,7 @@ export function FilePreviewDialog({
               sandbox="allow-scripts allow-same-origin"
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
+            <div className="flex h-full w-full items-center justify-center text-base text-muted-foreground">
               此檔案類型不支援內嵌預覽
             </div>
           )}

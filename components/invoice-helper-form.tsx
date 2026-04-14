@@ -126,7 +126,7 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
           </Label>
           <div className="grid gap-3 sm:grid-cols-[180px_1fr]">
             <div>
-              <Label className="text-sm text-slate-600 mb-1 block">
+              <Label className="text-base text-slate-600 mb-1 block">
                 統一編號
               </Label>
               <Input
@@ -142,7 +142,7 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
               />
             </div>
             <div>
-              <Label className="text-sm text-slate-600 mb-1 block flex items-center gap-1">
+              <Label className="text-base text-slate-600 mb-1 block flex items-center gap-1">
                 公司名稱
                 {data.buyerTaxId.length === 8 && !data.buyerName && (
                   <Loader2 className="h-3 w-3 animate-spin text-slate-400" />
@@ -273,15 +273,15 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <Label className="text-sm text-slate-500 mb-1 block">數量</Label>
+                    <Label className="text-base text-slate-500 mb-1 block">數量</Label>
                     <Input {...quantityProps} className="h-11 text-lg text-center" />
                   </div>
                   <div>
-                    <Label className="text-sm text-slate-500 mb-1 block">單價</Label>
+                    <Label className="text-base text-slate-500 mb-1 block">單價</Label>
                     <Input {...unitPriceProps} className="h-11 text-lg text-right font-mono" />
                   </div>
                   <div>
-                    <Label className="text-sm text-slate-500 mb-1 block">金額</Label>
+                    <Label className="text-base text-slate-500 mb-1 block">金額</Label>
                     <div className="h-11 flex items-center justify-end font-mono text-lg text-slate-700 tabular-nums px-2 bg-white rounded-md border border-slate-200">
                       {item.amount ? item.amount.toLocaleString() : "-"}
                     </div>
@@ -306,14 +306,14 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
       {/* Bidirectional Tax Totals (only for 應稅) */}
       {data.taxType === "應稅" && (
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
-          <p className="text-sm text-slate-500">
+          <p className="text-base text-slate-500">
             {data.variant === "二聯式"
               ? "二聯式發票品項金額為含稅價，系統自動反算未稅金額"
               : "三聯式發票品項金額為未稅價，系統自動加計營業稅"}
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <Label className="text-sm text-slate-600 mb-1 block">
+              <Label className="text-base text-slate-600 mb-1 block">
                 未稅金額（銷售額）
               </Label>
               <Input
@@ -331,7 +331,7 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
               />
             </div>
             <div>
-              <Label className="text-sm text-slate-600 mb-1 block">
+              <Label className="text-base text-slate-600 mb-1 block">
                 含稅金額（總計）
               </Label>
               <Input

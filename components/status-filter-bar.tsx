@@ -62,7 +62,7 @@ export function StatusFilterBar({
             type="button"
             onClick={() => onStatusChange(option.value)}
             className={cn(
-              "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+              "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium transition-colors",
               isActive
                 ? option.activeClass
                 : "border-transparent bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground",

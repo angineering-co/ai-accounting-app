@@ -990,7 +990,7 @@ export function InvoiceReviewDialog({
                         </PopoverContent>
                       </Popover>
                       {isPeriodMismatch && invoice?.year_month && (
-                        <div className="flex items-center gap-1.5 mt-1 text-xs font-medium text-orange-600 bg-orange-50 p-1.5 rounded border border-orange-200">
+                        <div className="flex items-center gap-1.5 mt-1 text-sm font-medium text-orange-600 bg-orange-50 p-1.5 rounded border border-orange-200">
                           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                           <span>
                             期別不符 ({RocPeriod.fromYYYMM(invoice.year_month).format()})
@@ -1107,7 +1107,7 @@ export function InvoiceReviewDialog({
               {(isAiTotalMismatch || isTaxAmountWarning) && (
                 <div className="space-y-1.5">
                   {isAiTotalMismatch && (
-                    <div className="flex items-center gap-1.5 text-xs font-medium text-orange-600 bg-orange-50 p-1.5 rounded border border-orange-200">
+                    <div className="flex items-center gap-1.5 text-sm font-medium text-orange-600 bg-orange-50 p-1.5 rounded border border-orange-200">
                       <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                       <span>
                         AI 辨識總計為 {aiExtractedTotal}，與銷售額 + 稅額 ({computedTotal}) 不符，請確認銷售額與稅額是否正確
@@ -1115,7 +1115,7 @@ export function InvoiceReviewDialog({
                     </div>
                   )}
                   {isTaxAmountWarning && (
-                    <div className="flex items-center gap-1.5 text-xs font-medium text-red-600 bg-red-50 p-1.5 rounded border border-red-200">
+                    <div className="flex items-center gap-1.5 text-sm font-medium text-red-600 bg-red-50 p-1.5 rounded border border-red-200">
                       <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                       <span>
                         {isTaxEmbeddedInvoice
@@ -1175,7 +1175,7 @@ export function InvoiceReviewDialog({
                         />
                       </FormControl>
                       {isSellerTaxIdInvalid && (
-                        <div className="flex items-center gap-1.5 mt-2 text-xs font-medium text-red-600 bg-red-50 p-2 rounded border border-red-200">
+                        <div className="flex items-center gap-1.5 mt-2 text-sm font-medium text-red-600 bg-red-50 p-2 rounded border border-red-200">
                           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                           <span>統一編號檢核碼不符</span>
                         </div>
@@ -1234,7 +1234,7 @@ export function InvoiceReviewDialog({
                         />
                       </FormControl>
                       {isBuyerTaxIdInvalid && (
-                        <div className="flex items-center gap-1.5 mt-2 text-xs font-medium text-red-600 bg-red-50 p-2 rounded border border-red-200">
+                        <div className="flex items-center gap-1.5 mt-2 text-sm font-medium text-red-600 bg-red-50 p-2 rounded border border-red-200">
                           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                           <span>統一編號檢核碼不符</span>
                         </div>
@@ -1457,13 +1457,13 @@ export function InvoiceReviewDialog({
             {/* Linked Allowances Section */}
             {linkedAllowances.length > 0 && (
               <div className="mt-3 space-y-2 border-t pt-3">
-                <p className="text-sm font-medium">
+                <p className="text-base font-medium">
                   相關折讓單 ({linkedAllowances.length})
                 </p>
                 {linkedAllowances.map((allowance) => (
                   <div
                     key={allowance.id}
-                    className="flex items-center justify-between text-sm p-2 bg-muted rounded-md"
+                    className="flex items-center justify-between text-base p-2 bg-muted rounded-md"
                   >
                     <div className="flex items-center gap-3">
                       <span className="font-mono">
@@ -1480,7 +1480,7 @@ export function InvoiceReviewDialog({
                           allowance.extracted_data?.amount || 0
                         ).toLocaleString()}
                       </span>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-sm text-muted-foreground">
                         {allowance.status === "confirmed" ? "已確認" : "待確認"}
                       </span>
                     </div>

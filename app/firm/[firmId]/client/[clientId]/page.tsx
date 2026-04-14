@@ -153,25 +153,25 @@ export default function ClientDetailPage({
               </CardHeader>
               <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">
+                  <p className="text-base font-medium text-muted-foreground">
                     統一編號
                   </p>
                   <p>{client.tax_id}</p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">
+                  <p className="text-base font-medium text-muted-foreground">
                     稅籍編號
                   </p>
                   <p>{client.tax_payer_id}</p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">
+                  <p className="text-base font-medium text-muted-foreground">
                     負責人
                   </p>
                   <p>{client.contact_person || "-"}</p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">
+                  <p className="text-base font-medium text-muted-foreground">
                     產業
                   </p>
                   <p>{client.industry || "-"}</p>
@@ -197,7 +197,7 @@ export default function ClientDetailPage({
                     <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                   </div>
                 ) : portalUsers.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-base text-muted-foreground">
                     尚未建立入口網站帳號。
                   </p>
                 ) : (
@@ -209,7 +209,7 @@ export default function ClientDetailPage({
                       >
                         <div className="space-y-1">
                           <p className="font-medium">{user.name || "未命名使用者"}</p>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-base text-muted-foreground">
                             {user.email || "無 Email"}
                           </p>
                           <Badge variant="secondary">啟用中</Badge>

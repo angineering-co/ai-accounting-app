@@ -53,7 +53,7 @@ export function ForgotPasswordForm({
             <CardDescription>已寄送密碼重設連結</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-base text-muted-foreground">
               如果您曾使用此電子郵件註冊，將會收到密碼重設郵件。
             </p>
           </CardContent>
@@ -80,12 +80,12 @@ export function ForgotPasswordForm({
                     onChange={(e) => setEmail(e.target.value)}
                   />
                 </div>
-                {error && <p className="text-sm text-red-500">{error}</p>}
+                {error && <p className="text-base text-red-500">{error}</p>}
                 <Button type="submit" className="w-full" disabled={isLoading}>
                   {isLoading ? "寄送中..." : "寄送重設郵件"}
                 </Button>
               </div>
-              <div className="mt-4 text-center text-sm">
+              <div className="mt-4 text-center text-base">
                 <Link
                   href="/auth/login"
                   className="underline underline-offset-4"

@@ -38,7 +38,7 @@ export function MobileNav() {
 
           {/* 小工具 section */}
           <div className="pt-2 border-t border-slate-100 mt-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <span className="text-sm font-semibold uppercase tracking-wider text-slate-400">
               小工具
             </span>
             <div className="mt-1 flex flex-col gap-1">

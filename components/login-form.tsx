@@ -81,7 +81,7 @@ export function LoginForm({
                   </Label>
                   <Link
                     href="/auth/forgot-password"
-                    className="ml-auto inline-block text-sm text-emerald-600 underline-offset-4 hover:underline"
+                    className="ml-auto inline-block text-base text-emerald-600 underline-offset-4 hover:underline"
                   >
                     忘記密碼？
                   </Link>
@@ -96,7 +96,7 @@ export function LoginForm({
                 />
               </div>
               {error && (
-                <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">
+                <p className="rounded-lg bg-red-50 px-4 py-2 text-base text-red-600">
                   {error}
                 </p>
               )}

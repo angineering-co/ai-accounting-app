@@ -15,11 +15,21 @@ export default defineConfig({
   projects: [
     { name: "setup", testMatch: /.*\.setup\.ts/ },
     {
-      name: "chromium",
+      name: "chromium-admin-flows",
       use: {
         ...devices["Desktop Chrome"],
-        storageState: "tests/e2e/.auth/user.json",
+        storageState: "tests/e2e/.auth/admin-user.json",
       },
+      testIgnore: /.*\.portal\.spec\.ts/,
+      dependencies: ["setup"],
+    },
+    {
+      name: "chromium-client-flows",
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: "tests/e2e/.auth/client-user.json",
+      },
+      testMatch: /.*\.portal\.spec\.ts/,
       dependencies: ["setup"],
     },
   ],

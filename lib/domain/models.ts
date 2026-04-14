@@ -50,7 +50,9 @@ export const landlordSchema = z.object({
 export const invoicePurchasingSchema = z.object({
   enabled: z.boolean().default(false),
   two_part_manual: z.number().int({ message: "請輸入整數" }).nonnegative().default(0),
+  two_part_manual_duplicate: z.boolean().default(false),
   three_part_manual: z.number().int({ message: "請輸入整數" }).nonnegative().default(0),
+  three_part_manual_duplicate: z.boolean().default(false),
   two_part_register: z.number().int({ message: "請輸入整數" }).nonnegative().default(0),
   three_part_register: z.number().int({ message: "請輸入整數" }).nonnegative().default(0),
 });

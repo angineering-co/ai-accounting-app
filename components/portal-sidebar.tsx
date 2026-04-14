@@ -62,7 +62,7 @@ export function PortalSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="設定">
+                <SidebarMenuButton asChild tooltip="設定" className="text-base">
                   <Link href={`${dashboardUrl}/settings`}>
                     <Settings />
                     <span>設定</span>

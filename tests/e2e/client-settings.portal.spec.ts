@@ -44,12 +44,13 @@ test.describe("Portal settings — company basics", () => {
     await expect(section.getByRole("textbox", { name: "稅籍編號" })).toBeDisabled();
   });
 
-  test("can save address, phone, email", async ({ page }) => {
+  test("can save address, mailing address, phone, email", async ({ page }) => {
     await goToSettings(page);
 
     const section = getSection(page, "公司基本資料");
 
     await section.locator('input[placeholder="請輸入公司地址"]').fill("台北市大安區復興南路200號");
+    await section.locator('input[placeholder="請輸入通訊地址"]').fill("台北市信義區松仁路100號");
     await section.locator('input[placeholder="請輸入聯絡電話"]').fill("02-2700-5678");
     await section.locator('input[placeholder="請輸入聯絡信箱"]').fill("portal@snapbooks.ai");
 
@@ -60,6 +61,7 @@ test.describe("Portal settings — company basics", () => {
     await goToSettings(page);
     const s = getSection(page, "公司基本資料");
     await expect(s.locator('input[placeholder="請輸入公司地址"]')).toHaveValue("台北市大安區復興南路200號");
+    await expect(s.locator('input[placeholder="請輸入通訊地址"]')).toHaveValue("台北市信義區松仁路100號");
     await expect(s.locator('input[placeholder="請輸入聯絡電話"]')).toHaveValue("02-2700-5678");
     await expect(s.locator('input[placeholder="請輸入聯絡信箱"]')).toHaveValue("portal@snapbooks.ai");
   });

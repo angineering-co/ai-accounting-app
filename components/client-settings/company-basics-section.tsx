@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -8,6 +9,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import {
   Form,
   FormControl,
@@ -24,6 +27,7 @@ const formSchema = z.object({
   tax_id: z.string().min(8, "統一編號格式錯誤").max(8, "統一編號格式錯誤"),
   tax_payer_id: z.string().min(1, "稅籍編號為必填"),
   address: z.string().optional(),
+  mailing_address: z.string().optional(),
   phone: z.string().optional(),
   email: z.string().email("信箱格式錯誤").or(z.literal("")).optional(),
 });
@@ -50,10 +54,22 @@ export function CompanyBasicsSection({
       tax_id: client.tax_id,
       tax_payer_id: client.tax_payer_id,
       address: client.address ?? "",
+      mailing_address: client.mailing_address ?? "",
       phone: client.phone ?? "",
       email: client.email ?? "",
     },
   });
+
+  const address = form.watch("address");
+  const [sameAsCompany, setSameAsCompany] = useState(
+    () => !!(client.address && client.mailing_address && client.address === client.mailing_address),
+  );
+
+  useEffect(() => {
+    if (sameAsCompany && form.getValues("mailing_address") !== (address ?? "")) {
+      form.setValue("mailing_address", address ?? "", { shouldDirty: true });
+    }
+  }, [sameAsCompany, address, form]);
 
   const onSubmit = async (values: FormValues) => {
     try {
@@ -124,6 +140,36 @@ export function CompanyBasicsSection({
                   <FormLabel>公司地址</FormLabel>
                   <FormControl>
                     <Input placeholder="請輸入公司地址" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="mailing_address"
+              render={({ field }) => (
+                <FormItem>
+                  <div className="flex items-center gap-4">
+                    <FormLabel>通訊地址</FormLabel>
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="same-as-company"
+                        checked={sameAsCompany}
+                        onCheckedChange={(checked) => setSameAsCompany(!!checked)}
+                      />
+                      <Label htmlFor="same-as-company" className="text-sm font-normal text-muted-foreground">
+                        同公司地址
+                      </Label>
+                    </div>
+                  </div>
+                  <FormControl>
+                    <Input
+                      placeholder="請輸入通訊地址"
+                      {...field}
+                      disabled={sameAsCompany}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

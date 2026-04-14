@@ -159,6 +159,7 @@ export type Database = {
           industry: string | null
           invoice_purchasing: Json | null
           landlord: Json | null
+          mailing_address: string | null
           name: string
           phone: string | null
           platform_credentials: Json | null
@@ -177,6 +178,7 @@ export type Database = {
           industry?: string | null
           invoice_purchasing?: Json | null
           landlord?: Json | null
+          mailing_address?: string | null
           name: string
           phone?: string | null
           platform_credentials?: Json | null
@@ -195,6 +197,7 @@ export type Database = {
           industry?: string | null
           invoice_purchasing?: Json | null
           landlord?: Json | null
+          mailing_address?: string | null
           name?: string
           phone?: string | null
           platform_credentials?: Json | null

@@ -42,13 +42,14 @@ test.describe("Client settings — company basics", () => {
     await expect(taxPayerIdInput).toBeEnabled();
   });
 
-  test("can save address, phone, email", async ({ page }) => {
+  test("can save address, mailing address, phone, email", async ({ page }) => {
     await goToBasicTab(page);
 
     const section = page.locator("text=公司基本資料").locator("..").locator("..");
 
     // Fill in editable fields
     await section.locator('input[placeholder="請輸入公司地址"]').fill("台北市信義區松仁路100號");
+    await section.locator('input[placeholder="請輸入通訊地址"]').fill("台北市大安區忠孝東路50號");
     await section.locator('input[placeholder="請輸入聯絡電話"]').fill("02-2720-1234");
     await section.locator('input[placeholder="請輸入聯絡信箱"]').fill("test@snapbooks.ai");
 
@@ -62,6 +63,7 @@ test.describe("Client settings — company basics", () => {
     await goToBasicTab(page);
     const sectionAfter = page.locator("text=公司基本資料").locator("..").locator("..");
     await expect(sectionAfter.locator('input[placeholder="請輸入公司地址"]')).toHaveValue("台北市信義區松仁路100號");
+    await expect(sectionAfter.locator('input[placeholder="請輸入通訊地址"]')).toHaveValue("台北市大安區忠孝東路50號");
     await expect(sectionAfter.locator('input[placeholder="請輸入聯絡電話"]')).toHaveValue("02-2720-1234");
     await expect(sectionAfter.locator('input[placeholder="請輸入聯絡信箱"]')).toHaveValue("test@snapbooks.ai");
   });

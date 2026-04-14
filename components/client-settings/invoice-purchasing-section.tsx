@@ -123,10 +123,8 @@ export function InvoicePurchasingSection({
                     name={`invoice_purchasing.${key}`}
                     render={({ field }) => (
                       <FormItem>
-                        <div className="flex items-center gap-3">
-                          <FormLabel className="min-w-[140px] shrink-0">
-                            {label}
-                          </FormLabel>
+                        <FormLabel>{label}</FormLabel>
+                        <div className="flex items-center gap-2">
                           <FormControl>
                             <Input
                               inputMode="numeric"
@@ -141,7 +139,7 @@ export function InvoicePurchasingSection({
                               }
                             />
                           </FormControl>
-                          <span className="text-sm text-muted-foreground">
+                          <span className="text-sm text-muted-foreground whitespace-nowrap">
                             {unit}（{unitNote}）
                           </span>
                         </div>

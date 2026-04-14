@@ -76,7 +76,7 @@ export function PeopleSection({
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <CardContent className="space-y-6">
             <div>
-              <h3 className="text-sm font-medium text-muted-foreground mb-3">負責人</h3>
+              <h3 className="text-base font-medium text-muted-foreground mb-3">負責人</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
@@ -153,7 +153,7 @@ export function PeopleSection({
 
             <div>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium text-muted-foreground">股東</h3>
+                <h3 className="text-base font-medium text-muted-foreground">股東</h3>
                 <Button
                   type="button"
                   variant="outline"

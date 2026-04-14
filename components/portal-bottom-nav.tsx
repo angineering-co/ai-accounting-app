@@ -45,7 +45,7 @@ export function PortalBottomNav() {
 
         <Link
           href={`${portalHome}/settings`}
-          className={`flex flex-col items-center gap-1 px-4 py-2 text-xs font-medium transition-colors ${
+          className={`flex flex-col items-center gap-1 px-4 py-2 text-sm font-medium transition-colors ${
             isSettings
               ? "text-emerald-600"
               : "text-slate-500 active:text-emerald-600"

@@ -86,10 +86,10 @@ export function CredentialsSection({
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <CardContent className="space-y-6">
             <div>
-              <h3 className="text-sm font-medium text-muted-foreground mb-1">
+              <h3 className="text-base font-medium text-muted-foreground mb-1">
                 電子發票平台
               </h3>
-              <p className="text-sm text-muted-foreground mb-3">
+              <p className="text-base text-muted-foreground mb-3">
                 財政部電子發票平台（俗稱大平台）
                 <a
                   href="https://www.einvoice.nat.gov.tw"
@@ -136,10 +136,10 @@ export function CredentialsSection({
             </div>
 
             <div>
-              <h3 className="text-sm font-medium text-muted-foreground mb-1">
+              <h3 className="text-base font-medium text-muted-foreground mb-1">
                 營業人電子申報平台
               </h3>
-              <p className="text-sm text-muted-foreground mb-3">
+              <p className="text-base text-muted-foreground mb-3">
                 <a
                   href="https://tax.nat.gov.tw/password.html"
                   target="_blank"

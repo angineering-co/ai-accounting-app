@@ -139,7 +139,7 @@ export function InvoicePurchasingSection({
                               }
                             />
                           </FormControl>
-                          <span className="text-sm text-muted-foreground whitespace-nowrap">
+                          <span className="text-base text-muted-foreground whitespace-nowrap">
                             {unit}（{unitNote}）
                           </span>
                         </div>

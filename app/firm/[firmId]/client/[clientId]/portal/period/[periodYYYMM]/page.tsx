@@ -350,6 +350,9 @@ export default function PortalPeriodDetailPage({
                 );
               })}
             </CardContent>
+            <p className="px-6 pb-6 text-sm text-slate-500 md:hidden">
+              總覽顯示本期所有資料數量，手機版僅顯示待辨識檔案。如需查看完整資料，請使用電腦版。
+            </p>
           </Card>
 
           <Card className="border-slate-200/80 bg-white shadow-sm shadow-slate-200/60">
@@ -453,6 +456,10 @@ export default function PortalPeriodDetailPage({
               onPageChange={setInAllowancePage}
             />
           </div>
+
+          <p className="text-sm text-slate-500 md:hidden">
+            手機版僅顯示待辨識檔案，如需查看所有已處理資料請使用電腦版。
+          </p>
         </TabsContent>
 
         {/* Same pattern as input tab: mounted for performance, hidden when inactive for correct tab UX. */}
@@ -536,6 +543,10 @@ export default function PortalPeriodDetailPage({
               onPageChange={setOutAllowancePage}
             />
           </div>
+
+          <p className="text-sm text-slate-500 md:hidden">
+            手機版僅顯示待辨識檔案，如需查看所有已處理資料請使用電腦版。
+          </p>
         </TabsContent>
 
         <TabsContent value="ranges" className="mt-6">

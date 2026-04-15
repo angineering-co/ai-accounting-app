@@ -22,12 +22,10 @@ export function BlogCta({ title, children }: BlogCtaProps) {
         </a>
         ，或{" "}
         <a
-          href="https://calendar.app.google/Cy9JgZH521YNiHV77"
-          target="_blank"
-          rel="noopener noreferrer"
+          href="/apply"
           className="inline-flex items-center gap-1 rounded-lg border border-emerald-600 px-3 py-1 font-semibold text-emerald-700 hover:bg-emerald-100"
         >
-          會計師免費諮詢
+          取得報價
         </a>
       </p>
     </div>

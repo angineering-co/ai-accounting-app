@@ -88,7 +88,7 @@ export default function StartupGuidePage() {
               className="group rounded-full bg-emerald-600 text-white hover:bg-emerald-500 border-0 h-14 px-8 text-lg font-semibold shadow-lg shadow-emerald-600/25 transition-all duration-300 hover:shadow-xl hover:shadow-emerald-600/30 hover:-translate-y-0.5"
             >
               <CtaLink href={ctaHref} location="startup_guide_cta">
-                預約免費諮詢
+                立即申請
                 <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
               </CtaLink>
             </Button>

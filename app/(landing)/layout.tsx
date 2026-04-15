@@ -53,7 +53,7 @@ export default function LandingLayout({
               className="rounded-full bg-emerald-500 text-white hover:bg-slate-800 font-medium"
             >
               <CtaLink href="/apply" location="nav">
-                免費諮詢
+                立即申請
               </CtaLink>
             </Button>
           </div>

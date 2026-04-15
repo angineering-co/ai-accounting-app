@@ -171,7 +171,7 @@ export const faqCategories: FaqCategory[] = [
       {
         question: "未成年子女可以擔任股東嗎？",
         answer:
-          "可以，但需要法定代理人同意；但需要注意的是，如果是股份有限公司，因為發起人須為成年人，因此再發起的當下不能擔任發起人，但設立之後可以轉讓股份給未成年子女。",
+          "可以，但需要法定代理人同意；但需要注意的是，如果是股份有限公司，因為發起人須為成年人，因此在發起的當下不能擔任發起人，但設立之後可以轉讓股份給未成年子女。",
       },
     ],
   },
@@ -182,7 +182,7 @@ export const faqCategories: FaqCategory[] = [
       {
         question: "資本額最低限制與設定建議",
         answer:
-          "除特許行業（例如營造業等）現行法律雖無最低資本額限制，但建議至少足以支付設立初期的開銷。資本額高低除了影響公司的形象外，以及部分產業投標可能需要較高的資本額。",
+          "除特許行業（例如營造業等）現行法律雖無最低資本額限制，但建議至少足以支付設立初期的開銷。資本額高低除了影響公司的形象外，部分產業投標也可能需要較高的資本額。",
       },
       {
         question: "資本額對公司的影響",
@@ -219,7 +219,7 @@ export const faqCategories: FaqCategory[] = [
               2. 資本額存入後，至少<strong className="font-bold text-slate-900">「隔天」</strong>，可至銀行臨櫃申請存款餘額證明，要隔天是因為這樣才能證明資本額在存入當天的晚上24點為止資本額都沒動用。
             </p>
             <p>
-              3. 部分銀行開立餘額證明困難，也可以<strong className="font-bold text-slate-900">「隔天」</strong>存入1000元後，在提供金額頁面，這樣也能證明資本額在前一天的晚上24點都沒動用。
+              3. 部分銀行開立餘額證明困難，也可以<strong className="font-bold text-slate-900">「隔天」</strong>存入1000元後，再提供存摺明細頁面，這樣也能證明資本額在前一天的晚上24點都沒動用。
             </p>
           </div>
         ),
@@ -278,7 +278,7 @@ export const faqCategories: FaqCategory[] = [
               4. 公司章程及股東名冊
             </p>
             <p>
-              5. 國稅局稅籍登記核准函(通常在負責人親自前往登記轄區國稅局後會取得，依照轄區不同，有些轄區是當場核發，但多數一周後收到郵寄公文)
+              5. 國稅局稅籍登記核准函(通常在負責人親自前往登記轄區國稅局後會取得，依照轄區不同，有些轄區是當場核發，但多數一週後收到郵寄公文)
             </p>
           </div>
         )
@@ -323,7 +323,7 @@ export const faqCategories: FaqCategory[] = [
               同一地址可登記多家公司，但需留意空間是否足以辨識經營範圍，並確保公文收發有專人處理以免遺漏重大通知。
             </p>
             <p>
-              由於政府公文書有法行政法規定，<strong className="font-bold text-slate-900">只能寄送到公司登記地址</strong>，因此要特別留意政府公文書的送達，一旦有人簽收(即使是管理權簽收)，即視為公司已收悉。
+              由於政府公文書依法規定，<strong className="font-bold text-slate-900">只能寄送到公司登記地址</strong>，因此要特別留意政府公文書的送達，一旦有人簽收(即使是管理室簽收)，即視為公司已收悉。
             </p>
           </div>
         )
@@ -354,7 +354,7 @@ export const faqCategories: FaqCategory[] = [
         answer: (
           <div className="space-y-2">
             <p>
-              <strong className="font-bold text-slate-900">有限公司</strong>適合結構簡單、股東彼此任賴感強的小型企業，基本上經營以股東同意為主；
+              <strong className="font-bold text-slate-900">有限公司</strong>適合結構簡單、股東彼此信賴感強的小型企業，基本上經營以股東同意為主；
             </p>
             <p>
               <strong className="font-bold text-slate-900">股份有限公司</strong>則適合股權結構複雜，之後想要引進外部投資人，或是將股權分散給較多人的企業。
@@ -393,10 +393,10 @@ export const faqCategories: FaqCategory[] = [
         answer: (
           <div className="space-y-2">
             <p>
-              營業項目應根據實際經營內容選擇對應的營業代碼。但是由於營業項目繁多，依此登記實際使用到的項目並加上<strong className="font-bold text-slate-900">ZZ999999「其他經許可之相關業務」</strong>可以避免未來實際經營的業務與登記不符。特定項目（如醫療器材）需經特許。
+              營業項目應根據實際經營內容選擇對應的營業代碼。但是由於營業項目繁多，以此登記實際使用到的項目並加上<strong className="font-bold text-slate-900">ZZ999999「其他經許可之相關業務」</strong>可以避免未來實際經營的業務與登記不符。特定項目（如醫療器材）需經特許。
             </p>
             <p>
-              另外，很多人會搞混的是，經濟部的營業項目代碼與國稅局並不同，因此屆時去國稅局申請營業人登記時，仍需要再重新選擇一次營業項目，照實後選擇的營業項目，則是國稅局之後作為課稅評估使用。
+              另外，很多人會搞混的是，經濟部的營業項目代碼與國稅局並不同，因此屆時去國稅局申請營業人登記時，仍需要再重新選擇一次營業項目，最後選擇的營業項目，則是國稅局之後作為課稅評估使用。
             </p>
           </div>
         )
@@ -436,7 +436,7 @@ export const faqCategories: FaqCategory[] = [
       {
         question: "年度帳冊保存",
         answer:
-          "因為本公司採用電子服務，因此原始憑證由公司自行保存 5 年、帳冊、報表等稅務申報資料依規定保存10年。",
+          "因為本公司採用電子服務，因此原始憑證由公司自行保存 5 年、帳冊、報表等稅務申報資料依規定保存 10 年。",
       },
       {
         question: "記帳服務與費用範圍",
@@ -530,13 +530,13 @@ export const faqCategories: FaqCategory[] = [
         answer: (
           <div className="space-y-2">
             <p>
-              分為健保、勞保、及勞工退休金等方面來說明：。
+              分為健保、勞保、及勞工退休金等方面來說明：
             </p>
             <p>
               <strong className="font-bold text-slate-900">勞保</strong>員工人數未滿五人，公司可以選擇不成立投保單位，但仍須為員工加保就業保險、職災保險及提繳6%勞工退休金，
             </p>
             <p>
-              <strong className="font-bold text-slate-900">健保</strong>雇主仍需要依照最低薪資幫員工投保，但如果員工在其他地方已經依照受雇者身分加保，那麼就可以不用加保，
+              <strong className="font-bold text-slate-900">健保</strong>雇主仍需要依照員工實際薪資幫員工投保，但如果員工在其他地方已經依照受雇者身分加保，那麼就可以不用加保，
             </p>
             <p>
               <strong className="font-bold text-slate-900">勞工退休金</strong>雇主仍須提繳6%的勞工退休金。

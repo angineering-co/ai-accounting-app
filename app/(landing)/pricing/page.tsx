@@ -26,8 +26,7 @@ export const metadata: Metadata = {
 };
 
 export default function PricingPage() {
-  const earlyAdopterFormUrl = process.env.NEXT_PUBLIC_EARLY_ADOPTER_FORM_URL;
-  const ctaHref = earlyAdopterFormUrl ?? "#signup-unavailable";
+  const ctaHref = "/apply";
 
   return (
     <main className="flex flex-1 flex-col">

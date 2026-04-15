@@ -13,9 +13,6 @@ export default function LandingLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const ctaHref =
-    process.env.NEXT_PUBLIC_EARLY_ADOPTER_FORM_URL ?? "#signup-unavailable";
-
   return (
     <div className="flex min-h-screen flex-col bg-white selection:bg-emerald-100 selection:text-emerald-900 font-sans text-slate-900">
       {/* Sticky Navigation */}
@@ -55,7 +52,7 @@ export default function LandingLayout({
               size="sm"
               className="rounded-full bg-emerald-500 text-white hover:bg-slate-800 font-medium"
             >
-              <CtaLink href={ctaHref} location="nav">
+              <CtaLink href="/apply" location="nav">
                 免費諮詢
               </CtaLink>
             </Button>

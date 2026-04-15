@@ -48,8 +48,7 @@ export const metadata: Metadata = {
 };
 
 export default function StartupGuidePage() {
-  const ctaHref =
-    process.env.NEXT_PUBLIC_EARLY_ADOPTER_FORM_URL ?? "#signup-unavailable";
+  const ctaHref = "/apply";
 
   return (
     <main className="flex-1">

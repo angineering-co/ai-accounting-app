@@ -201,9 +201,7 @@ const startupGuideSteps = [
 ];
 
 export default function Home() {
-  const earlyAdopterFormUrl = process.env.NEXT_PUBLIC_EARLY_ADOPTER_FORM_URL;
-  const hasFormUrl = Boolean(earlyAdopterFormUrl);
-  const ctaHref = earlyAdopterFormUrl ?? "#signup-unavailable";
+  const ctaHref = "/apply";
 
   return (
     <>
@@ -252,14 +250,6 @@ export default function Home() {
                   <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
                 </CtaLink>
               </Button>
-              {!hasFormUrl && (
-                <p
-                  id="signup-unavailable"
-                  className="text-xs text-slate-500"
-                >
-                  諮詢表單即將開放，敬請期待。
-                </p>
-              )}
               <CouponDialog
                 location="hero_promo"
                 trigger={

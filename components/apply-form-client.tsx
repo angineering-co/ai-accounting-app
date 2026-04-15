@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Copy, Check, ArrowRight, Building2, FileText, ExternalLink } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -66,6 +66,12 @@ export function ApplyFormClient() {
   const [result, setResult] = useState<{ leadCode: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Restore prior submission from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("apply_lead_code");
+    if (saved) setResult({ leadCode: saved });
+  }, []);
 
   // Registration fields
   const [companyType, setCompanyType] = useState("");
@@ -133,6 +139,7 @@ export function ApplyFormClient() {
       const res = await submitApplyForm(formData);
       if (res.success && res.leadCode) {
         trackApplySubmit(path);
+        localStorage.setItem("apply_lead_code", res.leadCode);
         setResult({ leadCode: res.leadCode });
       } else {
         setError(res.error ?? "送出失敗，請稍後再試");
@@ -208,7 +215,7 @@ export function ApplyFormClient() {
   const faqs = path === "registration" ? REGISTRATION_FAQS : BOOKKEEPING_FAQS;
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
+    <form onSubmit={handleSubmit} noValidate className="space-y-8">
       {/* Path selection */}
       <div className="space-y-3">
         <Label className="text-lg font-semibold text-slate-700">

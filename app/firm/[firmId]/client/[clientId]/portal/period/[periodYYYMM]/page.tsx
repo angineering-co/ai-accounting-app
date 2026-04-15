@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useCallback, useRef, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import dynamic from "next/dynamic";
 import { ArrowLeft, FileText, Loader2, Receipt } from "lucide-react";
@@ -190,6 +190,14 @@ export default function PortalPeriodDetailPage({
     page: outAllowancePage,
     pageSize: PAGE_SIZE,
   });
+
+  // Reset page to 0 when current page is beyond available data (e.g. after deletion)
+  useEffect(() => {
+    if (inInvoiceTotalCount > 0 && inInvoicePage * PAGE_SIZE >= inInvoiceTotalCount) setInInvoicePage(0);
+    if (outInvoiceTotalCount > 0 && outInvoicePage * PAGE_SIZE >= outInvoiceTotalCount) setOutInvoicePage(0);
+    if (inAllowanceTotalCount > 0 && inAllowancePage * PAGE_SIZE >= inAllowanceTotalCount) setInAllowancePage(0);
+    if (outAllowanceTotalCount > 0 && outAllowancePage * PAGE_SIZE >= outAllowanceTotalCount) setOutAllowancePage(0);
+  }, [inInvoiceTotalCount, outInvoiceTotalCount, inAllowanceTotalCount, outAllowanceTotalCount, inInvoicePage, outInvoicePage, inAllowancePage, outAllowancePage]);
 
   const handleFabFilesSelected = useCallback(
     (files: File[], inOrOut: "in" | "out", type: "invoice" | "allowance") => {

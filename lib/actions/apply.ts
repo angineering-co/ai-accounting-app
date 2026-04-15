@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export interface ApplyFormData {
   path: "registration" | "bookkeeping";
@@ -48,11 +48,11 @@ export async function submitApplyForm(
   if (!formData.contactName?.trim()) {
     return { success: false, error: "請填寫聯絡人姓名" };
   }
-  if (!formData.email?.trim()) {
-    return { success: false, error: "請填寫電子信箱" };
+  if (!formData.email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+    return { success: false, error: "請填寫正確的電子信箱格式" };
   }
-  if (!formData.phone?.trim()) {
-    return { success: false, error: "請填寫聯絡電話" };
+  if (!formData.phone?.trim() || !/^0\d{8,9}$/.test(formData.phone.trim().replace(/[-\s]/g, ""))) {
+    return { success: false, error: "請填寫正確的電話號碼（例如 0912345678）" };
   }
   if (!formData.path) {
     return { success: false, error: "請選擇服務類型" };
@@ -82,12 +82,7 @@ export async function submitApplyForm(
   );
 
   try {
-    // Use untyped client — leads table is not yet in generated database.types.ts
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { autoRefreshToken: false, persistSession: false } },
-    );
+    const supabase = createAdminClient();
     const { error } = await supabase.from("leads").insert({
       lead_code: leadCode,
       path,

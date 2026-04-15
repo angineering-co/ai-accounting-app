@@ -3,7 +3,7 @@
 create table if not exists leads (
   id uuid primary key default gen_random_uuid(),
   lead_code text unique not null,
-  path text not null check (path in ('registration', 'bookkeeping')),
+  path text not null,
   data jsonb not null default '{}',
   status text not null default 'new' check (status in ('new', 'contacted', 'converted')),
   created_at timestamptz not null default now(),

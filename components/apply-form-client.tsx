@@ -292,7 +292,7 @@ export function ApplyFormClient() {
             <h3 className="text-lg font-semibold text-slate-700">聯絡資訊</h3>
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label htmlFor="contactName">聯絡人姓名 *</Label>
+                <Label htmlFor="contactName" className="text-base">聯絡人姓名 *</Label>
                 <Input
                   id="contactName"
                   value={contactName}
@@ -302,7 +302,7 @@ export function ApplyFormClient() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="email">電子信箱 *</Label>
+                <Label htmlFor="email" className="text-base">電子信箱 *</Label>
                 <Input
                   id="email"
                   type="email"
@@ -313,7 +313,7 @@ export function ApplyFormClient() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="phone">聯絡電話 *</Label>
+                <Label htmlFor="phone" className="text-base">聯絡電話 *</Label>
                 <Input
                   id="phone"
                   type="tel"
@@ -324,7 +324,7 @@ export function ApplyFormClient() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="notes">備註（選填）</Label>
+                <Label htmlFor="notes" className="text-base">備註（選填）</Label>
                 <textarea
                   id="notes"
                   value={notes}
@@ -473,26 +473,26 @@ function RegistrationFields({
 
       {/* Company type */}
       <div className="space-y-2">
-        <Label>公司型態</Label>
+        <Label className="text-base">公司型態</Label>
         <RadioGroup value={companyType} onValueChange={setCompanyType}>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="商行" id="ct-sole" />
-            <Label htmlFor="ct-sole" className="font-normal">商行（行號）</Label>
+            <Label htmlFor="ct-sole" className="text-base font-normal">商行（行號）</Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="有限公司" id="ct-llc" />
-            <Label htmlFor="ct-llc" className="font-normal">有限公司</Label>
+            <Label htmlFor="ct-llc" className="text-base font-normal">有限公司</Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="股份有限公司" id="ct-corp" />
-            <Label htmlFor="ct-corp" className="font-normal">股份有限公司</Label>
+            <Label htmlFor="ct-corp" className="text-base font-normal">股份有限公司</Label>
           </div>
         </RadioGroup>
       </div>
 
       {/* Company names */}
       <div className="space-y-2">
-        <Label>期望的公司名稱</Label>
+        <Label className="text-base">期望的公司名稱</Label>
         <p className="text-sm text-slate-500">建議準備 3 個名字，以備名稱預查未通過時使用</p>
         {companyNames.map((name, i) => (
           <Input
@@ -510,7 +510,7 @@ function RegistrationFields({
 
       {/* Business description */}
       <div className="space-y-1.5">
-        <Label htmlFor="bizDesc">主要業務簡述</Label>
+        <Label htmlFor="bizDesc" className="text-base">主要業務簡述</Label>
         <p className="text-sm text-slate-500">簡述主要業務，我們協助轉換營業項目代碼</p>
         <Input
           id="bizDesc"
@@ -522,7 +522,7 @@ function RegistrationFields({
 
       {/* Capital amount */}
       <div className="space-y-1.5">
-        <Label htmlFor="capital">預計資本額（NT$）</Label>
+        <Label htmlFor="capital" className="text-base">預計資本額（NT$）</Label>
         <Input
           id="capital"
           value={capitalAmount}
@@ -533,7 +533,7 @@ function RegistrationFields({
 
       {/* Shareholder count */}
       <div className="space-y-1.5">
-        <Label htmlFor="shareholders">股東人數</Label>
+        <Label htmlFor="shareholders" className="text-base">股東人數</Label>
         <Input
           id="shareholders"
           type="number"
@@ -546,34 +546,34 @@ function RegistrationFields({
 
       {/* Address situation */}
       <div className="space-y-2">
-        <Label>登記地址</Label>
+        <Label className="text-base">登記地址</Label>
         <RadioGroup value={addressSituation} onValueChange={setAddressSituation}>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="已有地址" id="addr-have" />
-            <Label htmlFor="addr-have" className="font-normal">已有地址</Label>
+            <Label htmlFor="addr-have" className="text-base font-normal">已有地址</Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="需要協助" id="addr-need" />
-            <Label htmlFor="addr-need" className="font-normal">需要協助尋找</Label>
+            <Label htmlFor="addr-need" className="text-base font-normal">需要協助尋找</Label>
           </div>
         </RadioGroup>
       </div>
 
       {/* Articles of incorporation */}
       <div className="space-y-2">
-        <Label>公司章程</Label>
+        <Label className="text-base">公司章程</Label>
         <RadioGroup value={articlesOfIncorporation} onValueChange={setArticlesOfIncorporation}>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="自行準備" id="aoi-self" />
-            <Label htmlFor="aoi-self" className="font-normal">自行準備</Label>
+            <Label htmlFor="aoi-self" className="text-base font-normal">自行準備</Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="請協助草擬" id="aoi-draft" />
-            <Label htmlFor="aoi-draft" className="font-normal">請協助草擬</Label>
+            <Label htmlFor="aoi-draft" className="text-base font-normal">請協助草擬</Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="尚未決定" id="aoi-undecided" />
-            <Label htmlFor="aoi-undecided" className="font-normal">尚未決定</Label>
+            <Label htmlFor="aoi-undecided" className="text-base font-normal">尚未決定</Label>
           </div>
         </RadioGroup>
       </div>
@@ -610,7 +610,7 @@ function BookkeepingFields({
       <h3 className="text-lg font-semibold text-slate-700">公司資訊</h3>
 
       <div className="space-y-1.5">
-        <Label htmlFor="companyName">公司名稱 *</Label>
+        <Label htmlFor="companyName" className="text-base">公司名稱 *</Label>
         <Input
           id="companyName"
           value={companyName}
@@ -621,7 +621,7 @@ function BookkeepingFields({
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="taxId">統一編號 *</Label>
+        <Label htmlFor="taxId" className="text-base">統一編號 *</Label>
         <Input
           id="taxId"
           value={taxId}
@@ -634,55 +634,55 @@ function BookkeepingFields({
       </div>
 
       <div className="space-y-2">
-        <Label>公司型態</Label>
+        <Label className="text-base">公司型態</Label>
         <RadioGroup value={companyType} onValueChange={setCompanyType}>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="商行" id="bk-ct-sole" />
-            <Label htmlFor="bk-ct-sole" className="font-normal">商行（行號）</Label>
+            <Label htmlFor="bk-ct-sole" className="text-base font-normal">商行（行號）</Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="有限公司" id="bk-ct-llc" />
-            <Label htmlFor="bk-ct-llc" className="font-normal">有限公司</Label>
+            <Label htmlFor="bk-ct-llc" className="text-base font-normal">有限公司</Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="股份有限公司" id="bk-ct-corp" />
-            <Label htmlFor="bk-ct-corp" className="font-normal">股份有限公司</Label>
+            <Label htmlFor="bk-ct-corp" className="text-base font-normal">股份有限公司</Label>
           </div>
         </RadioGroup>
       </div>
 
       <div className="space-y-2">
-        <Label>目前記帳方式</Label>
+        <Label className="text-base">目前記帳方式</Label>
         <RadioGroup value={currentAccounting} onValueChange={setCurrentAccounting}>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="自行處理" id="ca-self" />
-            <Label htmlFor="ca-self" className="font-normal">自行處理</Label>
+            <Label htmlFor="ca-self" className="text-base font-normal">自行處理</Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="其他事務所" id="ca-other" />
-            <Label htmlFor="ca-other" className="font-normal">其他事務所</Label>
+            <Label htmlFor="ca-other" className="text-base font-normal">其他事務所</Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="目前無" id="ca-none" />
-            <Label htmlFor="ca-none" className="font-normal">目前無</Label>
+            <Label htmlFor="ca-none" className="text-base font-normal">目前無</Label>
           </div>
         </RadioGroup>
       </div>
 
       <div className="space-y-2">
-        <Label>每月發票量預估</Label>
+        <Label className="text-base">每月發票量預估</Label>
         <RadioGroup value={monthlyInvoiceVolume} onValueChange={setMonthlyInvoiceVolume}>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="<50" id="vol-low" />
-            <Label htmlFor="vol-low" className="font-normal">50 張以下</Label>
+            <Label htmlFor="vol-low" className="text-base font-normal">50 張以下</Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="50-100" id="vol-mid" />
-            <Label htmlFor="vol-mid" className="font-normal">50-100 張</Label>
+            <Label htmlFor="vol-mid" className="text-base font-normal">50-100 張</Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="100+" id="vol-high" />
-            <Label htmlFor="vol-high" className="font-normal">100 張以上</Label>
+            <Label htmlFor="vol-high" className="text-base font-normal">100 張以上</Label>
           </div>
         </RadioGroup>
       </div>

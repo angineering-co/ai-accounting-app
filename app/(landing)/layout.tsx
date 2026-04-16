@@ -103,54 +103,6 @@ export default function LandingLayout({
               >
                 關於我們
               </Link>
-              <Link
-                href="/blog"
-                className="hover:text-slate-900 transition-colors"
-              >
-                部落格
-              </Link>
-              <Link
-                href="/faq"
-                className="hover:text-slate-900 transition-colors"
-              >
-                常見問題
-              </Link>
-              <Link
-                href="/startup-guide"
-                className="hover:text-slate-900 transition-colors"
-              >
-                創業必看
-              </Link>
-              <Link
-                href="/tools/invoice-helper"
-                className="hover:text-slate-900 transition-colors"
-              >
-                手開發票小幫手
-              </Link>
-              <Link
-                href="/tools/company-setup-check"
-                className="hover:text-slate-900 transition-colors"
-              >
-                公司設立健檢
-              </Link>
-              <Link
-                href="/tools/withholding-tax-calculator"
-                className="hover:text-slate-900 transition-colors"
-              >
-                扣繳計算機
-              </Link>
-              <Link
-                href="/tools/incorporation-flow"
-                className="hover:text-slate-900 transition-colors"
-              >
-                開公司流程圖
-              </Link>
-              <Link
-                href="/tools/insurance-calculator"
-                className="hover:text-slate-900 transition-colors"
-              >
-                勞健保計算機
-              </Link>
             </div>
 
             <div className="text-sm text-slate-400">

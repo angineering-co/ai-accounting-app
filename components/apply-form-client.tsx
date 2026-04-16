@@ -17,17 +17,15 @@ import {
 
 import { submitApplyForm, type ApplyFormData } from "@/lib/actions/apply";
 import { trackApplySubmit } from "@/lib/analytics";
-import { REGISTRATION_PRICING_NOTE, PRICES } from "@/lib/pricing";
+import { REGISTRATION_PRICING_NOTE, PRICES, LINE_URL } from "@/lib/pricing";
 
 // ── Registration path: "我們會為您處理的事項" checklist ──────────────
 const REGISTRATION_STEPS = [
-  "公司名稱預查",
-  "籌備戶開戶與股款存入",
-  "會計師資本額簽證",
-  "公司設立登記",
-  "國稅局稅籍登記",
-  "勞健保投保單位設立",
-  "發票購票證申請",
+  "預查公司名稱，確認可用性",
+  "協助開設籌備戶，完成資本簽證",
+  "備齊文件，向主管機關申請設立登記",
+  "取得統一編號與公司登記證",
+  "辦理稅籍登記，開始合法營運",
 ];
 
 // ── Curated Q&As (conversion-focused, not overwhelming) ─────────────
@@ -41,24 +39,25 @@ const REGISTRATION_FAQS = [
     a: "通常需要等 1-2 個工作日，銀行才會開立籌備戶存款餘額證明。建議預留時間，避免影響設立流程。",
   },
   {
-    q: "公司章程可以請你們代擬嗎？",
-    a: "可以！我們會根據您的公司類型與股東結構，提供符合公司法規定的章程範本，您確認後即可使用。",
+    q: "節省房屋稅與地價稅？",
+    a: "若登記在自家，可向稅捐稽徵處申請「按比例課徵營業用稅率」。通常可申請將六分之一面積設為營業用，其餘維持住家用稅率。",
   },
+  {
+    q: "設立後如何委託記帳？",
+    a: "設立完成後，只需簽署記帳委任合約即可無縫銜接。您可以直接透過手機拍照上傳發票，我們處理後續的帳務與申報，省去傳統郵寄或親送的麻煩。",
+  }
 ];
 
 const BOOKKEEPING_FAQS = [
   {
-    q: "可以從月中開始委託記帳嗎？",
-    a: "可以。我們會根據您的委託起始日，協助銜接前任帳務。若有前事務所的帳務資料，請一併提供以利交接。",
+    q: "年度中間是否可以委託 SnapBooks 速博記帳？",
+    a: "隨時都可以進行移轉喔！只需要提供最近期的401申報書、明細帳、所得稅等資料就可以無縫移轉。詳細文件清單，我們將依照您設立的年度，開立發票方式等提供清單給您。\n\n若原本有委託記帳，只需要將清單提供給委託業者就可以了、若自行記帳，我們也會另外提供需要的文件清單給您。詳細狀況，可以加入我們官方帳號將有專人為您服務。",
   },
   {
-    q: "我的發票量很少，費用會比較便宜嗎？",
-    a: "我們採用統一透明定價，不因發票量多寡而浮動。紙本發票超過 50 張才會酌收額外處理費，電子發票則不受影響。",
+    q: "你們怎麼收費？",
+    a: <>SnapBooks標榜收費透明，以年繳方案為例，基本收費只需要1,260/月，並且提供多項的數位服務工具，不但省去您到郵局排隊寄信的麻煩，更省去人工親送至事務所的作業時間。詳細情形，可以參考<a href="/pricing" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-slate-700">收費說明</a></>,
   },
 ];
-
-// ── LINE Official Account URL ───────────────────────────────────────
-const LINE_URL = "https://lin.ee/nPVmG3M";
 
 export function ApplyFormClient() {
   const [path, setPath] = useState<"registration" | "bookkeeping" | null>(null);
@@ -87,7 +86,6 @@ export function ApplyFormClient() {
   const [taxId, setTaxId] = useState("");
   const [bkCompanyType, setBkCompanyType] = useState("");
   const [currentAccounting, setCurrentAccounting] = useState("");
-  const [monthlyInvoiceVolume, setMonthlyInvoiceVolume] = useState("");
 
   // Contact fields (shared)
   const [contactName, setContactName] = useState("");
@@ -132,7 +130,6 @@ export function ApplyFormClient() {
       formData.taxId = taxId.trim();
       formData.companyType = bkCompanyType || undefined;
       formData.currentAccounting = currentAccounting || undefined;
-      formData.monthlyInvoiceVolume = monthlyInvoiceVolume || undefined;
     }
 
     startTransition(async () => {
@@ -287,8 +284,6 @@ export function ApplyFormClient() {
               setCompanyType={setBkCompanyType}
               currentAccounting={currentAccounting}
               setCurrentAccounting={setCurrentAccounting}
-              monthlyInvoiceVolume={monthlyInvoiceVolume}
-              setMonthlyInvoiceVolume={setMonthlyInvoiceVolume}
             />
           )}
 
@@ -387,14 +382,24 @@ export function ApplyFormClient() {
                   <AccordionTrigger className="text-base text-left">
                     {faq.q}
                   </AccordionTrigger>
-                  <AccordionContent className="text-base text-slate-600 leading-relaxed">
+                  <AccordionContent className="text-base text-slate-600 leading-relaxed whitespace-pre-line">
                     {faq.a}
                   </AccordionContent>
                 </AccordionItem>
               ))}
             </Accordion>
             <p className="mt-3 text-sm text-slate-500">
-              更多問題？請參考
+              更多問題？請加入
+              <a
+                href={LINE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-0.5 underline underline-offset-2 hover:text-slate-700"
+              >
+                官方 LINE 帳號
+                <ExternalLink className="h-3 w-3" />
+              </a>
+              專人回覆、
               <a
                 href="/faq"
                 target="_blank"
@@ -404,7 +409,7 @@ export function ApplyFormClient() {
                 常見問題
                 <ExternalLink className="h-3 w-3" />
               </a>
-              或
+              ，或
               <a
                 href="/tools/incorporation-flow"
                 target="_blank"
@@ -481,7 +486,10 @@ function RegistrationFields({
       {/* Company type */}
       <div className="space-y-2">
         <Label className="text-base">公司型態</Label>
-        <RadioGroup value={companyType} onValueChange={setCompanyType}>
+        <RadioGroup value={companyType} onValueChange={(v) => {
+          setCompanyType(v);
+          if (v === "商行") setArticlesOfIncorporation("");
+        }}>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="商行" id="ct-sole" />
             <Label htmlFor="ct-sole" className="text-base font-normal">商行（行號）</Label>
@@ -556,34 +564,42 @@ function RegistrationFields({
         <Label className="text-base">登記地址</Label>
         <RadioGroup value={addressSituation} onValueChange={setAddressSituation}>
           <div className="flex items-center gap-2">
-            <RadioGroupItem value="已有地址" id="addr-have" />
-            <Label htmlFor="addr-have" className="text-base font-normal">已有地址</Label>
+            <RadioGroupItem value="自家地址" id="addr-have" />
+            <Label htmlFor="addr-have" className="text-base font-normal">自家地址</Label>
           </div>
           <div className="flex items-center gap-2">
-            <RadioGroupItem value="需要協助" id="addr-need" />
-            <Label htmlFor="addr-need" className="text-base font-normal">需要協助尋找</Label>
+            <RadioGroupItem value="外租地址" id="addr-need" />
+            <Label htmlFor="addr-need" className="text-base font-normal">外租地址</Label>
           </div>
         </RadioGroup>
       </div>
 
-      {/* Articles of incorporation */}
-      <div className="space-y-2">
-        <Label className="text-base">公司章程</Label>
-        <RadioGroup value={articlesOfIncorporation} onValueChange={setArticlesOfIncorporation}>
-          <div className="flex items-center gap-2">
-            <RadioGroupItem value="自行準備" id="aoi-self" />
-            <Label htmlFor="aoi-self" className="text-base font-normal">自行準備</Label>
-          </div>
-          <div className="flex items-center gap-2">
-            <RadioGroupItem value="請協助草擬" id="aoi-draft" />
-            <Label htmlFor="aoi-draft" className="text-base font-normal">請協助草擬</Label>
-          </div>
-          <div className="flex items-center gap-2">
-            <RadioGroupItem value="尚未決定" id="aoi-undecided" />
-            <Label htmlFor="aoi-undecided" className="text-base font-normal">尚未決定</Label>
-          </div>
-        </RadioGroup>
-      </div>
+      {/* Articles of incorporation (not applicable to 商行) */}
+      {companyType !== "商行" && (
+        <div className="space-y-2">
+          <Label className="text-base">公司章程</Label>
+          <RadioGroup value={articlesOfIncorporation} onValueChange={setArticlesOfIncorporation}>
+            <div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="自行準備" id="aoi-self" />
+                <Label htmlFor="aoi-self" className="text-base font-normal">自行準備</Label>
+              </div>
+              <p className="ml-6 text-sm text-slate-500">我們將協助審查是否符合公司法要求</p>
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="請協助草擬" id="aoi-draft" />
+                <Label htmlFor="aoi-draft" className="text-base font-normal">請協助草擬</Label>
+              </div>
+              <p className="ml-6 text-sm text-slate-500">我們將依照經濟部範本撰寫（特殊特別股等股權規劃不包含在內）</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <RadioGroupItem value="尚未決定" id="aoi-undecided" />
+              <Label htmlFor="aoi-undecided" className="text-base font-normal">尚未決定</Label>
+            </div>
+          </RadioGroup>
+        </div>
+      )}
     </div>
   );
 }
@@ -598,8 +614,6 @@ function BookkeepingFields({
   setCompanyType,
   currentAccounting,
   setCurrentAccounting,
-  monthlyInvoiceVolume,
-  setMonthlyInvoiceVolume,
 }: {
   companyName: string;
   setCompanyName: (v: string) => void;
@@ -609,8 +623,6 @@ function BookkeepingFields({
   setCompanyType: (v: string) => void;
   currentAccounting: string;
   setCurrentAccounting: (v: string) => void;
-  monthlyInvoiceVolume: string;
-  setMonthlyInvoiceVolume: (v: string) => void;
 }) {
   return (
     <div className="space-y-5">
@@ -672,24 +684,6 @@ function BookkeepingFields({
           <div className="flex items-center gap-2">
             <RadioGroupItem value="目前無" id="ca-none" />
             <Label htmlFor="ca-none" className="text-base font-normal">目前無</Label>
-          </div>
-        </RadioGroup>
-      </div>
-
-      <div className="space-y-2">
-        <Label className="text-base">每月發票量預估</Label>
-        <RadioGroup value={monthlyInvoiceVolume} onValueChange={setMonthlyInvoiceVolume}>
-          <div className="flex items-center gap-2">
-            <RadioGroupItem value="<50" id="vol-low" />
-            <Label htmlFor="vol-low" className="text-base font-normal">50 張以下</Label>
-          </div>
-          <div className="flex items-center gap-2">
-            <RadioGroupItem value="50-100" id="vol-mid" />
-            <Label htmlFor="vol-mid" className="text-base font-normal">50-100 張</Label>
-          </div>
-          <div className="flex items-center gap-2">
-            <RadioGroupItem value="100+" id="vol-high" />
-            <Label htmlFor="vol-high" className="text-base font-normal">100 張以上</Label>
           </div>
         </RadioGroup>
       </div>

@@ -1,3 +1,5 @@
+import { LINE_URL } from "@/lib/pricing";
+
 interface BlogCtaProps {
   title: string;
   children: React.ReactNode;
@@ -13,7 +15,7 @@ export function BlogCta({ title, children }: BlogCtaProps) {
       <p className="mt-4 text-lg leading-relaxed text-emerald-700">
         想聊聊你的記帳需求？直接加我們的{" "}
         <a
-          href="https://lin.ee/nPVmG3M"
+          href={LINE_URL}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1 font-semibold text-white hover:bg-emerald-700"

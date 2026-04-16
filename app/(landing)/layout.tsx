@@ -7,6 +7,7 @@ import { CurrentYear } from "@/components/current-year";
 import { ToolsNavDropdown } from "@/components/tools-nav-dropdown";
 import { MobileNav } from "@/components/mobile-nav";
 import { navLinks } from "@/lib/nav-links";
+import { LINE_URL } from "@/lib/pricing";
 
 export default function LandingLayout({
   children,
@@ -161,7 +162,7 @@ export default function LandingLayout({
 
       {/* Floating Line "Add Friend" button */}
       <a
-        href="https://lin.ee/nPVmG3M"
+        href={LINE_URL}
         target="_blank"
         rel="noopener noreferrer"
         aria-label="加入 Line 好友"

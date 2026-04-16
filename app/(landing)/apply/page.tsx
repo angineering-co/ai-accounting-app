@@ -25,7 +25,7 @@ export default function ApplyPage() {
       <section className="bg-gradient-to-br from-emerald-50/60 via-slate-50 to-sky-50/40 pt-16 pb-10 md:pt-20 md:pb-12">
         <div className="mx-auto max-w-3xl px-5 text-center">
           <h1 className="font-display text-3xl font-extrabold tracking-tight text-slate-900 md:text-4xl lg:text-5xl">
-            線上申請公司設立與記帳服務
+            合作申請
           </h1>
           <p className="mx-auto mt-4 max-w-xl text-lg leading-relaxed text-slate-600">
             填寫以下表單，我們會透過 LINE 與您聯繫，提供最適合的服務方案。

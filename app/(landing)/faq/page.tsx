@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { LINE_URL } from "@/lib/pricing";
 
 import {
   Accordion,
@@ -86,7 +87,7 @@ export default function FaqPage() {
         <p className="text-slate-500">
           還有其他問題？歡迎
           <Link
-            href="https://lin.ee/nPVmG3M"
+            href={LINE_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="font-medium text-emerald-600 hover:text-emerald-700 underline underline-offset-2"

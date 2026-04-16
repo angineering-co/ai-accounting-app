@@ -19,8 +19,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-
-const LINE_URL = "https://lin.ee/nPVmG3M";
+import { LINE_URL } from "@/lib/pricing";
 
 export function CouponDialog({
   trigger,

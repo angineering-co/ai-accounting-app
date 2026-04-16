@@ -26,6 +26,12 @@ export function trackAssessmentComplete() {
   sendGAEvent("event", "assessment_complete", {});
 }
 
+export function trackApplySubmit(path: "registration" | "bookkeeping") {
+  sendGAEvent("event", "apply_submit", {
+    apply_path: path,
+  });
+}
+
 export function trackCouponGeneration(location: string, code: string) {
   sendGAEvent("event", "coupon_generated", {
     coupon_location: location,

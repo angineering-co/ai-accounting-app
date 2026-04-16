@@ -7,15 +7,13 @@ import { CurrentYear } from "@/components/current-year";
 import { ToolsNavDropdown } from "@/components/tools-nav-dropdown";
 import { MobileNav } from "@/components/mobile-nav";
 import { navLinks } from "@/lib/nav-links";
+import { LINE_URL } from "@/lib/pricing";
 
 export default function LandingLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const ctaHref =
-    process.env.NEXT_PUBLIC_EARLY_ADOPTER_FORM_URL ?? "#signup-unavailable";
-
   return (
     <div className="flex min-h-screen flex-col bg-white selection:bg-emerald-100 selection:text-emerald-900 font-sans text-slate-900">
       {/* Sticky Navigation */}
@@ -55,8 +53,8 @@ export default function LandingLayout({
               size="sm"
               className="rounded-full bg-emerald-500 text-white hover:bg-slate-800 font-medium"
             >
-              <CtaLink href={ctaHref} location="nav">
-                免費諮詢
+              <CtaLink href="/apply" location="nav">
+                立即申請
               </CtaLink>
             </Button>
           </div>
@@ -164,7 +162,7 @@ export default function LandingLayout({
 
       {/* Floating Line "Add Friend" button */}
       <a
-        href="https://lin.ee/nPVmG3M"
+        href={LINE_URL}
         target="_blank"
         rel="noopener noreferrer"
         aria-label="加入 Line 好友"

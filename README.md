@@ -85,7 +85,6 @@ App runs at http://localhost:3000.
 | `SUPABASE_SERVICE_ROLE_KEY` | Next.js (server) | Yes | Service role key for admin operations |
 | `GEMINI_API_KEY` | Next.js + Edge Fn | Yes | Google Gemini 2.5 Flash API key |
 | `DATABASE_URL` | Tests | For tests | PostgreSQL connection string |
-| `NEXT_PUBLIC_EARLY_ADOPTER_FORM_URL` | Next.js (client) | No | Google Forms URL for early adopter signup |
 | `RESEND_API_KEY` | Next.js (server) | No | Resend email API key |
 
 ## Vault Secrets

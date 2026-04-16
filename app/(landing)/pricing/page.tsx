@@ -26,8 +26,7 @@ export const metadata: Metadata = {
 };
 
 export default function PricingPage() {
-  const earlyAdopterFormUrl = process.env.NEXT_PUBLIC_EARLY_ADOPTER_FORM_URL;
-  const ctaHref = earlyAdopterFormUrl ?? "#signup-unavailable";
+  const ctaHref = "/apply";
 
   return (
     <main className="flex flex-1 flex-col">
@@ -84,7 +83,7 @@ export default function PricingPage() {
             className="group rounded-full bg-emerald-600 text-white hover:bg-emerald-500 border-0 h-16 px-10 text-xl font-bold shadow-xl shadow-emerald-600/20 transition-all duration-300 hover:shadow-2xl hover:shadow-emerald-600/30 hover:-translate-y-0.5"
           >
             <CtaLink href={ctaHref} location="pricing_cta">
-              預約免費諮詢
+              立即申請
               <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
             </CtaLink>
           </Button>

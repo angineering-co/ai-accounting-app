@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { trackCtaClick } from "@/lib/analytics";
 
 export function CtaLink({
@@ -14,14 +15,12 @@ export function CtaLink({
   className?: string;
 }) {
   return (
-    <a
+    <Link
       href={href}
-      target="_blank"
-      rel="noreferrer"
       className={className}
       onClick={() => trackCtaClick(location)}
     >
       {children}
-    </a>
+    </Link>
   );
 }

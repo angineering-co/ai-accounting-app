@@ -261,7 +261,7 @@ export function CompanySetupCheckClient() {
             className="mt-6 rounded-full bg-white px-8 py-6 text-base font-semibold text-emerald-700 shadow-lg hover:bg-emerald-50"
           >
             <a href={CTA_FORM_URL} target="_blank" rel="noopener noreferrer">
-              預約免費諮詢
+              立即申請
               <ArrowRight className="ml-2 h-5 w-5" />
             </a>
           </Button>

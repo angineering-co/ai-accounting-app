@@ -5,5 +5,7 @@ export const PRICES: Record<BillingCycle, number> = {
   monthly: 1470,
 };
 
+export const LINE_URL = "https://lin.ee/nPVmG3M";
+
 export const REGISTRATION_PRICING_NOTE =
   "商行 NT$6,500 / 有限公司 NT$8,500 / 股份有限公司 NT$9,500";

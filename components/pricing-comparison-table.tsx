@@ -123,7 +123,7 @@ function BillingToggle({
         >
           年繳
           <span className="ml-1.5 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700">
-            -15%
+            -14%
           </span>
         </button>
         <button
@@ -139,7 +139,7 @@ function BillingToggle({
         </button>
       </div>
       <p className="text-sm text-slate-500">
-        兩種皆為一年 13 個月計費，年繳享 15% 折扣
+        兩種皆為一年 13 個月計費
       </p>
     </div>
   );

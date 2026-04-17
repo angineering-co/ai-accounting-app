@@ -110,7 +110,7 @@ function BillingToggle({
   onChange: (v: BillingCycle) => void;
 }) {
   return (
-    <div className="flex items-center justify-center">
+    <div className="flex flex-col items-center gap-2">
       <div className="inline-flex rounded-full bg-slate-100 p-1">
         <button
           type="button"
@@ -138,6 +138,9 @@ function BillingToggle({
           月繳
         </button>
       </div>
+      <p className="text-sm text-slate-500">
+        兩種皆為一年 13 個月計費，年繳享 15% 折扣
+      </p>
     </div>
   );
 }
@@ -167,6 +170,9 @@ export function PricingSection() {
               </span>
               <span className="text-base font-medium text-slate-500">/ 月（含稅）</span>
             </div>
+            <p className="mb-2 text-sm text-slate-600">
+              ※ 一年收取 13 個月費用
+            </p>
             <p className="text-base leading-relaxed text-slate-500">
               已有公司，只需要記帳報稅服務
             </p>
@@ -199,6 +205,9 @@ export function PricingSection() {
                 </Tooltip>
               </span>
             </div>
+            <p className="mb-2 text-sm text-slate-600">
+              ※ 記帳部分一年收取 13 個月費用
+            </p>
             <p className="text-base leading-relaxed text-slate-500">
               新創業，需要設立公司加記帳一次搞定
             </p>

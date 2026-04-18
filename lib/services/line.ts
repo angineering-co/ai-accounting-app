@@ -2,6 +2,7 @@
 
 import { createHmac } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 // ---------------------------------------------------------------------------
 // LINE API transport types (not domain models)
@@ -45,7 +46,7 @@ const BINDING_EXPIRY_HOURS = 48;
 // Signature verification
 // ---------------------------------------------------------------------------
 
-export function verifyLineSignature(body: string, signature: string): boolean {
+export async function verifyLineSignature(body: string, signature: string): Promise<boolean> {
   const secret = process.env.LINE_CHANNEL_SECRET;
   if (!secret) throw new Error("Missing LINE_CHANNEL_SECRET");
   const hash = createHmac("SHA256", secret).update(body).digest("base64");
@@ -93,24 +94,25 @@ export async function sendLineMessage(
   }
 
   const token = getAccessToken();
-  const errors: string[] = [];
-
-  for (const account of accounts) {
-    const res = await fetch(`${LINE_API_BASE}/message/push`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        to: account.line_user_id,
-        messages: [{ type: "text", text: message }],
-      }),
-    });
-    if (!res.ok) {
-      errors.push(`Failed to send to ${account.line_user_id}: ${res.status}`);
-    }
-  }
+  const results = await Promise.all(
+    accounts.map(async (account) => {
+      const res = await fetch(`${LINE_API_BASE}/message/push`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          to: account.line_user_id,
+          messages: [{ type: "text", text: message }],
+        }),
+      });
+      return res.ok
+        ? null
+        : `Failed to send to ${account.line_user_id}: ${res.status}`;
+    }),
+  );
+  const errors = results.filter((e): e is string => e !== null);
 
   if (errors.length > 0) {
     return { success: false, error: errors.join("; ") };
@@ -180,8 +182,32 @@ function generateCode(prefix: string): string {
 export async function generateBindingCode(
   clientId: string,
 ): Promise<{ success: boolean; bindingCode?: string; error?: string }> {
-  const supabase = createAdminClient();
+  const authed = await createClient();
+  const {
+    data: { user },
+  } = await authed.auth.getUser();
+  if (!user) return { success: false, error: "未登入" };
 
+  const { data: profile } = await authed
+    .from("profiles")
+    .select("firm_id, role")
+    .eq("id", user.id)
+    .single();
+  if (!profile || !["admin", "staff", "super_admin"].includes(profile.role ?? "")) {
+    return { success: false, error: "權限不足" };
+  }
+
+  const { data: clientRecord } = await authed
+    .from("clients")
+    .select("firm_id")
+    .eq("id", clientId)
+    .single();
+  if (!clientRecord) return { success: false, error: "找不到客戶" };
+  if (profile.role !== "super_admin" && clientRecord.firm_id !== profile.firm_id) {
+    return { success: false, error: "權限不足" };
+  }
+
+  const supabase = createAdminClient();
   const bindingCode = generateCode("LB");
 
   const { error } = await supabase.from("line_accounts").insert({
@@ -461,36 +487,21 @@ async function handleConfirmBinding(
     return;
   }
 
-  const { data: existingRow } = await supabase
-    .from("line_accounts")
-    .select("id")
-    .eq("line_user_id", lineUserId)
-    .single();
-
-  if (existingRow) {
-    await Promise.all([
-      supabase
-        .from("line_accounts")
-        .update({
-          client_id: pendingRow.client_id,
-          binding_code: null,
-          binding_confirmed: true,
-          linked_at: new Date().toISOString(),
-        })
-        .eq("line_user_id", lineUserId),
-      supabase.from("line_accounts").delete().eq("id", pendingRow.id),
-    ]);
-  } else {
-    await supabase
+  // handleLineEvent upserts the lineUserId row on every event, so the row
+  // keyed by line_user_id is guaranteed to exist here. Merge pending row in
+  // and delete it.
+  await Promise.all([
+    supabase
       .from("line_accounts")
       .update({
-        line_user_id: lineUserId,
+        client_id: pendingRow.client_id,
         binding_code: null,
         binding_confirmed: true,
         linked_at: new Date().toISOString(),
       })
-      .eq("id", pendingRow.id);
-  }
+      .eq("line_user_id", lineUserId),
+    supabase.from("line_accounts").delete().eq("id", pendingRow.id),
+  ]);
 
   if (replyToken) {
     await replyToLine(replyToken, [

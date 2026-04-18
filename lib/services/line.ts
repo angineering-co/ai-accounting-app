@@ -29,6 +29,8 @@ type LineFlexMessage = {
 
 type LineMessage = LineTextMessage | LineFlexMessage;
 
+type SupabaseAdmin = ReturnType<typeof createAdminClient>;
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -127,6 +129,42 @@ async function getLineProfile(
 }
 
 // ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
+function getExpiryThreshold(): string {
+  return new Date(
+    Date.now() - BINDING_EXPIRY_HOURS * 60 * 60 * 1000,
+  ).toISOString();
+}
+
+async function checkAlreadyBound(
+  supabase: SupabaseAdmin,
+  lineUserId: string,
+  replyToken?: string,
+): Promise<boolean> {
+  const { data: account } = await supabase
+    .from("line_accounts")
+    .select("client_id, binding_confirmed")
+    .eq("line_user_id", lineUserId)
+    .single();
+
+  if (account?.client_id && account.binding_confirmed) {
+    if (replyToken) {
+      await replyToLine(replyToken, [
+        {
+          type: "text",
+          text: "您已綁定帳號，如需變更請聯繫您的記帳事務所。",
+        },
+      ]);
+    }
+    return true;
+  }
+
+  return false;
+}
+
+// ---------------------------------------------------------------------------
 // Binding code generation (Server Action called from admin UI)
 // ---------------------------------------------------------------------------
 
@@ -185,26 +223,19 @@ export async function handleLineEvent(event: LineEvent): Promise<void> {
 
   const supabase = createAdminClient();
 
-  const { data: existing } = await supabase
-    .from("line_accounts")
-    .select("id")
-    .eq("line_user_id", lineUserId)
-    .single();
-
-  if (!existing) {
-    await supabase.from("line_accounts").insert({
-      line_user_id: lineUserId,
-      followed_at: new Date().toISOString(),
-    });
-  }
+  await supabase.from("line_accounts").upsert(
+    { line_user_id: lineUserId, followed_at: new Date().toISOString() },
+    { onConflict: "line_user_id", ignoreDuplicates: true },
+  );
 
   switch (event.type) {
     case "follow":
-      await handleFollow(lineUserId, event.replyToken);
+      await handleFollow(supabase, lineUserId, event.replyToken);
       break;
     case "message":
       if (event.message?.type === "text" && event.message.text) {
         await handleTextMessage(
+          supabase,
           lineUserId,
           event.message.text,
           event.replyToken,
@@ -213,7 +244,12 @@ export async function handleLineEvent(event: LineEvent): Promise<void> {
       break;
     case "postback":
       if (event.postback?.data) {
-        await handlePostback(lineUserId, event.postback.data, event.replyToken);
+        await handlePostback(
+          supabase,
+          lineUserId,
+          event.postback.data,
+          event.replyToken,
+        );
       }
       break;
   }
@@ -224,12 +260,12 @@ export async function handleLineEvent(event: LineEvent): Promise<void> {
 // ---------------------------------------------------------------------------
 
 async function handleFollow(
+  supabase: SupabaseAdmin,
   lineUserId: string,
   replyToken?: string,
 ): Promise<void> {
   const profile = await getLineProfile(lineUserId);
   if (profile?.displayName) {
-    const supabase = createAdminClient();
     await supabase
       .from("line_accounts")
       .update({ display_name: profile.displayName })
@@ -251,6 +287,7 @@ async function handleFollow(
 // ---------------------------------------------------------------------------
 
 async function handleTextMessage(
+  supabase: SupabaseAdmin,
   lineUserId: string,
   text: string,
   replyToken?: string,
@@ -259,13 +296,18 @@ async function handleTextMessage(
 
   const leadCodeMatch = trimmed.match(LEAD_CODE_RE);
   if (leadCodeMatch) {
-    await handleLeadCode(lineUserId, leadCodeMatch[0], replyToken);
+    await handleLeadCode(supabase, lineUserId, leadCodeMatch[0], replyToken);
     return;
   }
 
   const bindingCodeMatch = trimmed.match(BINDING_CODE_RE);
   if (bindingCodeMatch) {
-    await handleBindingCode(lineUserId, bindingCodeMatch[0], replyToken);
+    await handleBindingCode(
+      supabase,
+      lineUserId,
+      bindingCodeMatch[0],
+      replyToken,
+    );
     return;
   }
 }
@@ -275,12 +317,11 @@ async function handleTextMessage(
 // ---------------------------------------------------------------------------
 
 async function handleLeadCode(
+  supabase: SupabaseAdmin,
   lineUserId: string,
   leadCode: string,
   replyToken?: string,
 ): Promise<void> {
-  const supabase = createAdminClient();
-
   const { data: lead } = await supabase
     .from("leads")
     .select("id")
@@ -312,43 +353,22 @@ async function handleLeadCode(
 }
 
 // ---------------------------------------------------------------------------
-// Binding code handling (with expiry check + confirmation)
+// Binding code handling (with expiry check + Flex confirmation)
 // ---------------------------------------------------------------------------
 
 async function handleBindingCode(
+  supabase: SupabaseAdmin,
   lineUserId: string,
   bindingCode: string,
   replyToken?: string,
 ): Promise<void> {
-  const supabase = createAdminClient();
-
-  const { data: existingAccount } = await supabase
-    .from("line_accounts")
-    .select("client_id, binding_confirmed")
-    .eq("line_user_id", lineUserId)
-    .single();
-
-  if (existingAccount?.client_id && existingAccount.binding_confirmed) {
-    if (replyToken) {
-      await replyToLine(replyToken, [
-        {
-          type: "text",
-          text: "您已綁定帳號，如需變更請聯繫您的記帳事務所。",
-        },
-      ]);
-    }
-    return;
-  }
-
-  const expiryThreshold = new Date(
-    Date.now() - BINDING_EXPIRY_HOURS * 60 * 60 * 1000,
-  ).toISOString();
+  if (await checkAlreadyBound(supabase, lineUserId, replyToken)) return;
 
   const { data: pendingRow } = await supabase
     .from("line_accounts")
     .select("id, client_id, binding_code_created_at")
     .eq("binding_code", bindingCode)
-    .gte("binding_code_created_at", expiryThreshold)
+    .gte("binding_code_created_at", getExpiryThreshold())
     .single();
 
   if (!pendingRow) {
@@ -370,7 +390,6 @@ async function handleBindingCode(
     .single();
 
   const clientName = client?.name ?? "您的公司";
-
   const expiryTime = formatExpiryTime(pendingRow.binding_code_created_at!);
 
   if (replyToken) {
@@ -385,6 +404,7 @@ async function handleBindingCode(
 // ---------------------------------------------------------------------------
 
 async function handlePostback(
+  supabase: SupabaseAdmin,
   lineUserId: string,
   data: string,
   replyToken?: string,
@@ -394,7 +414,12 @@ async function handlePostback(
 
   switch (action) {
     case "confirm_binding":
-      await handleConfirmBinding(lineUserId, params.get("code"), replyToken);
+      await handleConfirmBinding(
+        supabase,
+        lineUserId,
+        params.get("code"),
+        replyToken,
+      );
       break;
     case "cancel_binding":
       if (replyToken) {
@@ -407,42 +432,21 @@ async function handlePostback(
 }
 
 async function handleConfirmBinding(
+  supabase: SupabaseAdmin,
   lineUserId: string,
   bindingCode: string | null,
   replyToken?: string,
 ): Promise<void> {
   if (!bindingCode) return;
 
-  const supabase = createAdminClient();
-
-  const { data: existingAccount } = await supabase
-    .from("line_accounts")
-    .select("client_id, binding_confirmed")
-    .eq("line_user_id", lineUserId)
-    .single();
-
-  if (existingAccount?.client_id && existingAccount.binding_confirmed) {
-    if (replyToken) {
-      await replyToLine(replyToken, [
-        {
-          type: "text",
-          text: "您已綁定帳號，如需變更請聯繫您的記帳事務所。",
-        },
-      ]);
-    }
-    return;
-  }
-
-  const expiryThreshold = new Date(
-    Date.now() - BINDING_EXPIRY_HOURS * 60 * 60 * 1000,
-  ).toISOString();
+  if (await checkAlreadyBound(supabase, lineUserId, replyToken)) return;
 
   const { data: pendingRow } = await supabase
     .from("line_accounts")
     .select("id, client_id")
     .eq("binding_code", bindingCode)
     .is("line_user_id", null)
-    .gte("binding_code_created_at", expiryThreshold)
+    .gte("binding_code_created_at", getExpiryThreshold())
     .single();
 
   if (!pendingRow) {
@@ -457,18 +461,25 @@ async function handleConfirmBinding(
     return;
   }
 
-  if (existingAccount) {
-    await supabase
-      .from("line_accounts")
-      .update({
-        client_id: pendingRow.client_id,
-        binding_code: null,
-        binding_confirmed: true,
-        linked_at: new Date().toISOString(),
-      })
-      .eq("line_user_id", lineUserId);
+  const { data: existingRow } = await supabase
+    .from("line_accounts")
+    .select("id")
+    .eq("line_user_id", lineUserId)
+    .single();
 
-    await supabase.from("line_accounts").delete().eq("id", pendingRow.id);
+  if (existingRow) {
+    await Promise.all([
+      supabase
+        .from("line_accounts")
+        .update({
+          client_id: pendingRow.client_id,
+          binding_code: null,
+          binding_confirmed: true,
+          linked_at: new Date().toISOString(),
+        })
+        .eq("line_user_id", lineUserId),
+      supabase.from("line_accounts").delete().eq("id", pendingRow.id),
+    ]);
   } else {
     await supabase
       .from("line_accounts")

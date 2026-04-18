@@ -12,13 +12,22 @@ type LineEvent = {
   source: { type: string; userId?: string };
   replyToken?: string;
   message?: { type: string; text?: string };
+  postback?: { data: string };
   timestamp: number;
 };
 
-type LineMessage = {
+type LineTextMessage = {
   type: "text";
   text: string;
 };
+
+type LineFlexMessage = {
+  type: "flex";
+  altText: string;
+  contents: Record<string, unknown>;
+};
+
+type LineMessage = LineTextMessage | LineFlexMessage;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -176,12 +185,18 @@ export async function handleLineEvent(event: LineEvent): Promise<void> {
 
   const supabase = createAdminClient();
 
-  // Upsert line_user_id on every event for resilience.
-  // If the row already exists (by line_user_id), this is a no-op.
-  await supabase.from("line_accounts").upsert(
-    { line_user_id: lineUserId, followed_at: new Date().toISOString() },
-    { onConflict: "line_user_id", ignoreDuplicates: true },
-  );
+  const { data: existing } = await supabase
+    .from("line_accounts")
+    .select("id")
+    .eq("line_user_id", lineUserId)
+    .single();
+
+  if (!existing) {
+    await supabase.from("line_accounts").insert({
+      line_user_id: lineUserId,
+      followed_at: new Date().toISOString(),
+    });
+  }
 
   switch (event.type) {
     case "follow":
@@ -194,6 +209,11 @@ export async function handleLineEvent(event: LineEvent): Promise<void> {
           event.message.text,
           event.replyToken,
         );
+      }
+      break;
+    case "postback":
+      if (event.postback?.data) {
+        await handlePostback(lineUserId, event.postback.data, event.replyToken);
       }
       break;
   }
@@ -237,20 +257,12 @@ async function handleTextMessage(
 ): Promise<void> {
   const trimmed = text.trim();
 
-  // Check for "是" confirmation reply
-  if (trimmed === "是") {
-    await handleBindingConfirmation(lineUserId, replyToken);
-    return;
-  }
-
-  // Check for lead code (SB-XXXX-XXXX)
   const leadCodeMatch = trimmed.match(LEAD_CODE_RE);
   if (leadCodeMatch) {
     await handleLeadCode(lineUserId, leadCodeMatch[0], replyToken);
     return;
   }
 
-  // Check for binding code (LB-XXXX-XXXX)
   const bindingCodeMatch = trimmed.match(BINDING_CODE_RE);
   if (bindingCodeMatch) {
     await handleBindingCode(lineUserId, bindingCodeMatch[0], replyToken);
@@ -310,7 +322,6 @@ async function handleBindingCode(
 ): Promise<void> {
   const supabase = createAdminClient();
 
-  // Check if user already has a confirmed client binding
   const { data: existingAccount } = await supabase
     .from("line_accounts")
     .select("client_id, binding_confirmed")
@@ -329,14 +340,13 @@ async function handleBindingCode(
     return;
   }
 
-  // Look up the pending binding code row with expiry check
   const expiryThreshold = new Date(
     Date.now() - BINDING_EXPIRY_HOURS * 60 * 60 * 1000,
   ).toISOString();
 
   const { data: pendingRow } = await supabase
     .from("line_accounts")
-    .select("id, client_id")
+    .select("id, client_id, binding_code_created_at")
     .eq("binding_code", bindingCode)
     .gte("binding_code_created_at", expiryThreshold)
     .single();
@@ -353,7 +363,6 @@ async function handleBindingCode(
     return;
   }
 
-  // Fetch client name for the confirmation message
   const { data: client } = await supabase
     .from("clients")
     .select("name")
@@ -362,50 +371,68 @@ async function handleBindingCode(
 
   const clientName = client?.name ?? "您的公司";
 
-  // Store the pending binding info on the user's row for confirmation
-  await supabase
-    .from("line_accounts")
-    .update({
-      binding_code: bindingCode,
-      binding_confirmed: false,
-    })
-    .eq("line_user_id", lineUserId);
+  const expiryTime = formatExpiryTime(pendingRow.binding_code_created_at!);
 
   if (replyToken) {
     await replyToLine(replyToken, [
-      {
-        type: "text",
-        text: `確認綁定【${clientName}】的 LINE 通知服務？回覆「是」確認。`,
-      },
+      buildBindingConfirmationFlex(clientName, bindingCode, expiryTime),
     ]);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Binding confirmation ("是" reply)
+// Postback handler (Flex Message button taps)
 // ---------------------------------------------------------------------------
 
-async function handleBindingConfirmation(
+async function handlePostback(
   lineUserId: string,
+  data: string,
   replyToken?: string,
 ): Promise<void> {
+  const params = new URLSearchParams(data);
+  const action = params.get("action");
+
+  switch (action) {
+    case "confirm_binding":
+      await handleConfirmBinding(lineUserId, params.get("code"), replyToken);
+      break;
+    case "cancel_binding":
+      if (replyToken) {
+        await replyToLine(replyToken, [
+          { type: "text", text: "已取消綁定。" },
+        ]);
+      }
+      break;
+  }
+}
+
+async function handleConfirmBinding(
+  lineUserId: string,
+  bindingCode: string | null,
+  replyToken?: string,
+): Promise<void> {
+  if (!bindingCode) return;
+
   const supabase = createAdminClient();
 
-  // Find the user's row with a pending (unconfirmed) binding code
-  const { data: userRow } = await supabase
+  const { data: existingAccount } = await supabase
     .from("line_accounts")
-    .select("id, binding_code, binding_confirmed")
+    .select("client_id, binding_confirmed")
     .eq("line_user_id", lineUserId)
-    .not("binding_code", "is", null)
-    .eq("binding_confirmed", false)
     .single();
 
-  if (!userRow || !userRow.binding_code) {
-    // No pending binding — ignore the "是" as a regular message
+  if (existingAccount?.client_id && existingAccount.binding_confirmed) {
+    if (replyToken) {
+      await replyToLine(replyToken, [
+        {
+          type: "text",
+          text: "您已綁定帳號，如需變更請聯繫您的記帳事務所。",
+        },
+      ]);
+    }
     return;
   }
 
-  // Look up the original pending row by binding code (with expiry check)
   const expiryThreshold = new Date(
     Date.now() - BINDING_EXPIRY_HOURS * 60 * 60 * 1000,
   ).toISOString();
@@ -413,7 +440,7 @@ async function handleBindingConfirmation(
   const { data: pendingRow } = await supabase
     .from("line_accounts")
     .select("id, client_id")
-    .eq("binding_code", userRow.binding_code)
+    .eq("binding_code", bindingCode)
     .is("line_user_id", null)
     .gte("binding_code_created_at", expiryThreshold)
     .single();
@@ -427,26 +454,32 @@ async function handleBindingConfirmation(
         },
       ]);
     }
-    // Clear the stale binding code from user's row
-    await supabase
-      .from("line_accounts")
-      .update({ binding_code: null })
-      .eq("id", userRow.id);
     return;
   }
 
-  // Merge: set client_id on the user's existing row, delete the pending row
-  await supabase
-    .from("line_accounts")
-    .update({
-      client_id: pendingRow.client_id,
-      binding_code: null,
-      binding_confirmed: true,
-      linked_at: new Date().toISOString(),
-    })
-    .eq("id", userRow.id);
+  if (existingAccount) {
+    await supabase
+      .from("line_accounts")
+      .update({
+        client_id: pendingRow.client_id,
+        binding_code: null,
+        binding_confirmed: true,
+        linked_at: new Date().toISOString(),
+      })
+      .eq("line_user_id", lineUserId);
 
-  await supabase.from("line_accounts").delete().eq("id", pendingRow.id);
+    await supabase.from("line_accounts").delete().eq("id", pendingRow.id);
+  } else {
+    await supabase
+      .from("line_accounts")
+      .update({
+        line_user_id: lineUserId,
+        binding_code: null,
+        binding_confirmed: true,
+        linked_at: new Date().toISOString(),
+      })
+      .eq("id", pendingRow.id);
+  }
 
   if (replyToken) {
     await replyToLine(replyToken, [
@@ -456,4 +489,132 @@ async function handleBindingConfirmation(
       },
     ]);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Flex Message builder
+// ---------------------------------------------------------------------------
+
+function formatExpiryTime(createdAt: string): string {
+  const expiry = new Date(
+    new Date(createdAt).getTime() + BINDING_EXPIRY_HOURS * 60 * 60 * 1000,
+  );
+  return expiry.toLocaleString("zh-TW", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function buildBindingConfirmationFlex(
+  clientName: string,
+  bindingCode: string,
+  expiryTime: string,
+): LineFlexMessage {
+  return {
+    type: "flex",
+    altText: `確認綁定【${clientName}】的 LINE 通知服務`,
+    contents: {
+      type: "bubble",
+      header: {
+        type: "box",
+        layout: "vertical",
+        contents: [
+          {
+            type: "text",
+            text: "LINE 綁定確認",
+            weight: "bold",
+            size: "lg",
+            color: "#ffffff",
+          },
+        ],
+        backgroundColor: "#10B981",
+        paddingAll: "16px",
+      },
+      body: {
+        type: "box",
+        layout: "vertical",
+        spacing: "md",
+        contents: [
+          {
+            type: "text",
+            text: "請確認要綁定以下公司的 LINE 通知服務：",
+            size: "sm",
+            color: "#888888",
+            wrap: true,
+          },
+          {
+            type: "text",
+            text: clientName,
+            weight: "bold",
+            size: "xl",
+            color: "#171717",
+            wrap: true,
+          },
+          { type: "separator" },
+          {
+            type: "box",
+            layout: "baseline",
+            contents: [
+              {
+                type: "text",
+                text: "綁定碼",
+                size: "sm",
+                color: "#888888",
+                flex: 2,
+              },
+              {
+                type: "text",
+                text: bindingCode,
+                size: "sm",
+                color: "#171717",
+                flex: 5,
+              },
+            ],
+          },
+          {
+            type: "text",
+            text: `有效期限至 ${expiryTime}`,
+            size: "xs",
+            color: "#aaaaaa",
+            margin: "md",
+          },
+        ],
+        paddingAll: "16px",
+      },
+      footer: {
+        type: "box",
+        layout: "vertical",
+        spacing: "sm",
+        contents: [
+          {
+            type: "button",
+            style: "primary",
+            color: "#10B981",
+            action: {
+              type: "postback",
+              label: "確認綁定",
+              data: `action=confirm_binding&code=${bindingCode}`,
+              displayText: "確認綁定",
+            },
+          },
+          {
+            type: "button",
+            style: "secondary",
+            action: {
+              type: "postback",
+              label: "取消",
+              data: "action=cancel_binding",
+              displayText: "取消綁定",
+            },
+          },
+        ],
+        paddingAll: "16px",
+      },
+    },
+  };
 }

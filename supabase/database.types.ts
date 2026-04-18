@@ -392,6 +392,60 @@ export type Database = {
         }
         Relationships: []
       }
+      line_accounts: {
+        Row: {
+          binding_code: string | null
+          binding_code_created_at: string | null
+          binding_confirmed: boolean
+          client_id: string | null
+          display_name: string | null
+          followed_at: string
+          id: string
+          lead_id: string | null
+          line_user_id: string | null
+          linked_at: string | null
+        }
+        Insert: {
+          binding_code?: string | null
+          binding_code_created_at?: string | null
+          binding_confirmed?: boolean
+          client_id?: string | null
+          display_name?: string | null
+          followed_at?: string
+          id?: string
+          lead_id?: string | null
+          line_user_id?: string | null
+          linked_at?: string | null
+        }
+        Update: {
+          binding_code?: string | null
+          binding_code_created_at?: string | null
+          binding_confirmed?: boolean
+          client_id?: string | null
+          display_name?: string | null
+          followed_at?: string
+          id?: string
+          lead_id?: string | null
+          line_user_id?: string | null
+          linked_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "line_accounts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "line_accounts_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           client_id: string | null

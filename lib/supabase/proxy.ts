@@ -55,6 +55,7 @@ export async function updateSession(request: NextRequest) {
     !publicRoutes.includes(request.nextUrl.pathname) &&
     !request.nextUrl.pathname.startsWith("/blog/") &&
     !request.nextUrl.pathname.startsWith("/tools/") &&
+    !request.nextUrl.pathname.startsWith("/api/webhooks/") &&
     !user &&
     !request.nextUrl.pathname.startsWith("/login") &&
     !request.nextUrl.pathname.startsWith("/auth")

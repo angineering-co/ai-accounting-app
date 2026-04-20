@@ -16,6 +16,7 @@ import {
 } from "@/lib/services/client-user";
 import { getClientSettings } from "@/lib/services/client-settings";
 import { InviteClientDialog } from "@/components/invite-client-dialog";
+import { LinkLineDialog } from "@/components/link-line-dialog";
 import { ClientSettingsSections } from "@/components/client-settings/client-settings-sections";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -150,11 +151,14 @@ export default function ClientDetailPage({
                   <ShieldCheck className="h-5 w-5" />
                   入口網站存取
                 </CardTitle>
-                <InviteClientDialog
-                  clientId={clientId}
-                  defaultName={client.contact_person || client.name}
-                  onInvited={fetchPortalUsers}
-                />
+                <div className="flex items-center gap-2">
+                  <LinkLineDialog clientId={clientId} />
+                  <InviteClientDialog
+                    clientId={clientId}
+                    defaultName={client.contact_person || client.name}
+                    onInvited={fetchPortalUsers}
+                  />
+                </div>
               </CardHeader>
               <CardContent>
                 {isPortalUsersLoading ? (

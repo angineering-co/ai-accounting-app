@@ -127,3 +127,9 @@ Currently public:
 - `supabase/database.types.ts` — Auto-generated TypeScript types from schema
 - `supabase/migrations/` — All DB migrations (chronological)
 - RLS policies enforce firm-level data isolation; admin client bypasses RLS for service operations
+
+Regenerate types after migrations (must include `pgmq_public`, otherwise `lib/services/bulk-extraction.ts` fails to type-check):
+
+```bash
+npx supabase gen types typescript --local --schema public --schema pgmq_public 2>/dev/null > supabase/database.types.ts
+```

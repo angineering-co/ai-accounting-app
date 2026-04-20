@@ -4,7 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Copy, Loader2, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 
-import { generateBindingCode } from "@/lib/services/line";
+import {
+  generateBindingCode,
+  getClientLineBindingCount,
+} from "@/lib/services/line";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,6 +28,7 @@ export function LinkLineDialog({ clientId }: LinkLineDialogProps) {
   const [code, setCode] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [bindingCount, setBindingCount] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -35,7 +39,14 @@ export function LinkLineDialog({ clientId }: LinkLineDialogProps) {
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
-    if (!next) {
+    if (next) {
+      setBindingCount(null);
+      getClientLineBindingCount(clientId).then((result) => {
+        if (result.success && typeof result.count === "number") {
+          setBindingCount(result.count);
+        }
+      });
+    } else {
       setCode(null);
       setCopied(false);
     }
@@ -134,9 +145,16 @@ export function LinkLineDialog({ clientId }: LinkLineDialogProps) {
             </p>
           </div>
         ) : (
-          <p className="py-2 text-base text-muted-foreground">
-            點擊下方按鈕產生一組 48 小時內有效的綁定碼。
-          </p>
+          <div className="space-y-3 py-2">
+            <p className="text-base text-muted-foreground">
+              點擊下方按鈕產生一組 48 小時內有效的綁定碼。
+            </p>
+            {bindingCount !== null && bindingCount > 0 ? (
+              <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                此客戶目前已綁定 {bindingCount} 位 LINE 用戶；新綁定碼將新增而非取代現有綁定。
+              </p>
+            ) : null}
+          </div>
         )}
 
         <DialogFooter>

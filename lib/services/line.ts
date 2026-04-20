@@ -38,8 +38,9 @@ type SupabaseAdmin = ReturnType<typeof createAdminClient>;
 
 const LINE_API_BASE = "https://api.line.me/v2/bot";
 const CODE_CHARS = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
-const LEAD_CODE_RE = /SB-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}/;
-const BINDING_CODE_RE = /LB-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}/;
+const LEAD_CODE_RE = /^SB-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}$/;
+const BINDING_CODE_RE = /^LB-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}$/;
+const UNBIND_COMMAND = "解除綁定";
 const BINDING_EXPIRY_HOURS = 48;
 
 // ---------------------------------------------------------------------------
@@ -179,14 +180,14 @@ function generateCode(prefix: string): string {
   return `${prefix}-${segment()}-${segment()}`;
 }
 
-export async function generateBindingCode(
+async function authorizeAdminForClient(
   clientId: string,
-): Promise<{ success: boolean; bindingCode?: string; error?: string }> {
+): Promise<{ authorized: true } | { authorized: false; error: string }> {
   const authed = await createClient();
   const {
     data: { user },
   } = await authed.auth.getUser();
-  if (!user) return { success: false, error: "未登入" };
+  if (!user) return { authorized: false, error: "未登入" };
 
   const { data: profile } = await authed
     .from("profiles")
@@ -194,7 +195,7 @@ export async function generateBindingCode(
     .eq("id", user.id)
     .single();
   if (!profile || !["admin", "staff", "super_admin"].includes(profile.role ?? "")) {
-    return { success: false, error: "權限不足" };
+    return { authorized: false, error: "權限不足" };
   }
 
   const { data: clientRecord } = await authed
@@ -202,12 +203,35 @@ export async function generateBindingCode(
     .select("firm_id")
     .eq("id", clientId)
     .single();
-  if (!clientRecord) return { success: false, error: "找不到客戶" };
+  if (!clientRecord) return { authorized: false, error: "找不到客戶" };
   if (profile.role !== "super_admin" && clientRecord.firm_id !== profile.firm_id) {
-    return { success: false, error: "權限不足" };
+    return { authorized: false, error: "權限不足" };
   }
 
+  return { authorized: true };
+}
+
+export async function generateBindingCode(
+  clientId: string,
+): Promise<{ success: boolean; bindingCode?: string; error?: string }> {
+  const auth = await authorizeAdminForClient(clientId);
+  if (!auth.authorized) return { success: false, error: auth.error };
+
   const supabase = createAdminClient();
+
+  const { data: existingPending } = await supabase
+    .from("line_accounts")
+    .select("binding_code")
+    .eq("client_id", clientId)
+    .is("line_user_id", null)
+    .gte("binding_code_created_at", getExpiryThreshold())
+    .not("binding_code", "is", null)
+    .maybeSingle();
+
+  if (existingPending?.binding_code) {
+    return { success: true, bindingCode: existingPending.binding_code };
+  }
+
   const bindingCode = generateCode("LB");
 
   const { error } = await supabase.from("line_accounts").insert({
@@ -237,6 +261,27 @@ export async function generateBindingCode(
   }
 
   return { success: true, bindingCode };
+}
+
+export async function getClientLineBindingCount(
+  clientId: string,
+): Promise<{ success: boolean; count?: number; error?: string }> {
+  const auth = await authorizeAdminForClient(clientId);
+  if (!auth.authorized) return { success: false, error: auth.error };
+
+  const supabase = createAdminClient();
+  const { count, error } = await supabase
+    .from("line_accounts")
+    .select("*", { count: "exact", head: true })
+    .eq("client_id", clientId)
+    .eq("binding_confirmed", true);
+
+  if (error) {
+    console.error("Failed to count LINE bindings:", error);
+    return { success: false, error: "查詢綁定資料失敗" };
+  }
+
+  return { success: true, count: count ?? 0 };
 }
 
 // ---------------------------------------------------------------------------
@@ -336,6 +381,11 @@ async function handleTextMessage(
     );
     return;
   }
+
+  if (trimmed === UNBIND_COMMAND) {
+    await handleUnbindRequest(supabase, lineUserId, replyToken);
+    return;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -426,6 +476,43 @@ async function handleBindingCode(
 }
 
 // ---------------------------------------------------------------------------
+// Unbind request handling
+// ---------------------------------------------------------------------------
+
+async function handleUnbindRequest(
+  supabase: SupabaseAdmin,
+  lineUserId: string,
+  replyToken?: string,
+): Promise<void> {
+  const { data: row } = await supabase
+    .from("line_accounts")
+    .select("client_id, binding_confirmed")
+    .eq("line_user_id", lineUserId)
+    .single();
+
+  if (!row?.binding_confirmed || !row.client_id) {
+    if (replyToken) {
+      await replyToLine(replyToken, [
+        { type: "text", text: "您尚未綁定任何帳號。" },
+      ]);
+    }
+    return;
+  }
+
+  const { data: client } = await supabase
+    .from("clients")
+    .select("name")
+    .eq("id", row.client_id)
+    .single();
+
+  const clientName = client?.name ?? "您的公司";
+
+  if (replyToken) {
+    await replyToLine(replyToken, [buildUnbindConfirmationFlex(clientName)]);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Postback handler (Flex Message button taps)
 // ---------------------------------------------------------------------------
 
@@ -448,13 +535,37 @@ async function handlePostback(
       );
       break;
     case "cancel_binding":
-      if (replyToken) {
-        await replyToLine(replyToken, [
-          { type: "text", text: "已取消綁定。" },
-        ]);
-      }
+      await handleCancelBinding(supabase, lineUserId, replyToken);
+      break;
+    case "confirm_unbind":
+      await handleConfirmUnbind(supabase, lineUserId, replyToken);
       break;
   }
+}
+
+async function handleCancelBinding(
+  supabase: SupabaseAdmin,
+  lineUserId: string,
+  replyToken?: string,
+): Promise<void> {
+  if (!replyToken) return;
+
+  const { data: row } = await supabase
+    .from("line_accounts")
+    .select("binding_confirmed, client_id")
+    .eq("line_user_id", lineUserId)
+    .single();
+
+  const isBound = !!row?.binding_confirmed && !!row.client_id;
+
+  await replyToLine(replyToken, [
+    {
+      type: "text",
+      text: isBound
+        ? "您已綁定，如需解除請輸入「解除綁定」。"
+        : "已取消綁定。",
+    },
+  ]);
 }
 
 async function handleConfirmBinding(
@@ -508,6 +619,45 @@ async function handleConfirmBinding(
       {
         type: "text",
         text: "綁定成功！您將會收到記帳相關的通知訊息。",
+      },
+    ]);
+  }
+}
+
+async function handleConfirmUnbind(
+  supabase: SupabaseAdmin,
+  lineUserId: string,
+  replyToken?: string,
+): Promise<void> {
+  const { data: row } = await supabase
+    .from("line_accounts")
+    .select("binding_confirmed, client_id")
+    .eq("line_user_id", lineUserId)
+    .single();
+
+  if (!row?.binding_confirmed || !row.client_id) {
+    if (replyToken) {
+      await replyToLine(replyToken, [
+        { type: "text", text: "您尚未綁定任何帳號。" },
+      ]);
+    }
+    return;
+  }
+
+  await supabase
+    .from("line_accounts")
+    .update({
+      client_id: null,
+      binding_confirmed: false,
+      linked_at: null,
+    })
+    .eq("line_user_id", lineUserId);
+
+  if (replyToken) {
+    await replyToLine(replyToken, [
+      {
+        type: "text",
+        text: "已解除綁定。如需重新綁定，請聯繫您的記帳事務所取得新的綁定碼。",
       },
     ]);
   }
@@ -632,6 +782,92 @@ function buildBindingConfirmationFlex(
               label: "取消",
               data: "action=cancel_binding",
               displayText: "取消綁定",
+            },
+          },
+        ],
+        paddingAll: "16px",
+      },
+    },
+  };
+}
+
+function buildUnbindConfirmationFlex(clientName: string): LineFlexMessage {
+  return {
+    type: "flex",
+    altText: `確認解除【${clientName}】的 LINE 通知綁定`,
+    contents: {
+      type: "bubble",
+      header: {
+        type: "box",
+        layout: "vertical",
+        contents: [
+          {
+            type: "text",
+            text: "解除綁定確認",
+            weight: "bold",
+            size: "lg",
+            color: "#ffffff",
+          },
+        ],
+        backgroundColor: "#DC2626",
+        paddingAll: "16px",
+      },
+      body: {
+        type: "box",
+        layout: "vertical",
+        spacing: "md",
+        contents: [
+          {
+            type: "text",
+            text: "請確認要解除以下公司的 LINE 通知綁定：",
+            size: "sm",
+            color: "#888888",
+            wrap: true,
+          },
+          {
+            type: "text",
+            text: clientName,
+            weight: "bold",
+            size: "xl",
+            color: "#171717",
+            wrap: true,
+          },
+          { type: "separator" },
+          {
+            type: "text",
+            text: "解除後將不再收到通知訊息。如需重新綁定，請聯繫您的記帳事務所取得新的綁定碼。",
+            size: "xs",
+            color: "#aaaaaa",
+            wrap: true,
+            margin: "md",
+          },
+        ],
+        paddingAll: "16px",
+      },
+      footer: {
+        type: "box",
+        layout: "vertical",
+        spacing: "sm",
+        contents: [
+          {
+            type: "button",
+            style: "primary",
+            color: "#DC2626",
+            action: {
+              type: "postback",
+              label: "確認解除",
+              data: "action=confirm_unbind",
+              displayText: "確認解除綁定",
+            },
+          },
+          {
+            type: "button",
+            style: "secondary",
+            action: {
+              type: "postback",
+              label: "取消",
+              data: "action=cancel_unbind",
+              displayText: "取消",
             },
           },
         ],

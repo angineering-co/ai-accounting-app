@@ -3,6 +3,7 @@
 import { createHmac } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import type { Json } from "@/supabase/database.types";
 
 // ---------------------------------------------------------------------------
 // LINE API transport types (not domain models)
@@ -400,7 +401,7 @@ async function handleLeadCode(
 ): Promise<void> {
   const { data: lead } = await supabase
     .from("leads")
-    .select("id")
+    .select("id, path, data, created_at")
     .eq("lead_code", leadCode)
     .single();
 
@@ -418,14 +419,27 @@ async function handleLeadCode(
     .update({ lead_id: lead.id, linked_at: new Date().toISOString() })
     .eq("line_user_id", lineUserId);
 
-  if (replyToken) {
-    await replyToLine(replyToken, [
-      {
-        type: "text",
-        text: `已收到您的諮詢編號 ${leadCode}，我們的專員會盡快與您聯繫！`,
-      },
-    ]);
+  if (!replyToken) return;
+
+  const dataObj = isPlainObject(lead.data) ? lead.data : {};
+  const hasAnyField = Object.keys(dataObj).length > 0;
+
+  const messages: LineMessage[] = [
+    {
+      type: "text",
+      text: hasAnyField
+        ? `已收到您的諮詢編號 ${leadCode}，以下是您在官網提交的資料，我們的專員會盡快與您聯繫！`
+        : `已收到您的諮詢編號 ${leadCode}，我們的專員會盡快與您聯繫！`,
+    },
+  ];
+
+  if (hasAnyField) {
+    messages.push(
+      buildLeadSummaryFlex(leadCode, lead.path, dataObj, lead.created_at),
+    );
   }
+
+  await replyToLine(replyToken, messages);
 }
 
 // ---------------------------------------------------------------------------
@@ -871,6 +885,201 @@ function buildUnbindConfirmationFlex(clientName: string): LineFlexMessage {
             },
           },
         ],
+        paddingAll: "16px",
+      },
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Lead summary Flex card
+// ---------------------------------------------------------------------------
+
+const LEAD_PATH_LABELS: Record<string, string> = {
+  registration: "公司設立",
+  bookkeeping: "記帳報稅",
+};
+
+const LEAD_CONTACT_KEYS = ["contactName", "phone", "email", "notes"] as const;
+
+const LEAD_SERVICE_KEYS = [
+  "companyName",
+  "taxId",
+  "companyType",
+  "companyNames",
+  "businessDescription",
+  "capitalAmount",
+  "shareholderCount",
+  "addressSituation",
+  "articlesOfIncorporation",
+  "currentAccounting",
+  "monthlyInvoiceVolume",
+] as const;
+
+const LEAD_FIELD_LABELS: Record<string, string> = {
+  contactName: "聯絡人",
+  phone: "電話",
+  email: "Email",
+  notes: "備註",
+  companyName: "公司名稱",
+  taxId: "統一編號",
+  companyType: "公司類型",
+  companyNames: "公司名稱（備案）",
+  businessDescription: "營業內容",
+  capitalAmount: "資本額",
+  shareholderCount: "股東人數",
+  addressSituation: "登記地址",
+  articlesOfIncorporation: "公司章程",
+  currentAccounting: "現行記帳方式",
+  monthlyInvoiceVolume: "月發票量",
+};
+
+function isPlainObject(v: unknown): v is Record<string, Json> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function formatLeadValue(value: Json | undefined): string | null {
+  if (value === undefined || value === null) return null;
+  if (Array.isArray(value)) {
+    const parts = value
+      .filter((v): v is string => typeof v === "string" && v.trim() !== "")
+      .map((v) => v.trim());
+    return parts.length > 0 ? parts.join("、") : null;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed === "" ? null : trimmed;
+  }
+  return null;
+}
+
+function formatLeadSubmittedAt(createdAt: string): string {
+  return new Date(createdAt).toLocaleString("zh-TW", {
+    timeZone: "Asia/Taipei",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function buildLeadRow(label: string, value: string): Record<string, unknown> {
+  return {
+    type: "box",
+    layout: "baseline",
+    spacing: "sm",
+    contents: [
+      {
+        type: "text",
+        text: label,
+        size: "sm",
+        color: "#888888",
+        flex: 2,
+      },
+      {
+        type: "text",
+        text: value,
+        size: "sm",
+        color: "#171717",
+        flex: 5,
+        wrap: true,
+      },
+    ],
+  };
+}
+
+function buildLeadSection(
+  title: string,
+  rows: Array<Record<string, unknown>>,
+): Record<string, unknown> {
+  return {
+    type: "box",
+    layout: "vertical",
+    spacing: "sm",
+    contents: [
+      {
+        type: "text",
+        text: title,
+        size: "sm",
+        weight: "bold",
+        color: "#10B981",
+      },
+      ...rows,
+    ],
+  };
+}
+
+function collectRows(
+  data: Record<string, Json>,
+  keys: readonly string[],
+): Array<Record<string, unknown>> {
+  const rows: Array<Record<string, unknown>> = [];
+  for (const key of keys) {
+    const label = LEAD_FIELD_LABELS[key];
+    if (!label) continue;
+    const value = formatLeadValue(data[key]);
+    if (value === null) continue;
+    rows.push(buildLeadRow(label, value));
+  }
+  return rows;
+}
+
+function buildLeadSummaryFlex(
+  leadCode: string,
+  path: string,
+  data: Record<string, Json>,
+  createdAt: string,
+): LineFlexMessage {
+  const pathLabel = LEAD_PATH_LABELS[path] ?? path;
+  const submittedAt = formatLeadSubmittedAt(createdAt);
+
+  const contactRows = collectRows(data, LEAD_CONTACT_KEYS);
+  const serviceRows = collectRows(data, LEAD_SERVICE_KEYS);
+
+  const bodyContents: Array<Record<string, unknown>> = [];
+  if (contactRows.length > 0) {
+    bodyContents.push(buildLeadSection("聯絡資訊", contactRows));
+  }
+  if (serviceRows.length > 0) {
+    if (bodyContents.length > 0) {
+      bodyContents.push({ type: "separator", margin: "md" });
+    }
+    bodyContents.push(buildLeadSection("服務需求", serviceRows));
+  }
+
+  return {
+    type: "flex",
+    altText: `諮詢表單 ${leadCode}（${pathLabel}）`,
+    contents: {
+      type: "bubble",
+      header: {
+        type: "box",
+        layout: "vertical",
+        spacing: "xs",
+        contents: [
+          {
+            type: "text",
+            text: `諮詢表單 · ${pathLabel}`,
+            weight: "bold",
+            size: "lg",
+            color: "#ffffff",
+          },
+          {
+            type: "text",
+            text: `${leadCode} · ${submittedAt}`,
+            size: "sm",
+            color: "#D1FAE5",
+          },
+        ],
+        backgroundColor: "#10B981",
+        paddingAll: "16px",
+      },
+      body: {
+        type: "box",
+        layout: "vertical",
+        spacing: "md",
+        contents: bodyContents,
         paddingAll: "16px",
       },
     },

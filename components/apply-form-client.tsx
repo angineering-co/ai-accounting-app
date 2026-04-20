@@ -333,8 +333,10 @@ export function ApplyFormClient() {
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="其他需求或問題..."
                   rows={3}
+                  maxLength={300}
                   className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 />
+                <p className="text-sm text-muted-foreground text-right">{notes.length} / 300</p>
               </div>
             </div>
           </div>
@@ -532,6 +534,7 @@ function RegistrationFields({
           value={businessDescription}
           onChange={(e) => setBusinessDescription(e.target.value)}
           placeholder="例：網路零售、餐飲、軟體開發..."
+          maxLength={100}
         />
       </div>
 

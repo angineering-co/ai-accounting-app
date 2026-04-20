@@ -58,6 +58,13 @@ export async function submitApplyForm(
     return { success: false, error: "請選擇服務類型" };
   }
 
+  if (formData.notes && formData.notes.length > 300) {
+    return { success: false, error: "備註最多 300 字" };
+  }
+  if (formData.businessDescription && formData.businessDescription.length > 100) {
+    return { success: false, error: "營業內容最多 100 字" };
+  }
+
   // Path-specific validation
   if (formData.path === "bookkeeping") {
     if (!formData.companyName?.trim()) {

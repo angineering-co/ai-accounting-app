@@ -79,12 +79,14 @@
 | `amount` | BIGINT NULL | 共通金額（便於列表查詢；正負號規則待 §10 Q11 決議） |
 | `duplicate_of` | UUID NULL | FK → `documents`（self-FK）；標為重複時指向原始那張 |
 | `status` | TEXT NOT NULL | `active` / `duplicate` / `void` / `deleted`，預設 `active` |
-| `void_reason` | TEXT NULL | `status='void'`（同期作廢，情境 G）填入原因 |
-| `voided_at` / `voided_by` | TIMESTAMPTZ / UUID NULL | status=void 時填入；FK → `profiles` |
-| `marked_duplicate_at` / `marked_duplicate_by` | TIMESTAMPTZ / UUID NULL | status=duplicate 時填入 |
-| `deleted_at` / `deleted_by` | TIMESTAMPTZ / UUID NULL | status=deleted（軟刪除）時填入 |
+| `void_reason` | TEXT NULL | `status='void'`（同期作廢，情境 G）填入原因（語意欄位，非單純時間戳） |
 | `created_by` | UUID NOT NULL | FK → `profiles` |
-| `created_at` / `updated_at` | TIMESTAMPTZ | |
+| `created_at` / `updated_at` | TIMESTAMPTZ | `updated_at` 隱式記錄「最後狀態變動時間」 |
+
+> **無 `voided_at/by`、`marked_duplicate_at/by`、`deleted_at/by`**：v1 刻意不加這些 audit metadata 欄位。理由：
+> - 80%+ 的 row 為 `active`，這些欄位常駐 NULL，污染 schema
+> - documents 是「事實層」，「誰於何時做了狀態翻轉」屬 audit 軌跡，本來就應該由 v1.5 的 `audit_trails` 表統一處理
+> - 過渡期想知道「最後變動時間」可看 `updated_at` 配合當前 `status` 粗推；想知道作廢原因看 `void_reason`
 
 **索引與限制**
 
@@ -107,10 +109,11 @@
 
 > **為何 soft delete 而非 hard delete**：
 > - 稅務合規：台灣稅法要求發票/憑證保存 5–10 年，即使使用者視為刪除，系統仍應可調閱
-> - 審計軌跡：「為什麼這張不見了」必須能回答
-> - 誤刪復原：accounting 操作失誤代價高
+> - 誤刪復原：accounting 操作失誤代價高，row 仍在可救回
 > - 參照完整性：可能仍有 reversed 之 journal_entry 指向；hard delete 會 orphan/cascade
 > - 例外：admin-only 之 GDPR right-to-erasure；含 PII 之誤上傳可保留 row 但清空 `file_url`
+>
+> 注意：「誰刪、何時刪」這類 audit metadata 不在 documents 內記錄（見上方 note），由 v1.5 `audit_trails` 補齊；soft delete 在 v1 提供的是「row 與 status='deleted' 仍可查」，足以滿足合規與 recovery 基本需求。
 
 > **CTI 完整性**：PostgreSQL 無內建 CTI 支援。「一個 documents 對應恰一個子表 row」由 application layer 確保，schema 不強制（避免 trigger 偵錯困難）。
 
@@ -157,10 +160,11 @@
 | `status` | TEXT NOT NULL | `draft` / `posted` / `reversed`，預設 `draft` |
 | `reverses_entry_id` | UUID NULL | FK → `journal_entries`（self-FK）；沖銷分錄指回被沖銷之原始分錄 |
 | `reversal_reason` | TEXT NULL | 沖銷原因（reverses_entry_id 同有同無） |
-| `posted_at` / `posted_by` | TIMESTAMPTZ / UUID NULL | `draft → posted` 時填入；FK → `profiles` |
-| `reversed_at` / `reversed_by` | TIMESTAMPTZ / UUID NULL | 原分錄被沖銷時（status='reversed'）填入 |
+| `posted_at` / `posted_by` | TIMESTAMPTZ / UUID NULL | `draft → posted` 時填入；FK → `profiles`。會計責任歸屬欄位，UI 經常顯示「由 X 於 Y 過帳」 |
 | `created_by` | UUID NULL | FK → `profiles`；NULL 表示系統自動產生（折舊、攤提工作） |
 | `created_at` / `updated_at` | TIMESTAMPTZ | |
+
+> **無 `reversed_at` / `reversed_by`**：被沖銷時不在原分錄上記錄；改由「沖銷 entry 的 `created_at` / `created_by`」反查，連結為 `WHERE reverses_entry_id = <原 entry id>`。資訊完全等價但不重複儲存，一致來源即沖銷 entry 本身。
 
 **索引與限制**
 

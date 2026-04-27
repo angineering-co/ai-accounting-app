@@ -428,7 +428,7 @@ D1 原發票 (status='void')     ← 真的作廢，不申報
   doc_type: invoice
   amount: 5,000
   date: 2026-04-15
-  voided_at: 2026-04-20
+  updated_at: 2026-04-20       (隱式記錄狀態變動時間)
   void_reason: '品項錯誤，當月作廢'
 
 （不會有對應的折讓單）

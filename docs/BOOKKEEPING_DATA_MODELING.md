@@ -2,6 +2,8 @@
 
 > 這份文件整理了「憑證 / 傳票 / 分錄 / 分錄明細」四層會計概念的澄清、最終的資料模型決策、以及完整的情境 illustration，作為後續 tech design refinement 的基礎。
 
+> **文件角色定位**：本文件為**會計概念與資料模型原則**的總結（教學性質：為何要這樣設計），作為 [`VOUCHER_JOURNAL_ENTRY_PLAN.md`](./VOUCHER_JOURNAL_ENTRY_PLAN.md) 的概念基礎。實作細節（精確 schema 欄位、序號表、年度關帳表、RPC pattern、UX 原則等）以 PLAN 文件為準。**當兩者衝突時以 PLAN 為準**。
+
 ---
 
 ## 一、核心概念與中英對照
@@ -178,7 +180,7 @@ documents (
   uploaded_at       TIMESTAMPTZ,
   ocr_status        TEXT,                -- 'pending' | 'done' | 'failed'
   doc_date          DATE,
-  amount            NUMERIC,             -- 共通金額欄位（方便列表查詢）
+  amount            BIGINT,              -- 共通金額欄位（NTD 整數；正負號規則見 PLAN §10 Q11）
   duplicate_of      UUID NULL REFERENCES documents(id),  -- 標記重複時指向原始那張 (TBD: necessary?)
   -- ...其他共通欄位
 )
@@ -190,7 +192,7 @@ invoices (
   buyer_taxId         TEXT,
   seller_taxId        TEXT,
   invoice_no        TEXT,
-  tax_amount        NUMERIC,
+  tax_amount        BIGINT,
   -- ...保留所有既有欄位
 )
 
@@ -198,7 +200,7 @@ invoices (
 allowances (
   id                  UUID PK,
   document_id         UUID UNIQUE NOT NULL REFERENCES documents(id),
-  original_invoice_id TEXT,               -- 業務關聯：指向被折讓的發票號
+  original_invoice_id UUID REFERENCES invoices(id),  -- 業務關聯：指向被折讓的發票
   allowance_reason    TEXT,
   -- ...保留所有既有欄位
 )
@@ -235,8 +237,8 @@ journal_entry_lines (
   id                UUID PK,
   journal_entry_id  UUID NOT NULL REFERENCES journal_entries(id),
   account_code      TEXT NOT NULL,
-  debit             NUMERIC DEFAULT 0,
-  credit            NUMERIC DEFAULT 0,
+  debit             BIGINT NOT NULL DEFAULT 0,
+  credit            BIGINT NOT NULL DEFAULT 0,
   -- ...
 )
 ```
@@ -256,7 +258,7 @@ D1 文具店發票 (status='active')
 
 JE1 支出分錄 (status='posted', reverses_entry_id=NULL)
   document_id: D1
-  voucher_no: 20260423-支-001
+  voucher_no: 20260423-00001
   voucher_type: 支出
   ├─ Dr 辦公用品費      3,143
   ├─ Dr 進項稅額          157
@@ -272,7 +274,7 @@ JE1 支出分錄 (status='posted', reverses_entry_id=NULL)
 
 JE2 折舊分錄 (status='posted', reverses_entry_id=NULL)
   document_id: NULL          ← 系統分錄，無憑證
-  voucher_no: 20260430-轉-005
+  voucher_no: 20260430-00005
   voucher_type: 轉帳
   ├─ Dr 折舊費用        5,000
   └─ Cr 累計折舊        5,000
@@ -312,7 +314,7 @@ D11 折讓單 (status='active', original_invoice_id→D10 的 invoice.id)
 
 JE10 原銷貨分錄 (status='posted', reverses_entry_id=NULL)
   document_id: D10
-  voucher_no: 20260410-收-002
+  voucher_no: 20260410-00002
   voucher_type: 收入
   ├─ Dr 應收帳款       10,500
   ├─ Cr 銷貨收入       10,000
@@ -320,7 +322,7 @@ JE10 原銷貨分錄 (status='posted', reverses_entry_id=NULL)
 
 JE11 折讓沖銷分錄 (status='posted', reverses_entry_id=JE10, reason='銷貨退回')
   document_id: D11
-  voucher_no: 20260428-轉-012
+  voucher_no: 20260428-00012
   voucher_type: 轉帳
   ├─ Dr 銷貨退回與折讓     476
   ├─ Dr 銷項稅額            24
@@ -348,7 +350,7 @@ D2 折讓單 (status='active', original_invoice_id→D1 的 invoice.id)
 
 JE1 原進貨分錄 (status='reversed', reverses_entry_id=NULL)
   document_id: D1
-  voucher_no: 20260315-支-001
+  voucher_no: 20260315-00001
   voucher_type: 支出
   ├─ Dr 原料            20,000
   ├─ Dr 進項稅額         1,000
@@ -356,7 +358,7 @@ JE1 原進貨分錄 (status='reversed', reverses_entry_id=NULL)
 
 JE2 折讓沖銷分錄 (status='posted', reverses_entry_id=JE1, reason='廠商開錯發票')
   document_id: D2
-  voucher_no: 20260420-轉-007
+  voucher_no: 20260420-00007
   voucher_type: 轉帳
   ├─ Dr 應付帳款        21,000
   ├─ Cr 進貨退出        20,000
@@ -386,7 +388,7 @@ D2 重複上傳 (status='duplicate', duplicate_of→D1)
 
 JE1 原記帳分錄 (status='posted', reverses_entry_id=NULL)
   document_id: D1
-  voucher_no: 20260423-支-001
+  voucher_no: 20260423-00001
   voucher_type: 支出
   ├─ Dr 辦公用品費       3,143
   ├─ Dr 進項稅額           157
@@ -394,7 +396,7 @@ JE1 原記帳分錄 (status='posted', reverses_entry_id=NULL)
 
 JE2 重複記帳分錄 (status='reversed', reverses_entry_id=NULL)
   document_id: D2
-  voucher_no: 20260425-支-018
+  voucher_no: 20260425-00018
   voucher_type: 支出
   ├─ Dr 辦公用品費       3,143
   ├─ Dr 進項稅額           157
@@ -402,7 +404,7 @@ JE2 重複記帳分錄 (status='reversed', reverses_entry_id=NULL)
 
 JE3 沖銷分錄 (status='posted', reverses_entry_id=JE2, reason='重複入帳沖銷')
   document_id: NULL        ← 純會計動作，無新憑證
-  voucher_no: 20260425-轉-019
+  voucher_no: 20260425-00019
   voucher_type: 轉帳
   ├─ Cr 辦公用品費       3,143
   ├─ Cr 進項稅額           157
@@ -469,18 +471,16 @@ D1 原發票 (status='void')     ← 真的作廢，不申報
 - 抽太多 → 和子表重複（資料一致性風險）
 - 語意是否統一？發票正數、折讓可能要視為負數？
 
-### 3. Posted 後的修改政策
-- 是否允許修改已 posted 的分錄？
-- 建議採台灣事務所慣例：**posted 後只能沖銷不能改**
-- 是否需要 audit trail（誰、何時、為什麼沖銷）？
+### ~~3. Posted 後的修改政策~~ ✅ 已決議
+- **結論**：posted 後只能沖銷不能改（反向分錄 + 重新建單）；採用 `journal_entries.reverses_entry_id` self-FK 的 audit trail
+- **決議位置**：PLAN Decision #6 #8、§5.6.1 三層編輯決策表、§5.8 Posting 為承諾點 UX 原則
 
 ### 4. 進項 vs 銷項的 status 差異
 目前建議統一用一個 `status` 欄位，用 application 層搭配 `doc_type` 做驗證。是否要 schema 層強制？
 
-### 5. Voucher_no 賦號策略
-- 格式：`YYYYMMDD-類型-NNN` vs `YYYY-MM-NNNN` vs 其他？
-- Sequence 粒度：全公司 / 依類型 / 依年月？
-- 跳號處理？年度重置？
+### ~~5. Voucher_no 賦號策略~~ ✅ 已決議
+- **結論**：格式 `YYYYMMDD-NNNNN`（5 位序號），每客戶每日重置，無類型前綴；強制 no-gap；以 `voucher_sequences(client_id, seq_date)` table + atomic UPSERT 賦號
+- **決議位置**：PLAN Decision #6、§3.5、§5.4（含 PL/pgSQL RPC 與 no-gap 紀律）
 
 ### 6. 部分沖銷 vs 完全沖銷的判斷邏輯
 目前 MVP 策略：

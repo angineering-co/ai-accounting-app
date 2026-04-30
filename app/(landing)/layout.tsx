@@ -23,9 +23,9 @@ export default function LandingLayout({
             <Image
               src="/snapbooks.svg"
               alt="SnapBooks.ai 速博 Logo"
-              width={182}
-              height={60}
-              className="h-10 w-auto"
+              width={220}
+              height={64}
+              className="h-12 w-auto"
             />
           </Link>
           <div className="flex items-center gap-4 md:gap-6">
@@ -70,9 +70,9 @@ export default function LandingLayout({
             <Image
               src="/snapbooks.svg"
               alt="SnapBooks.ai 速博 Logo"
-              width={182}
-              height={60}
-              className="h-10 w-auto"
+              width={275}
+              height={80}
+              className="h-16 w-auto"
             />
             <div className="text-sm text-slate-500 text-center md:text-left leading-relaxed">
               <p className="font-medium text-slate-700">

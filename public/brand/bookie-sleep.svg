@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="100%" height="100%">
+  <defs>
+    <radialGradient id="bk-body-s" cx="0.4" cy="0.3" r="0.9">
+      <stop offset="0%" stop-color="#0EA5E9"></stop>
+      <stop offset="100%" stop-color="#0284C7"></stop>
+    </radialGradient>
+  </defs>
+  <ellipse cx="120" cy="148" rx="76" ry="80" fill="url(#bk-body-s)"></ellipse>
+  <ellipse cx="120" cy="158" rx="50" ry="62" fill="#E0F2FE"></ellipse>
+  <path d="M104 130 Q120 138 136 130" stroke="#0EA5E9" stroke-width="2" fill="none" opacity="0.35"></path>
+  <path d="M98 156 Q120 168 142 156" stroke="#0EA5E9" stroke-width="2" fill="none" opacity="0.35"></path>
+  <path d="M102 184 Q120 196 138 184" stroke="#0EA5E9" stroke-width="2" fill="none" opacity="0.35"></path>
+  <path d="M62 96 L78 56 L94 96 Z" fill="#0284C7"></path>
+  <path d="M178 96 L162 56 L146 96 Z" fill="#0284C7"></path>
+  <circle cx="98" cy="116" r="30" fill="#FFFFFF"></circle>
+  <circle cx="142" cy="116" r="30" fill="#FFFFFF"></circle>
+  <circle cx="98" cy="116" r="30" fill="none" stroke="#0F172A" stroke-width="2" opacity="0.15"></circle>
+  <circle cx="142" cy="116" r="30" fill="none" stroke="#0F172A" stroke-width="2" opacity="0.15"></circle>
+  <path d="M90 116 Q98 112 106 116" stroke="#0F172A" stroke-width="3" fill="none" stroke-linecap="round"></path>
+  <path d="M134 116 Q142 112 150 116" stroke="#0F172A" stroke-width="3" fill="none" stroke-linecap="round"></path>
+  <path d="M120 132 L112 146 L128 146 Z" fill="#FBBF24"></path>
+  <ellipse cx="78" cy="138" rx="8" ry="4" fill="#F472B6" opacity="0.45"></ellipse>
+  <ellipse cx="162" cy="138" rx="8" ry="4" fill="#F472B6" opacity="0.45"></ellipse>
+  <ellipse cx="64" cy="156" rx="14" ry="22" fill="#0284C7"></ellipse>
+  <ellipse cx="100" cy="222" rx="14" ry="6" fill="#FBBF24"></ellipse>
+  <ellipse cx="140" cy="222" rx="14" ry="6" fill="#FBBF24"></ellipse>
+  <line x1="92" y1="222" x2="92" y2="228" stroke="#92400E" stroke-width="2" stroke-linecap="round"></line>
+  <line x1="100" y1="222" x2="100" y2="228" stroke="#92400E" stroke-width="2" stroke-linecap="round"></line>
+  <line x1="108" y1="222" x2="108" y2="228" stroke="#92400E" stroke-width="2" stroke-linecap="round"></line>
+  <line x1="132" y1="222" x2="132" y2="228" stroke="#92400E" stroke-width="2" stroke-linecap="round"></line>
+  <line x1="140" y1="222" x2="140" y2="228" stroke="#92400E" stroke-width="2" stroke-linecap="round"></line>
+  <line x1="148" y1="222" x2="148" y2="228" stroke="#92400E" stroke-width="2" stroke-linecap="round"></line>
+</svg>

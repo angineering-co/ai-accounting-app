@@ -542,3 +542,8 @@ export const ACCOUNT_LIST = [
 
 export type AccountCode = keyof typeof ACCOUNTS;
 export type Account = typeof ACCOUNT_LIST[number];
+
+export function accountLabel(code: string): string {
+  const acc = ACCOUNTS[code as AccountCode];
+  return acc ? `${code} ${acc.name}` : code;
+}

@@ -12,6 +12,19 @@ export function formatDateToYYYYMMDD(date: Date): string {
   return `${year}/${month}/${day}`;
 }
 
+export function formatDateToISO(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+const ntdFormatter = new Intl.NumberFormat("zh-TW");
+
+export function formatNTD(amount: number): string {
+  return ntdFormatter.format(amount);
+}
+
 export function normalizeDateInput(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const trimmed = value.trim();

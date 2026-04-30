@@ -1,11 +1,12 @@
 "use client";
 
-import { 
-  LayoutDashboard, 
-  Users, 
-  FileText, 
+import {
+  LayoutDashboard,
+  Users,
+  FileText,
   Settings,
-  LogOut
+  LogOut,
+  BookOpen,
 } from "lucide-react";
 import {
   Sidebar,
@@ -27,7 +28,8 @@ import { createClient } from "@/lib/supabase/client";
 export function FirmSidebar() {
   const router = useRouter();
   const supabase = createClient();
-  const { firmId } = useParams() as { firmId: string };
+  const params = useParams() as { firmId: string; clientId?: string };
+  const { firmId, clientId } = params;
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -40,6 +42,17 @@ export function FirmSidebar() {
     { title: "發票管理", url: `/firm/${firmId}/invoice`, icon: FileText },
     { title: "設定", url: `/firm/${firmId}/settings`, icon: Settings },
   ];
+
+  // 客戶子模組：僅在 URL 含 clientId 時顯示。
+  const clientItems = clientId
+    ? [
+        {
+          title: "傳票",
+          url: `/firm/${firmId}/client/${clientId}/voucher`,
+          icon: BookOpen,
+        },
+      ]
+    : [];
 
   return (
     <Sidebar collapsible="icon">
@@ -77,6 +90,25 @@ export function FirmSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        {clientItems.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-sm">客戶子模組</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {clientItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild tooltip={item.title} className="text-base">
+                      <Link href={item.url}>
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>

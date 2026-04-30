@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 
@@ -24,7 +24,10 @@ import {
 } from "@/components/ui/table";
 import { cn, formatNTD } from "@/lib/utils";
 
-import type { JournalEntry } from "@/lib/domain/journal-entry";
+import {
+  buildLineSumsMap,
+  type JournalEntry,
+} from "@/lib/domain/journal-entry";
 import { useVoucherDemoStore } from "@/lib/dev/use-voucher-demo-store";
 
 interface VoucherBatchPostDialogProps {
@@ -40,16 +43,6 @@ interface PostResult {
   error: string | null;
 }
 
-function summarizeEntry(
-  entry: JournalEntry,
-  allLines: { journal_entry_id: string; debit: number; credit: number }[],
-): { debit: number; credit: number; balanced: boolean } {
-  const ls = allLines.filter((l) => l.journal_entry_id === entry.id);
-  const debit = ls.reduce((s, l) => s + l.debit, 0);
-  const credit = ls.reduce((s, l) => s + l.credit, 0);
-  return { debit, credit, balanced: debit === credit && debit > 0 };
-}
-
 export function VoucherBatchPostDialog({
   entries,
   open,
@@ -61,11 +54,19 @@ export function VoucherBatchPostDialog({
   const [results, setResults] = useState<PostResult[] | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const drafts = entries.filter((e) => e.status === "draft");
-  const summaries = drafts.map((e) => ({
-    entry: e,
-    ...summarizeEntry(e, store.lines),
-  }));
+  const drafts = useMemo(
+    () => entries.filter((e) => e.status === "draft"),
+    [entries],
+  );
+
+  const summaries = useMemo(() => {
+    const sums = buildLineSumsMap(store.lines);
+    return drafts.map((entry) => {
+      const { debit, credit } = sums.get(entry.id) ?? { debit: 0, credit: 0 };
+      return { entry, debit, credit, balanced: debit === credit && debit > 0 };
+    });
+  }, [drafts, store.lines]);
+
   const balancedCount = summaries.filter((s) => s.balanced).length;
 
   const handleSubmit = () => {
@@ -99,7 +100,7 @@ export function VoucherBatchPostDialog({
           <DialogDescription className="text-base">
             {results
               ? "過帳結果如下，請逐筆確認。"
-              : `將為以下 ${drafts.length} 筆草稿賦予傳票編號並進入帳本。過帳後不可直接刪除，當年度未關帳前可 in-place edit（需填修改原因）；跨年度後不可改。`}
+              : `將為以下 ${drafts.length} 筆草稿賦予傳票編號並進入帳本。過帳後不可直接刪除，當年度未關帳前可更新（需填修改原因）；跨年度後不可改。`}
           </DialogDescription>
         </DialogHeader>
 
@@ -135,8 +136,10 @@ export function VoucherBatchPostDialog({
                     <TableCell className="text-base">
                       {s.entry.voucher_type}
                     </TableCell>
-                    <TableCell className="text-base max-w-[280px] truncate">
-                      {s.entry.description ?? "—"}
+                    <TableCell className="text-base max-w-[360px]">
+                      <div className="line-clamp-2">
+                        {s.entry.description ?? "—"}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right font-mono text-base">
                       {formatNTD(s.debit)} / {formatNTD(s.credit)}

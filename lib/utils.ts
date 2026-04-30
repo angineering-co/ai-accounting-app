@@ -19,8 +19,10 @@ export function formatDateToISO(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+const ntdFormatter = new Intl.NumberFormat("zh-TW");
+
 export function formatNTD(amount: number): string {
-  return amount.toLocaleString();
+  return ntdFormatter.format(amount);
 }
 
 export function normalizeDateInput(value: string | undefined): string | undefined {

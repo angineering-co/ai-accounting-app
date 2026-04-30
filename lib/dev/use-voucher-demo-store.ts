@@ -5,9 +5,10 @@ import {
   generateVoucherDemoData,
   type VoucherDemoData,
 } from "@/tests/fixtures/voucher-demo-generator";
-import type {
-  JournalEntry,
-  JournalEntryLine,
+import {
+  isLinesBalanced,
+  type JournalEntry,
+  type JournalEntryLine,
 } from "@/lib/domain/journal-entry";
 import type { AuditTrail } from "@/lib/domain/audit-trail";
 import { formatDateToISO } from "@/lib/utils";
@@ -23,6 +24,7 @@ function notify(): void {
 }
 
 function setState(next: VoucherDemoData): void {
+  if (next === _state) return;
   _state = next;
   notify();
 }
@@ -40,6 +42,13 @@ function getSnapshot(): VoucherDemoData {
 
 export function resetVoucherDemoStore(): void {
   setState(generateVoucherDemoData());
+}
+
+// Re-seed the demo so its firmId/clientId match the route the user is viewing.
+// Without this the page filter `e.client_id === clientId` excludes every entry.
+export function seedVoucherDemoFor(firmId: string, clientId: string): void {
+  if (_state.firmId === firmId && _state.clientId === clientId) return;
+  setState(generateVoucherDemoData({ firmId, clientId }));
 }
 
 function genId(): string {
@@ -85,9 +94,7 @@ function postEntries(entryIds: string[], userId: string): PostResult[] {
       continue;
     }
     const entryLines = working.lines.filter((l) => l.journal_entry_id === e.id);
-    const debit = entryLines.reduce((s, l) => s + l.debit, 0);
-    const credit = entryLines.reduce((s, l) => s + l.credit, 0);
-    if (debit !== credit || debit === 0) {
+    if (!isLinesBalanced(entryLines)) {
       results.push({ entry_id: e.id, voucher_no: null, error: "unbalanced" });
       continue;
     }

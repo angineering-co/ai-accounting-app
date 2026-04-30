@@ -17,15 +17,22 @@ export interface VoucherDemoData {
 
 // Phase 1 fake data: covers every UI state phase 2 must render.
 // IDs are deterministic counter-based UUIDs so tests can assert exact shapes.
-export function generateVoucherDemoData(): VoucherDemoData {
+export interface GenerateVoucherDemoDataOptions {
+  firmId?: string;
+  clientId?: string;
+}
+
+export function generateVoucherDemoData(
+  opts: GenerateVoucherDemoDataOptions = {},
+): VoucherDemoData {
   let counter = 0;
   const nextId = (): string => {
     counter += 1;
     return `00000000-0000-4000-8000-${counter.toString(16).padStart(12, "0")}`;
   };
 
-  const firmId = nextId();
-  const clientId = nextId();
+  const firmId = opts.firmId ?? nextId();
+  const clientId = opts.clientId ?? nextId();
   const userId = nextId();
 
   const documents: Document[] = [];
@@ -179,7 +186,7 @@ export function generateVoucherDemoData(): VoucherDemoData {
     voucher_no: "20240115-00001",
     voucher_type: "支出",
     entry_date: "2024-01-15",
-    description: "文具用品 3,300",
+    description: "誠品書店 文具用品採購：A4 影印紙、原子筆、便利貼一批，共 3,300 元（含稅）",
     status: "posted",
     reverses_entry_id: null,
     posted_at: at("2024-01-16T10:00:00Z"),
@@ -205,7 +212,7 @@ export function generateVoucherDemoData(): VoucherDemoData {
     voucher_no: "20240120-00001",
     voucher_type: "支出",
     entry_date: "2024-01-20",
-    description: "出差旅費 12,600",
+    description: "王經理 1/18–1/19 台北↔台中出差：高鐵票、計程車、住宿，共 12,600 元（含稅）",
     status: "posted",
     reverses_entry_id: null,
     posted_at: at("2024-01-21T11:00:00Z"),
@@ -228,7 +235,7 @@ export function generateVoucherDemoData(): VoucherDemoData {
     action: "updated",
     before: {
       entry: {
-        description: "出差旅費 12,600",
+        description: "出差旅費 12,600（OCR 誤抓為文具用品費，後修正）",
       },
       lines: [
         { line_number: 1, account_code: "6133", debit: 12000, credit: 0, description: "文具用品費（OCR 誤判）" },
@@ -251,7 +258,7 @@ export function generateVoucherDemoData(): VoucherDemoData {
     voucher_no: "20240205-00001",
     voucher_type: "收入",
     entry_date: "2024-02-05",
-    description: "進項折讓 1,050",
+    description: "誠品書店 進項折讓：1/15 文具用品退貨一批，折讓金額 1,050 元（含稅）",
     status: "posted",
     reverses_entry_id: null,
     posted_at: at("2024-02-06T09:00:00Z"),
@@ -276,7 +283,7 @@ export function generateVoucherDemoData(): VoucherDemoData {
     voucher_no: "20240210-00001",
     voucher_type: "收入",
     entry_date: "2024-02-10",
-    description: "銷項收入 21,000（已沖銷）",
+    description: "ABC 顧問公司 軟體授權銷售：5 套年度方案，含 5% 營業稅共 21,000 元（已沖銷）",
     status: "reversed",
     reverses_entry_id: null,
     posted_at: at("2024-02-11T10:00:00Z"),
@@ -301,7 +308,7 @@ export function generateVoucherDemoData(): VoucherDemoData {
     voucher_no: "20240215-00001",
     voucher_type: "轉帳",
     entry_date: "2024-02-15",
-    description: `沖銷 20240210-00001：客戶取消訂單`,
+    description: "沖銷 20240210-00001：ABC 顧問公司 2/15 來函取消訂單，全額退款已執行",
     status: "posted",
     reverses_entry_id: entry4Id,
     posted_at: at("2024-02-15T16:00:00Z"),
@@ -338,7 +345,7 @@ export function generateVoucherDemoData(): VoucherDemoData {
     voucher_no: "20240228-00001",
     voucher_type: "轉帳",
     entry_date: "2024-02-28",
-    description: "二月份折舊（系統自動）",
+    description: "二月份折舊（系統自動入帳）：辦公設備 + 電腦設備，依直線法分攤計提 5,000 元",
     status: "posted",
     reverses_entry_id: null,
     posted_at: at("2024-02-28T23:59:00Z"),
@@ -362,7 +369,7 @@ export function generateVoucherDemoData(): VoucherDemoData {
     voucher_no: null,
     voucher_type: "支出",
     entry_date: "2024-03-01",
-    description: "辦公用品 5,250",
+    description: "聯強國際 辦公用品採購：影印紙 10 包、墨水匣 3 組、雜項，共 5,250 元（含稅）",
     status: "draft",
     reverses_entry_id: null,
     posted_at: null,
@@ -387,7 +394,7 @@ export function generateVoucherDemoData(): VoucherDemoData {
     voucher_no: null,
     voucher_type: "收入",
     entry_date: "2024-03-03",
-    description: "現金銷貨 8,400（無發票，手動建單）",
+    description: "3/3 現金銷貨：店面零售收入，無開立發票，含 5% 營業稅共 8,400 元（手動建單）",
     status: "draft",
     reverses_entry_id: null,
     posted_at: null,
@@ -413,7 +420,7 @@ export function generateVoucherDemoData(): VoucherDemoData {
     voucher_no: null,
     voucher_type: "支出",
     entry_date: "2024-03-05",
-    description: "雜支 1,050（科目待補）",
+    description: "雜支 1,050 元（科目待補）：請會計師確認此筆應歸入文具用品費或雜項費用",
     status: "draft",
     reverses_entry_id: null,
     posted_at: null,

@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
@@ -45,7 +45,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn, formatNTD } from "@/lib/utils";
 
-import { useVoucherDemoStore } from "@/lib/dev/use-voucher-demo-store";
+import {
+  seedVoucherDemoFor,
+  useVoucherDemoStore,
+} from "@/lib/dev/use-voucher-demo-store";
 import { accountLabel } from "@/lib/data/accounts";
 import { VoucherEditDialog } from "@/components/voucher-edit-dialog";
 import { VoucherReverseDialog } from "@/components/voucher-reverse-dialog";
@@ -70,6 +73,10 @@ export default function VoucherDetailPage({
   const router = useRouter();
   const store = useVoucherDemoStore();
 
+  useEffect(() => {
+    seedVoucherDemoFor(firmId, clientId);
+  }, [firmId, clientId]);
+
   const [editOpen, setEditOpen] = useState(false);
   const [reverseOpen, setReverseOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -91,13 +98,6 @@ export default function VoucherDetailPage({
 
   const debitTotal = lines.reduce((s, l) => s + l.debit, 0);
   const creditTotal = lines.reduce((s, l) => s + l.credit, 0);
-
-  const editedCount = store.auditTrails.filter(
-    (t) =>
-      t.entity_table === "journal_entries" &&
-      t.entity_id === entryId &&
-      t.action === "updated",
-  ).length;
 
   const reverserEntry = useMemo(() => {
     if (entry?.status !== "reversed") return null;
@@ -178,14 +178,9 @@ export default function VoucherDetailPage({
                   草稿
                 </Badge>
               )}
-              {isPosted && editedCount === 0 && (
+              {isPosted && (
                 <Badge className="bg-emerald-100 text-emerald-900 hover:bg-emerald-100">
                   ✓ 已過帳
-                </Badge>
-              )}
-              {isPosted && editedCount > 0 && (
-                <Badge className="bg-amber-100 text-amber-900 hover:bg-amber-100">
-                  ✓ 已過帳・✎ 編輯 {editedCount} 次
                 </Badge>
               )}
               {isReversed && (
@@ -351,7 +346,7 @@ export default function VoucherDetailPage({
                 </Button>
               </>
             )}
-            {(editedCount > 0 || isReversed) && (
+            {!isDraft && (
               <Button variant="outline" onClick={() => setHistoryOpen(true)}>
                 <History className="size-4 mr-1" />
                 審計歷史
@@ -361,13 +356,12 @@ export default function VoucherDetailPage({
         </CardContent>
       </Card>
 
-      {editOpen && (
-        <VoucherEditDialog
-          entry={entry}
-          open={editOpen}
-          onOpenChange={setEditOpen}
-        />
-      )}
+      <VoucherEditDialog
+        entry={entry}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+      />
+
       {reverseOpen && (
         <VoucherReverseDialog
           entry={entry}

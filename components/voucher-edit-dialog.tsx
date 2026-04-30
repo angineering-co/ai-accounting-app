@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -51,6 +51,9 @@ import { cn, formatNTD } from "@/lib/utils";
 
 import { ACCOUNT_LIST } from "@/lib/data/accounts";
 import {
+  ACCOUNT_CODE_REGEX,
+  isLinesBalanced,
+  sumLines,
   VOUCHER_TYPE,
   type JournalEntry,
   type JournalEntryLine,
@@ -66,7 +69,7 @@ interface VoucherEditDialogProps {
 
 const lineFormSchema = z
   .object({
-    account_code: z.string().regex(/^\d{4}$/, "請選擇科目"),
+    account_code: z.string().regex(ACCOUNT_CODE_REGEX, "請選擇科目"),
     debit: z.number().int().nonnegative(),
     credit: z.number().int().nonnegative(),
     description: z.string().optional(),
@@ -90,14 +93,10 @@ function buildEditFormSchema(mode: "draft" | "posted") {
       lines: z.array(lineFormSchema).min(2, "至少 2 行"),
       reason: reasonSchema,
     })
-    .refine(
-      (data) => {
-        const debit = data.lines.reduce((s, l) => s + (l.debit || 0), 0);
-        const credit = data.lines.reduce((s, l) => s + (l.credit || 0), 0);
-        return debit === credit && debit > 0;
-      },
-      { message: "借貸不平衡", path: ["lines"] },
-    );
+    .refine((data) => isLinesBalanced(data.lines), {
+      message: "借貸不平衡",
+      path: ["lines"],
+    });
 }
 
 type EditFormValues = z.infer<ReturnType<typeof buildEditFormSchema>>;
@@ -147,27 +146,12 @@ export function VoucherEditDialog({
   });
 
   const watchedLines = form.watch("lines");
-  const debitTotal = watchedLines.reduce((s, l) => s + (Number(l.debit) || 0), 0);
-  const creditTotal = watchedLines.reduce((s, l) => s + (Number(l.credit) || 0), 0);
+  const numericLines = watchedLines.map((l) => ({
+    debit: Number(l.debit) || 0,
+    credit: Number(l.credit) || 0,
+  }));
+  const { debit: debitTotal, credit: creditTotal } = sumLines(numericLines);
   const isBalanced = debitTotal === creditTotal && debitTotal > 0;
-
-  // Reset only when the dialog opens or switches entries — avoid clobbering in-progress edits when the store updates while open.
-  useEffect(() => {
-    if (!open) return;
-    form.reset({
-      voucher_type: entry.voucher_type,
-      entry_date: entry.entry_date,
-      description: entry.description ?? "",
-      lines: initialLines.map((l) => ({
-        account_code: l.account_code,
-        debit: l.debit,
-        credit: l.credit,
-        description: l.description ?? "",
-      })),
-      reason: "",
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, entry.id]);
 
   const onSubmit = (values: EditFormValues) => {
     const newLines = values.lines.map((l, i) => ({

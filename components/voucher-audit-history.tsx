@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { History } from "lucide-react";
 import { format } from "date-fns";
 
@@ -41,38 +42,19 @@ const ACTION_LABEL: Record<AuditAction, string> = {
   reversed: "被沖銷",
 };
 
-interface BeforeSnapshot {
-  entry?: {
-    voucher_type?: string;
-    entry_date?: string;
-    description?: string | null;
-  };
-  lines?: {
-    line_number: number;
-    account_code: string;
-    debit: number;
-    credit: number;
-    description?: string | null;
-  }[];
-}
-
-function isBeforeSnapshot(value: unknown): value is BeforeSnapshot {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    ("entry" in value || "lines" in value)
-  );
-}
-
 export function VoucherAuditHistory({
   entryId,
   open,
   onOpenChange,
 }: VoucherAuditHistoryProps) {
   const store = useVoucherDemoStore();
-  const trails = [...store.auditTrails]
-    .filter((t) => t.entity_table === "journal_entries" && t.entity_id === entryId)
-    .sort((a, b) => b.actor_at.getTime() - a.actor_at.getTime());
+  const trails = useMemo(
+    () =>
+      store.auditTrails
+        .filter((t) => t.entity_table === "journal_entries" && t.entity_id === entryId)
+        .sort((a, b) => b.actor_at.getTime() - a.actor_at.getTime()),
+    [store.auditTrails, entryId],
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -117,7 +99,7 @@ export function VoucherAuditHistory({
                     "系統"
                   )}
                 </div>
-                {isBeforeSnapshot(t.before) && t.before.lines && (
+                {t.before?.lines && (
                   <div>
                     <div className="text-sm text-muted-foreground mb-1">
                       變更前的分錄：

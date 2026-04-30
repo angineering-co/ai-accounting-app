@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { ArrowLeft, CalendarIcon, Filter, X } from "lucide-react";
@@ -35,47 +35,36 @@ import { Badge } from "@/components/ui/badge";
 import { TablePagination } from "@/components/table-pagination";
 import { cn, formatNTD } from "@/lib/utils";
 
-import { useVoucherDemoStore } from "@/lib/dev/use-voucher-demo-store";
-import type { JournalEntry } from "@/lib/domain/journal-entry";
+import {
+  seedVoucherDemoFor,
+  useVoucherDemoStore,
+} from "@/lib/dev/use-voucher-demo-store";
+import {
+  buildLineSumsMap,
+  type JournalEntry,
+} from "@/lib/domain/journal-entry";
 import { VoucherBatchPostDialog } from "@/components/voucher-batch-post-dialog";
 
-type StatusFilter = "all" | "draft" | "posted" | "edited" | "reversed";
+type StatusFilter = "all" | "draft" | "posted" | "reversed";
 
 const STATUS_TABS: { key: StatusFilter; label: string }[] = [
   { key: "all", label: "全部" },
   { key: "draft", label: "草稿" },
   { key: "posted", label: "已過帳" },
-  { key: "edited", label: "已編輯" },
   { key: "reversed", label: "已沖銷" },
 ];
 
 const PAGE_SIZE = 25;
 
-function statusKey(
-  entry: JournalEntry,
-  editedSet: Set<string>,
-): "draft" | "posted" | "edited" | "reversed" {
-  if (entry.status === "draft") return "draft";
-  if (entry.status === "reversed") return "reversed";
-  return editedSet.has(entry.id) ? "edited" : "posted";
-}
-
-function StatusBadge({
-  entry,
-  editedSet,
-}: {
-  entry: JournalEntry;
-  editedSet: Set<string>;
-}) {
-  const k = statusKey(entry, editedSet);
-  if (k === "draft") {
+function StatusBadge({ entry }: { entry: JournalEntry }) {
+  if (entry.status === "draft") {
     return (
       <Badge variant="outline" className="border-dashed text-muted-foreground">
         草稿
       </Badge>
     );
   }
-  if (k === "reversed") {
+  if (entry.status === "reversed") {
     return (
       <Badge
         variant="outline"
@@ -85,33 +74,11 @@ function StatusBadge({
       </Badge>
     );
   }
-  if (k === "edited") {
-    return (
-      <Badge className="bg-amber-100 text-amber-900 hover:bg-amber-100">
-        ✓ 已過帳・✎ 編輯
-      </Badge>
-    );
-  }
   return (
     <Badge className="bg-emerald-100 text-emerald-900 hover:bg-emerald-100">
       ✓ 已過帳
     </Badge>
   );
-}
-
-function lineSums(
-  entryId: string,
-  lines: { journal_entry_id: string; debit: number; credit: number }[],
-) {
-  let debit = 0;
-  let credit = 0;
-  for (const l of lines) {
-    if (l.journal_entry_id === entryId) {
-      debit += l.debit;
-      credit += l.credit;
-    }
-  }
-  return { debit, credit };
 }
 
 export default function VoucherListPage({
@@ -123,6 +90,10 @@ export default function VoucherListPage({
   const router = useRouter();
   const store = useVoucherDemoStore();
 
+  useEffect(() => {
+    seedVoucherDemoFor(firmId, clientId);
+  }, [firmId, clientId]);
+
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [docTypeFilter, setDocTypeFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState<string>("");
@@ -132,35 +103,33 @@ export default function VoucherListPage({
   const [page, setPage] = useState(0);
   const [batchOpen, setBatchOpen] = useState(false);
 
-  const editedSet = useMemo(() => {
-    const s = new Set<string>();
-    for (const t of store.auditTrails) {
-      if (t.entity_table === "journal_entries" && t.action === "updated") {
-        s.add(t.entity_id);
-      }
-    }
-    return s;
-  }, [store.auditTrails]);
+  const documentsById = useMemo(
+    () => new Map(store.documents.map((d) => [d.id, d] as const)),
+    [store.documents],
+  );
 
-  const documentsById = useMemo(() => {
-    const m = new Map(store.documents.map((d) => [d.id, d] as const));
-    return m;
-  }, [store.documents]);
+  const clientEntries = useMemo(
+    () => store.entries.filter((e) => e.client_id === clientId),
+    [store.entries, clientId],
+  );
+
+  const lineSumsByEntry = useMemo(() => {
+    const ids = new Set(clientEntries.map((e) => e.id));
+    return buildLineSumsMap(store.lines.filter((l) => ids.has(l.journal_entry_id)));
+  }, [clientEntries, store.lines]);
 
   const { counts, filtered } = useMemo(() => {
     const c: Record<StatusFilter, number> = {
-      all: store.entries.length,
+      all: clientEntries.length,
       draft: 0,
       posted: 0,
-      edited: 0,
       reversed: 0,
     };
     const kw = keyword.trim();
     const list: JournalEntry[] = [];
-    for (const e of store.entries) {
-      const k = statusKey(e, editedSet);
-      c[k] += 1;
-      if (statusFilter !== "all" && k !== statusFilter) continue;
+    for (const e of clientEntries) {
+      c[e.status] += 1;
+      if (statusFilter !== "all" && e.status !== statusFilter) continue;
       if (dateFrom && e.entry_date < dateFrom) continue;
       if (dateTo && e.entry_date > dateTo) continue;
       if (docTypeFilter !== "all") {
@@ -185,7 +154,7 @@ export default function VoucherListPage({
       return b.created_at.getTime() - a.created_at.getTime();
     });
     return { counts: c, filtered: list };
-  }, [store.entries, statusFilter, dateFrom, dateTo, docTypeFilter, keyword, editedSet, documentsById]);
+  }, [clientEntries, statusFilter, dateFrom, dateTo, docTypeFilter, keyword, documentsById]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages - 1);
@@ -230,8 +199,8 @@ export default function VoucherListPage({
   };
 
   const selectedEntries = useMemo(
-    () => store.entries.filter((e) => selected.has(e.id)),
-    [store.entries, selected],
+    () => clientEntries.filter((e) => selected.has(e.id)),
+    [clientEntries, selected],
   );
 
   return (
@@ -410,30 +379,30 @@ export default function VoucherListPage({
                     aria-label="全選"
                   />
                 </TableHead>
-                <TableHead className="w-40">傳票編號 / 日期</TableHead>
-                <TableHead className="w-24">類型</TableHead>
+                <TableHead className="w-28">日期</TableHead>
+                <TableHead className="w-36">傳票編號</TableHead>
+                <TableHead className="w-20">類型</TableHead>
                 <TableHead>摘要</TableHead>
-                <TableHead className="w-32 text-right">借 / 貸</TableHead>
-                <TableHead className="w-32">狀態</TableHead>
+                <TableHead className="w-36 text-right">借 / 貸</TableHead>
+                <TableHead className="w-24">狀態</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {pageRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12 text-muted-foreground text-base">
+                  <TableCell colSpan={7} className="text-center py-12 text-muted-foreground text-base">
                     尚無符合條件的傳票
                   </TableCell>
                 </TableRow>
               ) : (
                 pageRows.map((entry) => {
-                  const sums = lineSums(entry.id, store.lines);
-                  const k = statusKey(entry, editedSet);
+                  const sums = lineSumsByEntry.get(entry.id) ?? { debit: 0, credit: 0 };
                   return (
                     <TableRow
                       key={entry.id}
                       className={cn(
-                        k === "draft" && "bg-muted/30",
-                        k === "reversed" && "opacity-60",
+                        entry.status === "draft" && "bg-muted/30",
+                        entry.status === "reversed" && "opacity-60",
                       )}
                     >
                       <TableCell>
@@ -447,22 +416,27 @@ export default function VoucherListPage({
                           <span className="block w-4" />
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="font-mono text-base">
                         <Link
                           href={`/firm/${firmId}/client/${clientId}/voucher/${entry.id}`}
-                          className="block"
+                          className="block hover:underline"
                         >
-                          <div className="font-mono text-base font-medium">
-                            {entry.voucher_no ?? "（無編號）"}
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            {entry.entry_date}
-                          </div>
+                          {entry.entry_date}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="font-mono text-base font-medium">
+                        <Link
+                          href={`/firm/${firmId}/client/${clientId}/voucher/${entry.id}`}
+                          className="block hover:underline"
+                        >
+                          {entry.voucher_no ?? "（無編號）"}
                         </Link>
                       </TableCell>
                       <TableCell className="text-base">{entry.voucher_type}</TableCell>
-                      <TableCell className="text-base max-w-[420px] truncate">
-                        {entry.description ?? "—"}
+                      <TableCell className="text-base max-w-[420px]">
+                        <div className="line-clamp-2">
+                          {entry.description ?? "—"}
+                        </div>
                       </TableCell>
                       <TableCell className="text-right font-mono text-base">
                         {formatNTD(sums.debit)}
@@ -470,7 +444,7 @@ export default function VoucherListPage({
                         {formatNTD(sums.credit)}
                       </TableCell>
                       <TableCell>
-                        <StatusBadge entry={entry} editedSet={editedSet} />
+                        <StatusBadge entry={entry} />
                       </TableCell>
                     </TableRow>
                   );

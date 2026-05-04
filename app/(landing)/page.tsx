@@ -53,21 +53,12 @@ export const metadata: Metadata = {
     url: "https://snapbooks.ai",
     siteName: "SnapBooks.ai",
     type: "website",
-    images: [
-      {
-        url: "https://snapbooks.ai/opengraph-image.png",
-        width: 1200,
-        height: 630,
-        alt: "SnapBooks.ai",
-      },
-    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "AI 記帳事務所推薦｜速博 SnapBooks - 每月$1,260，專業會計師把關",
     description:
       "速博 SnapBooks.ai — 專業會計師全程把關的記帳事務所，每月 NT$1,260 起。拍照上傳憑證就好，記帳報稅全程搞定。適合年營業額 3,000 萬以下中小企業。",
-    images: ["https://snapbooks.ai/twitter-image.png"],
   },
 };
 

@@ -16,6 +16,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const post = await getPostBySlug(slug);
   if (!post) return {};
 
+  const imageUrl = post.coverImage ?? "/opengraph-image.png";
+
   return {
     title: `${post.title}｜速博 SnapBooks.ai`,
     description: post.description,
@@ -26,9 +28,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       type: "article",
       publishedTime: post.date,
       siteName: "SnapBooks.ai",
-      ...(post.coverImage && {
-        images: [{ url: `https://snapbooks.ai${post.coverImage}`, width: 1200, height: 630 }],
-      }),
+      images: [{ url: imageUrl, width: 1200, height: 630 }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: post.title,
+      description: post.description,
+      images: [imageUrl],
     },
   };
 }

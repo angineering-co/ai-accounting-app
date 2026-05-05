@@ -13,6 +13,24 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse;
   }
 
+  // When adding public landing pages, add them here to skip auth redirect.
+  // Use the array for exact paths; use startsWith checks below for prefixes.
+  const publicRoutes = ["/", "/terms", "/privacy", "/company", "/blog", "/tools", "/faq", "/startup-guide", "/pricing", "/apply"];
+  const pathname = request.nextUrl.pathname;
+  const isPublic =
+    publicRoutes.includes(pathname) ||
+    pathname.startsWith("/blog/") ||
+    pathname.startsWith("/tools/") ||
+    pathname.startsWith("/api/webhooks/");
+
+  // Skip the Supabase round-trip on public marketing/content routes so they
+  // can serve from the Vercel edge cache. The auth client otherwise sets
+  // `Cache-Control: private, no-store` and forces a Lambda render on every
+  // crawler hit, which both hurts performance and trips bot mitigation.
+  if (isPublic) {
+    return supabaseResponse;
+  }
+
   // With Fluid compute, don't put this client in a global environment
   // variable. Always create a new one on each request.
   const supabase = createServerClient(
@@ -47,18 +65,10 @@ export async function updateSession(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const user = data?.claims;
 
-  // When adding public landing pages, add them here to skip auth redirect.
-  // Use the array for exact paths; use startsWith checks below for prefixes.
-  const publicRoutes = ["/", "/terms", "/privacy", "/company", "/blog", "/tools", "/faq", "/startup-guide", "/pricing", "/apply"];
-
   if (
-    !publicRoutes.includes(request.nextUrl.pathname) &&
-    !request.nextUrl.pathname.startsWith("/blog/") &&
-    !request.nextUrl.pathname.startsWith("/tools/") &&
-    !request.nextUrl.pathname.startsWith("/api/webhooks/") &&
     !user &&
-    !request.nextUrl.pathname.startsWith("/login") &&
-    !request.nextUrl.pathname.startsWith("/auth")
+    !pathname.startsWith("/login") &&
+    !pathname.startsWith("/auth")
   ) {
     // no user, potentially respond by redirecting the user to the login page
     const url = request.nextUrl.clone();
@@ -75,7 +85,6 @@ export async function updateSession(request: NextRequest) {
 
     if (profile?.role === "client" && profile.firm_id && profile.client_id) {
       const expectedPortalPath = `/firm/${profile.firm_id}/client/${profile.client_id}/portal`;
-      const pathname = request.nextUrl.pathname;
       const isPortalPath = pathname === expectedPortalPath || pathname.startsWith(`${expectedPortalPath}/`);
 
       if (

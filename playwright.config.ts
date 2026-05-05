@@ -20,7 +20,7 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         storageState: "tests/e2e/.auth/admin-user.json",
       },
-      testIgnore: /.*\.portal\.spec\.ts/,
+      testIgnore: [/.*\.portal\.spec\.ts/, /.*\.public\.spec\.ts/],
       dependencies: ["setup"],
     },
     {
@@ -31,6 +31,12 @@ export default defineConfig({
       },
       testMatch: /.*\.portal\.spec\.ts/,
       dependencies: ["setup"],
+    },
+    {
+      // Public marketing routes — no auth, no DB seeding.
+      name: "chromium-public-flows",
+      use: { ...devices["Desktop Chrome"] },
+      testMatch: /.*\.public\.spec\.ts/,
     },
   ],
   webServer: {

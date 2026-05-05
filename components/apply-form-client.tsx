@@ -15,9 +15,16 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 
-import { submitApplyForm, type ApplyFormData } from "@/lib/actions/apply";
+import {
+  submitApplyForm,
+  type ApplyFormData,
+  type ApplyFormPath,
+} from "@/lib/actions/apply";
 import { trackApplySubmit } from "@/lib/analytics";
 import { REGISTRATION_PRICING_NOTE, PRICES, LINE_URL } from "@/lib/pricing";
+import { Turnstile } from "@/components/turnstile";
+
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
 // ── Registration path: "我們會為您處理的事項" checklist ──────────────
 const REGISTRATION_STEPS = [
@@ -60,7 +67,7 @@ const BOOKKEEPING_FAQS = [
 ];
 
 export function ApplyFormClient() {
-  const [path, setPath] = useState<"registration" | "bookkeeping" | null>(null);
+  const [path, setPath] = useState<ApplyFormPath | null>(null);
   const [isPending, startTransition] = useTransition();
   const [result, setResult] = useState<{ leadCode: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +100,9 @@ export function ApplyFormClient() {
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
 
+  // Turnstile token (only required if site key is configured)
+  const [turnstileToken, setTurnstileToken] = useState("");
+
   function handleCopyCode() {
     if (!result?.leadCode) return;
     navigator.clipboard.writeText(result.leadCode);
@@ -109,12 +119,18 @@ export function ApplyFormClient() {
       return;
     }
 
+    if (TURNSTILE_SITE_KEY && !turnstileToken) {
+      setError("請完成人機驗證");
+      return;
+    }
+
     const formData: ApplyFormData = {
       path,
       contactName: contactName.trim(),
       email: email.trim(),
       phone: phone.trim(),
       notes: notes.trim() || undefined,
+      turnstileToken: turnstileToken || undefined,
     };
 
     if (path === "registration") {
@@ -424,6 +440,13 @@ export function ApplyFormClient() {
             </p>
           </div>
 
+          {/* Cloudflare Turnstile (only rendered if a site key is configured) */}
+          {TURNSTILE_SITE_KEY && (
+            <div className="flex justify-center">
+              <Turnstile siteKey={TURNSTILE_SITE_KEY} onVerify={setTurnstileToken} />
+            </div>
+          )}
+
           {/* Error message */}
           {error && (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-base text-red-700">
@@ -434,7 +457,7 @@ export function ApplyFormClient() {
           {/* Submit */}
           <Button
             type="submit"
-            disabled={isPending}
+            disabled={isPending || (!!TURNSTILE_SITE_KEY && !turnstileToken)}
             size="lg"
             className="group w-full rounded-full bg-emerald-600 text-white hover:bg-emerald-500 border-0 h-14 text-lg font-bold shadow-lg shadow-emerald-600/20 transition-all duration-300 hover:shadow-xl hover:shadow-emerald-600/30 hover:-translate-y-0.5 disabled:opacity-50"
           >

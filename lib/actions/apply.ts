@@ -2,8 +2,10 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 
+export type ApplyFormPath = "registration" | "bookkeeping";
+
 export interface ApplyFormData {
-  path: "registration" | "bookkeeping";
+  path: ApplyFormPath;
   // Contact (both paths)
   contactName: string;
   email: string;
@@ -22,6 +24,8 @@ export interface ApplyFormData {
   taxId?: string;
   currentAccounting?: string;
   monthlyInvoiceVolume?: string;
+  // Bot/spam protection
+  turnstileToken?: string;
 }
 
 export interface ApplyResult {
@@ -41,9 +45,39 @@ function generateLeadCode(): string {
   return `SB-${segment()}-${segment()}`;
 }
 
+// When TURNSTILE_SECRET_KEY is unset (e.g. local dev), verification is skipped.
+async function verifyTurnstile(token: string | undefined): Promise<boolean> {
+  const secret = process.env.TURNSTILE_SECRET_KEY;
+  if (!secret) return true;
+  if (!token) return false;
+
+  try {
+    const res = await fetch(
+      "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ secret, response: token }),
+        signal: AbortSignal.timeout(8000),
+      },
+    );
+    const data = (await res.json()) as { success?: boolean };
+    return data.success === true;
+  } catch (err) {
+    console.error("Turnstile verification failed:", err);
+    return false;
+  }
+}
+
 export async function submitApplyForm(
   formData: ApplyFormData,
 ): Promise<ApplyResult> {
+  // Bot/spam check first — if Turnstile is configured, fail closed before
+  // running anything else (including DB writes).
+  if (!(await verifyTurnstile(formData.turnstileToken))) {
+    return { success: false, error: "人機驗證失敗，請重新整理頁面後再試" };
+  }
+
   // Validate required fields
   if (!formData.contactName?.trim()) {
     return { success: false, error: "請填寫聯絡人姓名" };
@@ -77,11 +111,12 @@ export async function submitApplyForm(
 
   const leadCode = generateLeadCode();
 
-  // Store all form fields in JSONB data column
-  const { path, ...rest } = formData;
+  // `path` is its own column; `turnstileToken` is single-use and never persisted.
+  const NON_JSONB_FIELDS = new Set<keyof ApplyFormData>(["path", "turnstileToken"]);
   const data = Object.fromEntries(
-    Object.entries(rest).filter(
-      ([, v]) =>
+    Object.entries(formData).filter(
+      ([k, v]) =>
+        !NON_JSONB_FIELDS.has(k as keyof ApplyFormData) &&
         v !== undefined &&
         v !== "" &&
         !(Array.isArray(v) && v.every((s) => s === "")),
@@ -92,7 +127,7 @@ export async function submitApplyForm(
     const supabase = createAdminClient();
     const { error } = await supabase.from("leads").insert({
       lead_code: leadCode,
-      path,
+      path: formData.path,
       data,
     });
 
@@ -102,7 +137,7 @@ export async function submitApplyForm(
         const retryCode = generateLeadCode();
         const { error: retryError } = await supabase.from("leads").insert({
           lead_code: retryCode,
-          path,
+          path: formData.path,
           data,
         });
         if (retryError) {

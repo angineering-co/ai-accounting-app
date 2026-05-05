@@ -2,6 +2,22 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { hasEnvVars } from "../utils";
 
+// When adding public landing pages, add them here to skip auth redirect.
+// Use the set for exact paths; use startsWith checks below for prefixes.
+const publicRoutes = new Set([
+  "/",
+  "/terms",
+  "/privacy",
+  "/company",
+  "/blog",
+  "/tools",
+  "/faq",
+  "/startup-guide",
+  "/pricing",
+  "/apply",
+  "/api/webhooks",
+]);
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
@@ -13,12 +29,13 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse;
   }
 
-  // When adding public landing pages, add them here to skip auth redirect.
-  // Use the array for exact paths; use startsWith checks below for prefixes.
-  const publicRoutes = ["/", "/terms", "/privacy", "/company", "/blog", "/tools", "/faq", "/startup-guide", "/pricing", "/apply"];
   const pathname = request.nextUrl.pathname;
+  const normalizedPath =
+    pathname.length > 1 && pathname.endsWith("/")
+      ? pathname.slice(0, -1)
+      : pathname;
   const isPublic =
-    publicRoutes.includes(pathname) ||
+    publicRoutes.has(normalizedPath) ||
     pathname.startsWith("/blog/") ||
     pathname.startsWith("/tools/") ||
     pathname.startsWith("/api/webhooks/");

@@ -58,9 +58,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-Hant" suppressHydrationWarning>
-      {process.env.NEXT_PUBLIC_GA_ID && (
-        <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GA_ID} />
-      )}
       <body className={`${geistSans.className} ${notoSerifTC.variable} antialiased`}>
         <ThemeProvider
           attribute="class"
@@ -72,6 +69,9 @@ export default function RootLayout({
           <Toaster />
           <ServiceWorkerRegister />
         </ThemeProvider>
+        {process.env.NEXT_PUBLIC_GA_ID && (
+          <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GA_ID} />
+        )}
       </body>
     </html>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useRef } from "react";
 import { Plus, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { labelText } from "@/lib/styles/tools";
+import { useTaxIdLookup } from "@/hooks/use-tax-id-lookup";
 import type {
   InvoiceFormData,
   InvoiceVariant,
@@ -19,35 +20,6 @@ import { createEmptyItem, computeTotals } from "./invoice-helper-client";
 
 // Shared class for enlarged inputs (buyer info, tax totals)
 const largeInputClass = "h-12 sm:h-10 text-lg";
-
-function useTaxIdLookup(
-  taxId: string,
-  onResult: (name: string) => void
-) {
-  const abortRef = useRef<AbortController | null>(null);
-  const lastLookedUp = useRef<string>("");
-
-  useEffect(() => {
-    if (taxId.length !== 8 || taxId === lastLookedUp.current) return;
-    lastLookedUp.current = taxId;
-
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    fetch(
-      `https://eip.fia.gov.tw/OAI/api/businessRegistration/${taxId}`,
-      { signal: controller.signal }
-    )
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.businessNm) onResult(data.businessNm);
-      })
-      .catch(() => {});
-
-    return () => controller.abort();
-  }, [taxId, onResult]);
-}
 
 interface InvoiceHelperFormProps {
   data: InvoiceFormData;
@@ -69,7 +41,7 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
     cb({ ...d, buyerName: name });
   }, []);
 
-  useTaxIdLookup(data.buyerTaxId, handleLookupResult);
+  const { loading: isLookingUp } = useTaxIdLookup(data.buyerTaxId, handleLookupResult);
 
   function updateItem(index: number, patch: Partial<LineItem>) {
     const items = data.items.map((item, i) => {
@@ -144,7 +116,7 @@ export function InvoiceHelperForm({ data, onChange }: InvoiceHelperFormProps) {
             <div>
               <Label className="text-base text-slate-600 mb-1 block flex items-center gap-1">
                 公司名稱
-                {data.buyerTaxId.length === 8 && !data.buyerName && (
+                {isLookingUp && (
                   <Loader2 className="h-3 w-3 animate-spin text-slate-400" />
                 )}
               </Label>

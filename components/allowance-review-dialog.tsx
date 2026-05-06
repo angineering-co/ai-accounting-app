@@ -39,6 +39,7 @@ import {
   CalendarIcon,
 } from "lucide-react";
 import { type Allowance } from "@/lib/domain/models";
+import { useFormTaxIdLookup } from "@/hooks/use-tax-id-lookup";
 import { updateAllowance } from "@/lib/services/allowance";
 import { toast } from "sonner";
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -186,6 +187,12 @@ export function AllowanceReviewDialog({
 
   const source = form.watch("source");
   const isExcelImport = source === "import-excel";
+
+  const sellerTaxId = form.watch("sellerTaxId");
+  const buyerTaxId = form.watch("buyerTaxId");
+
+  const { sellerLoading: isSellerNameLoading, buyerLoading: isBuyerNameLoading } =
+    useFormTaxIdLookup(form, sellerTaxId ?? "", buyerTaxId ?? "");
 
   const dateValue = form.watch("date");
   const selectedAllowanceDate = useMemo(
@@ -878,7 +885,12 @@ export function AllowanceReviewDialog({
                   name="sellerName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>賣方名稱</FormLabel>
+                      <FormLabel className="flex items-center gap-1">
+                        賣方名稱
+                        {isSellerNameLoading && (
+                          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                        )}
+                      </FormLabel>
                       <FormControl>
                         <Input
                           {...field}
@@ -927,7 +939,12 @@ export function AllowanceReviewDialog({
                   name="buyerName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>買方名稱</FormLabel>
+                      <FormLabel className="flex items-center gap-1">
+                        買方名稱
+                        {isBuyerNameLoading && (
+                          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                        )}
+                      </FormLabel>
                       <FormControl>
                         <Input
                           {...field}

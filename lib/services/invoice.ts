@@ -19,6 +19,7 @@ import { type Json, type TablesUpdate } from "@/supabase/database.types";
 import { type ExtractedInvoiceData } from "@/lib/domain/models";
 import { ensurePeriodEditable } from "@/lib/services/tax-period";
 import { getImportFileMimeType } from "@/lib/utils/mime-type";
+import { enrichExtractedParties } from "@/lib/services/business-lookup";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 async function saveExtractedInvoiceData(
@@ -409,7 +410,13 @@ export async function extractInvoiceCore(
     // Validate extracted data against schema
     const validatedData = extractedInvoiceDataSchema.parse(extractedData);
 
-    return await saveExtractedInvoiceData(invoiceId, validatedData, supabase);
+    const enrichedData = await enrichExtractedParties(
+      validatedData,
+      invoice.in_or_out === "in" ? "in" : "out",
+      client?.tax_id ? { name: client.name, taxId: client.tax_id } : null,
+    );
+
+    return await saveExtractedInvoiceData(invoiceId, enrichedData, supabase);
   } catch (error) {
     // Update status to failed on error
     const errorMessage =

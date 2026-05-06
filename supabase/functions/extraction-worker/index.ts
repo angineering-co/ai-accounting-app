@@ -93,63 +93,82 @@ interface GeminiResponse {
 
 const FIA_API_BASE = "https://eip.fia.gov.tw/OAI/api/businessRegistration";
 
-// Batch-level cache — avoids redundant FIA lookups for the same tax ID
-// within a single invocation (common: multiple invoices from the same seller).
-// Cleared on each new Serve() invocation.
-let businessNameCache = new Map<string, string | null>();
-
 async function lookupBusinessName(taxId: string): Promise<string | null> {
   if (!/^\d{8}$/.test(taxId)) return null;
-  if (businessNameCache.has(taxId)) return businessNameCache.get(taxId)!;
   try {
     const res = await fetch(`${FIA_API_BASE}/${taxId}`);
-    if (!res.ok) { businessNameCache.set(taxId, null); return null; }
+    if (!res.ok) return null;
     const data = await res.json();
-    const name = data?.businessNm || null;
-    businessNameCache.set(taxId, name);
-    return name;
+    return data?.businessNm || null;
   } catch {
-    businessNameCache.set(taxId, null);
     return null;
   }
 }
 
+function applyKnownClient(
+  data: Record<string, unknown>,
+  side: "buyer" | "seller",
+  client: { name: string; taxId: string },
+): void {
+  const nameField = `${side}Name`;
+  const taxIdField = `${side}TaxId`;
+  data[nameField] = client.name;
+  data[taxIdField] = client.taxId;
+  if (data.confidence) {
+    const confidence = data.confidence as Record<string, string>;
+    confidence[nameField] = "high";
+    confidence[taxIdField] = "high";
+  }
+}
+
 /**
- * Enrich extracted data with business names from FIA registry.
- * Skips lookup when taxId is missing/invalid, taxId confidence is "low",
+ * Look up FIA business name for one party and write it back into `data`.
+ * Skips when taxId is missing/invalid, taxId confidence is "low",
  * or name confidence is already "high".
  */
-async function enrichBusinessNames(
+async function enrichParty(
   data: Record<string, unknown>,
-  parties: Array<{ nameField: string; taxIdField: string }>,
+  side: "buyer" | "seller",
 ): Promise<void> {
+  const nameField = `${side}Name`;
+  const taxIdField = `${side}TaxId`;
+  const taxId = data[taxIdField] as string | undefined;
+  if (!taxId || !/^\d{8}$/.test(taxId)) return;
+
   const confidence = (data.confidence ?? {}) as Record<string, string | undefined>;
+  if (confidence[taxIdField] === "low") return;
+  if (confidence[nameField] === "high") return;
 
-  const lookups = parties.map(async (party) => {
-    const taxId = data[party.taxIdField] as string | undefined;
-    if (!taxId || !/^\d{8}$/.test(taxId)) return;
+  const currentName = data[nameField] as string | undefined;
+  if (currentName && !data.confidence) return;
 
-    const taxIdConf = confidence[party.taxIdField];
-    if (taxIdConf === "low") return;
-
-    const nameConf = confidence[party.nameField];
-    if (nameConf === "high") return;
-
-    const currentName = data[party.nameField] as string | undefined;
-    if (currentName && !data.confidence) return;
-
-    const name = await lookupBusinessName(taxId);
-    if (name) {
-      data[party.nameField] = name;
-      confidence[party.nameField] = "high";
+  const name = await lookupBusinessName(taxId);
+  if (name) {
+    data[nameField] = name;
+    if (data.confidence) {
+      confidence[nameField] = "high";
+      data.confidence = confidence;
     }
-  });
-
-  await Promise.all(lookups);
-
-  if (data.confidence) {
-    data.confidence = confidence;
   }
+}
+
+/**
+ * Apply the firm's canonical client record to whichever side it represents
+ * (buyer for 進項, seller for 銷項), then FIA-look-up the other party only.
+ * Falls back to enriching both sides when no client record is available.
+ */
+async function enrichExtractedParties(
+  data: Record<string, unknown>,
+  inOrOut: "in" | "out",
+  client: { name: string; taxId: string } | null,
+): Promise<void> {
+  if (!client?.taxId) {
+    await Promise.all([enrichParty(data, "seller"), enrichParty(data, "buyer")]);
+    return;
+  }
+  const clientSide = inOrOut === "in" ? "buyer" : "seller";
+  applyKnownClient(data, clientSide, client);
+  await enrichParty(data, clientSide === "buyer" ? "seller" : "buyer");
 }
 
 // ─── Gemini API helpers ─────────────────────────────────────────────────────
@@ -293,10 +312,11 @@ async function extractInvoice(
       .replace(/－/g, "-").replace(/：/g, ":");
   }
 
-  await enrichBusinessNames(extractedData, [
-    { nameField: "sellerName", taxIdField: "sellerTaxId" },
-    { nameField: "buyerName", taxIdField: "buyerTaxId" },
-  ]);
+  await enrichExtractedParties(
+    extractedData,
+    invoice.in_or_out === "in" ? "in" : "out",
+    clientInfo.taxId ? { name: clientInfo.name, taxId: clientInfo.taxId } : null,
+  );
 
   await saveInvoiceResult(supabase, invoiceId, extractedData);
 }
@@ -500,10 +520,13 @@ async function extractAllowance(
   // Add source
   extractedData.source = "scan";
 
-  await enrichBusinessNames(extractedData, [
-    { nameField: "sellerName", taxIdField: "sellerTaxId" },
-    { nameField: "buyerName", taxIdField: "buyerTaxId" },
-  ]);
+  // allowance.in_or_out is the upload-time hint; the authoritative value is
+  // derived below from tax-id matching once both parties are resolved.
+  await enrichExtractedParties(
+    extractedData,
+    allowance.in_or_out === "in" ? "in" : "out",
+    clientTaxId ? { name: clientInfo.name, taxId: clientTaxId } : null,
+  );
 
   // Derive in_or_out from tax IDs
   let derivedInOrOut: string | undefined;
@@ -628,7 +651,6 @@ async function processOneMessage(
 }
 
 Deno.serve(async (req) => {
-  businessNameCache = new Map();
   const invocationStart = Date.now();
   try {
     // Verify authorization

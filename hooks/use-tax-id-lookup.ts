@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type UseFormReturn } from "react-hook-form";
+import { lookupBusinessName } from "@/lib/services/business-lookup";
 
 /**
  * React hook that looks up a business name from Taiwan's FIA registry
@@ -27,15 +28,10 @@ export function useTaxIdLookup(
 
     setLoading(true);
 
-    fetch(
-      `https://eip.fia.gov.tw/OAI/api/businessRegistration/${taxId}`,
-      { signal: controller.signal },
-    )
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.businessNm) onResult(data.businessNm);
+    lookupBusinessName(taxId, controller.signal)
+      .then((name) => {
+        if (name) onResult(name);
       })
-      .catch(() => {})
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });

@@ -13,7 +13,7 @@ import { type Json, type TablesUpdate } from "@/supabase/database.types";
 import { tryLinkOriginalInvoice } from "@/lib/services/invoice-import";
 import { extractAllowanceData, type ClientInfo } from "@/lib/services/gemini";
 import { getImportFileMimeType } from "@/lib/utils/mime-type";
-import { enrichBusinessNames } from "@/lib/services/business-lookup";
+import { enrichExtractedParties } from "@/lib/services/business-lookup";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ensurePeriodEditable } from "@/lib/services/tax-period";
 
@@ -194,20 +194,13 @@ export async function extractAllowanceCore(
 
     const validatedData = extractedAllowanceDataSchema.parse(normalizedData);
 
-    const enrichedData = await enrichBusinessNames(validatedData, [
-      {
-        name: validatedData.sellerName,
-        taxId: validatedData.sellerTaxId,
-        nameField: "sellerName",
-        taxIdField: "sellerTaxId",
-      },
-      {
-        name: validatedData.buyerName,
-        taxId: validatedData.buyerTaxId,
-        nameField: "buyerName",
-        taxIdField: "buyerTaxId",
-      },
-    ]);
+    // allowance.in_or_out is the upload-time hint; the authoritative value is
+    // derived below from tax-id matching once both parties are resolved.
+    const enrichedData = await enrichExtractedParties(
+      validatedData,
+      allowance.in_or_out === "in" ? "in" : "out",
+      client?.tax_id ? { name: client.name, taxId: client.tax_id } : null,
+    );
 
     const clientTaxId = client?.tax_id || "";
     let derivedInOrOut: "in" | "out" | undefined;

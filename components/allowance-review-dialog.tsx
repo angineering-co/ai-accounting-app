@@ -38,7 +38,10 @@ import {
   RotateCw,
   CalendarIcon,
 } from "lucide-react";
-import { type Allowance } from "@/lib/domain/models";
+import {
+  type Allowance,
+  type ExtractedAllowanceData,
+} from "@/lib/domain/models";
 import { useFormTaxIdLookup } from "@/hooks/use-tax-id-lookup";
 import { updateAllowance } from "@/lib/services/allowance";
 import { toast } from "sonner";
@@ -164,6 +167,10 @@ export function AllowanceReviewDialog({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [previewLoading, setPreviewLoading] = useState(false);
+  // List queries pass a partial `extracted_data` (only the 5 fields the table
+  // renders). Re-fetch the full row on open so the form has every field.
+  const [fullExtractedData, setFullExtractedData] =
+    useState<ExtractedAllowanceData | null>(null);
   const supabase = createClient();
 
   const form = useForm<AllowanceReviewFormValues>({
@@ -257,8 +264,35 @@ export function AllowanceReviewDialog({
   };
 
   useEffect(() => {
+    if (!isOpen || !allowance?.id) {
+      setFullExtractedData(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("allowances")
+        .select("extracted_data")
+        .eq("id", allowance.id)
+        .single();
+      if (!cancelled && data?.extracted_data) {
+        setFullExtractedData(
+          data.extracted_data as unknown as ExtractedAllowanceData,
+        );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, allowance?.id, supabase]);
+
+  useEffect(() => {
     if (allowance && isOpen) {
-      const extractedData = allowance.extracted_data || {};
+      // Prefer the full record once it lands; fall back to the partial fields
+      // from the list so the visible amount/date don't flicker on open.
+      const extractedData = (fullExtractedData ??
+        allowance.extracted_data ??
+        {}) as ExtractedAllowanceData;
 
       form.reset({
         allowanceType: extractedData.allowanceType || "電子發票折讓",
@@ -340,7 +374,7 @@ export function AllowanceReviewDialog({
       setPreviewUrl(null);
       setPreviewText(null);
     }
-  }, [allowance, isOpen, form, supabase]);
+  }, [allowance, isOpen, form, supabase, fullExtractedData]);
 
   const handleSave = useCallback(
     async (

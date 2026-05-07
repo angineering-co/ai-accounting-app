@@ -187,6 +187,10 @@ export function InvoiceReviewDialog({
   const [localConfirmed, setLocalConfirmed] = useState(false);
   const [hasEdited, setHasEdited] = useState(false);
   const [aiExtractedTotal, setAiExtractedTotal] = useState<number | null>(null);
+  // List queries pass a partial `extracted_data` (only the 4 fields the table
+  // renders). Re-fetch the full row on open so the form has every field.
+  const [fullExtractedData, setFullExtractedData] =
+    useState<ExtractedInvoiceData | null>(null);
   const supabase = createClient();
 
   const form = useForm<InvoiceReviewFormValues>({
@@ -430,6 +434,29 @@ export function InvoiceReviewDialog({
   };
 
   useEffect(() => {
+    if (!isOpen || !invoice?.id) {
+      setFullExtractedData(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("invoices")
+        .select("extracted_data")
+        .eq("id", invoice.id)
+        .single();
+      if (!cancelled && data?.extracted_data) {
+        setFullExtractedData(
+          data.extracted_data as unknown as ExtractedInvoiceData,
+        );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, invoice?.id, supabase]);
+
+  useEffect(() => {
     if (invoice && isOpen) {
       setRotation(0);
       setZoom(1);
@@ -438,8 +465,11 @@ export function InvoiceReviewDialog({
       setLocalConfirmed(false);
       setHasEdited(false);
       setAiExtractedTotal(null);
-      // Use the extracted_data directly, ensuring all fields are properly mapped
-      const extractedData = invoice.extracted_data || {};
+      // Prefer the full record once it lands; fall back to the partial fields
+      // from the list so the visible totals/date don't flicker on open.
+      const extractedData = (fullExtractedData ??
+        invoice.extracted_data ??
+        {}) as ExtractedInvoiceData;
       setAiExtractedTotal(extractedData.totalAmount ?? null);
 
       // Determine initial deductible based on account and DB value
@@ -553,7 +583,7 @@ export function InvoiceReviewDialog({
       setExcelData(null);
       setLinkedAllowances([]);
     }
-  }, [invoice, isOpen, form, supabase.storage, supabase]);
+  }, [invoice, isOpen, form, supabase.storage, supabase, fullExtractedData]);
 
   const { firmId } = useParams<{ firmId: string }>();
   const router = useRouter();

@@ -34,7 +34,6 @@ import {
 } from "@/lib/services/invoice";
 import {
   updateInvoiceSchema,
-  invoiceSchema,
   type Invoice as DomainInvoice,
 } from "@/lib/domain/models";
 import {
@@ -86,21 +85,40 @@ export default function InvoicePage({
     },
   });
 
+  // Trim columns to what invoice-table.tsx renders. Skip the heavy
+  // `extracted_data` JSONB; the review dialog re-fetches the full row on open.
+  // Skip Zod parse — extracted_data may contain invalid AI-generated values
+  // (hallucinated account names) which would throw and break the list.
   const fetcher = async () => {
     const { data, error } = await supabase
       .from("invoices")
       .select(`
-        *,
+        id, firm_id, client_id, tax_filing_period_id,
+        storage_path, filename, in_or_out, status,
+        invoice_serial_code, year_month, uploaded_by, created_at,
+        extracted_data->invoiceType,
+        extracted_data->totalSales,
+        extracted_data->tax,
+        extracted_data->date,
         client:clients(id, name)
       `)
       .eq("firm_id", firmId)
       .order("created_at", { ascending: false });
     if (error) throw error;
-    
-    const invoiceWithClientSchema = invoiceSchema.extend({
-      client: z.object({ id: z.string(), name: z.string() }).nullable().optional(),
-    });
-    return z.array(invoiceWithClientSchema).parse(data || []);
+
+    return ((data ?? []) as unknown as Array<{
+      invoiceType: string | null;
+      totalSales: number | null;
+      tax: number | null;
+      date: string | null;
+      [key: string]: unknown;
+    }>).map((row) => {
+      const { invoiceType, totalSales, tax, date, ...rest } = row;
+      return {
+        ...rest,
+        extracted_data: { invoiceType, totalSales, tax, date },
+      };
+    }) as unknown as Invoice[];
   };
 
   const {

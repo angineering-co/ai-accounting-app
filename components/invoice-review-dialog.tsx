@@ -187,10 +187,6 @@ export function InvoiceReviewDialog({
   const [localConfirmed, setLocalConfirmed] = useState(false);
   const [hasEdited, setHasEdited] = useState(false);
   const [aiExtractedTotal, setAiExtractedTotal] = useState<number | null>(null);
-  // List queries pass a partial `extracted_data` (only the 4 fields the table
-  // renders). Re-fetch the full row on open so the form has every field.
-  const [fullExtractedData, setFullExtractedData] =
-    useState<ExtractedInvoiceData | null>(null);
   const supabase = createClient();
 
   const form = useForm<InvoiceReviewFormValues>({
@@ -433,46 +429,11 @@ export function InvoiceReviewDialog({
     }
   };
 
-  useEffect(() => {
-    if (!isOpen || !invoice?.id) {
-      setFullExtractedData(null);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      const { data } = await supabase
-        .from("invoices")
-        .select("extracted_data")
-        .eq("id", invoice.id)
-        .single();
-      if (!cancelled && data?.extracted_data) {
-        setFullExtractedData(
-          data.extracted_data as unknown as ExtractedInvoiceData,
-        );
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, invoice?.id, supabase]);
-
-  useEffect(() => {
-    if (invoice && isOpen) {
-      setRotation(0);
-      setZoom(1);
-      setPan({ x: 0, y: 0 });
-      setIsPanMode(false);
-      setLocalConfirmed(false);
-      setHasEdited(false);
-      setAiExtractedTotal(null);
-      // Prefer the full record once it lands; fall back to the partial fields
-      // from the list so the visible totals/date don't flicker on open.
-      const extractedData = (fullExtractedData ??
-        invoice.extracted_data ??
-        {}) as ExtractedInvoiceData;
+  const seedFormFromExtractedData = useCallback(
+    (extractedData: ExtractedInvoiceData) => {
+      if (!invoice) return;
       setAiExtractedTotal(extractedData.totalAmount ?? null);
 
-      // Determine initial deductible based on account and DB value
       let initialDeductible = extractedData.deductible ?? false;
       if (extractedData.account) {
         const accountCode = extractedData.account.split(" ")[0];
@@ -502,6 +463,46 @@ export function InvoiceReviewDialog({
           extractedData.inOrOut ||
           (invoice.in_or_out === "in" ? "進項" : "銷項"),
       } as InvoiceReviewFormValues);
+    },
+    [form, invoice],
+  );
+
+  // List queries pass a partial `extracted_data` (only the 4 fields the table
+  // renders). Re-fetch the full row on open and re-seed the form, unless the
+  // user has started editing in the brief window before the fetch lands.
+  useEffect(() => {
+    if (!isOpen || !invoice?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("invoices")
+        .select("extracted_data")
+        .eq("id", invoice.id)
+        .single();
+      if (cancelled || !data?.extracted_data) return;
+      if (form.formState.isDirty) return;
+      seedFormFromExtractedData(
+        data.extracted_data as unknown as ExtractedInvoiceData,
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, invoice?.id, supabase, form, seedFormFromExtractedData]);
+
+  useEffect(() => {
+    if (invoice && isOpen) {
+      setRotation(0);
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+      setIsPanMode(false);
+      setLocalConfirmed(false);
+      setHasEdited(false);
+      // Initial seed with the partial extracted_data from the list query.
+      // The fetch effect re-seeds with the full record once it arrives.
+      seedFormFromExtractedData(
+        (invoice.extracted_data ?? {}) as ExtractedInvoiceData,
+      );
 
       // Get signed URL or text content for preview
       const getPreview = async () => {
@@ -583,7 +584,7 @@ export function InvoiceReviewDialog({
       setExcelData(null);
       setLinkedAllowances([]);
     }
-  }, [invoice, isOpen, form, supabase.storage, supabase, fullExtractedData]);
+  }, [invoice, isOpen, supabase.storage, supabase, seedFormFromExtractedData]);
 
   const { firmId } = useParams<{ firmId: string }>();
   const router = useRouter();

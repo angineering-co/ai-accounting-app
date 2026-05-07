@@ -167,10 +167,6 @@ export function AllowanceReviewDialog({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [previewLoading, setPreviewLoading] = useState(false);
-  // List queries pass a partial `extracted_data` (only the 5 fields the table
-  // renders). Re-fetch the full row on open so the form has every field.
-  const [fullExtractedData, setFullExtractedData] =
-    useState<ExtractedAllowanceData | null>(null);
   const supabase = createClient();
 
   const form = useForm<AllowanceReviewFormValues>({
@@ -263,37 +259,9 @@ export function AllowanceReviewDialog({
     }
   };
 
-  useEffect(() => {
-    if (!isOpen || !allowance?.id) {
-      setFullExtractedData(null);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      const { data } = await supabase
-        .from("allowances")
-        .select("extracted_data")
-        .eq("id", allowance.id)
-        .single();
-      if (!cancelled && data?.extracted_data) {
-        setFullExtractedData(
-          data.extracted_data as unknown as ExtractedAllowanceData,
-        );
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, allowance?.id, supabase]);
-
-  useEffect(() => {
-    if (allowance && isOpen) {
-      // Prefer the full record once it lands; fall back to the partial fields
-      // from the list so the visible amount/date don't flicker on open.
-      const extractedData = (fullExtractedData ??
-        allowance.extracted_data ??
-        {}) as ExtractedAllowanceData;
-
+  const seedFormFromExtractedData = useCallback(
+    (extractedData: ExtractedAllowanceData) => {
+      if (!allowance) return;
       form.reset({
         allowanceType: extractedData.allowanceType || "電子發票折讓",
         originalInvoiceSerialCode:
@@ -311,10 +279,46 @@ export function AllowanceReviewDialog({
         deductionCode: extractedData.deductionCode,
         ...extractedData,
       } as AllowanceReviewFormValues);
+    },
+    [form, allowance],
+  );
+
+  // List queries pass a partial `extracted_data` (only the 5 fields the table
+  // renders). Re-fetch the full row on open and re-seed the form, unless the
+  // user has started editing in the brief window before the fetch lands.
+  useEffect(() => {
+    if (!isOpen || !allowance?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("allowances")
+        .select("extracted_data")
+        .eq("id", allowance.id)
+        .single();
+      if (cancelled || !data?.extracted_data) return;
+      if (form.formState.isDirty) return;
+      seedFormFromExtractedData(
+        data.extracted_data as unknown as ExtractedAllowanceData,
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, allowance?.id, supabase, form, seedFormFromExtractedData]);
+
+  useEffect(() => {
+    if (allowance && isOpen) {
+      // Initial seed with the partial extracted_data from the list query.
+      // The fetch effect re-seeds with the full record once it arrives.
+      seedFormFromExtractedData(
+        (allowance.extracted_data ?? {}) as ExtractedAllowanceData,
+      );
 
       // Load preview based on source
       const loadPreview = async () => {
-        const isExcelImport = extractedData.source === "import-excel";
+        const isExcelImport =
+          (allowance.extracted_data as ExtractedAllowanceData | null)
+            ?.source === "import-excel";
         if (!allowance.storage_path) {
           setExcelData(null);
           setPreviewUrl(null);
@@ -374,7 +378,7 @@ export function AllowanceReviewDialog({
       setPreviewUrl(null);
       setPreviewText(null);
     }
-  }, [allowance, isOpen, form, supabase, fullExtractedData]);
+  }, [allowance, isOpen, supabase, seedFormFromExtractedData]);
 
   const handleSave = useCallback(
     async (

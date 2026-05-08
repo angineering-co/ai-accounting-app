@@ -107,7 +107,7 @@ const invoiceReviewFormSchema = z
     totalSales: z
       .number({ message: "請輸入銷售額" })
       .int("請輸入非負整數")
-      .positive("銷售額需大於 0"),
+      .nonnegative("請輸入非負整數"),
     tax: z
       .number({ message: "請輸入稅額" })
       .int("請輸入非負整數")

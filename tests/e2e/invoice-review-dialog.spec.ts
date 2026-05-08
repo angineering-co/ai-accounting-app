@@ -307,3 +307,40 @@ test.describe("Tax amount rounding warning", () => {
     await expect(btn).toBeDisabled();
   });
 });
+
+// ─── Group 6: Zero-amount invoice ───────────────────────────────────────────
+
+test.describe("Zero-amount invoice", () => {
+  test("invoice with sales=0 and tax=0 is valid and confirm is enabled", async ({
+    page,
+  }) => {
+    // Invoice 7: totalSales=0, tax=0
+    await openInvoiceDialog(page, "GG00000007");
+
+    const dialog = page.locator('[role="dialog"]');
+    const salesInput = dialog
+      .locator("label", { hasText: "銷售額" })
+      .locator("..")
+      .locator("input");
+    const taxInput = dialog
+      .locator("label", { hasText: "稅額" })
+      .locator("..")
+      .locator("input");
+    const totalInput = dialog
+      .locator("label", { hasText: "總計" })
+      .locator("..")
+      .locator("input");
+
+    await expect(salesInput).toHaveValue("0");
+    await expect(taxInput).toHaveValue("0");
+    await expect(totalInput).toHaveValue("0");
+
+    // No tax-mismatch warning when both are zero
+    await expect(
+      dialog.locator("text=與銷售額 5%"),
+    ).not.toBeVisible();
+
+    const btn = confirmButton(page);
+    await expect(btn).toBeEnabled();
+  });
+});

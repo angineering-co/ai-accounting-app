@@ -238,17 +238,19 @@ export function InvoiceReviewDialog({
   const sellerTaxId = form.watch("sellerTaxId");
   const buyerTaxId = form.watch("buyerTaxId");
 
-  // Tax is embedded in totalSales (i.e. tax should be 0) when EITHER:
-  //   1. the buyer is a consumer (no 統一編號) — covers B2C 電子發票 / 三聯式收銀機, and
-  //   2. the invoice format is 二聯式 — covers B2B 二聯式收銀機 where the buyer's
-  //      統編 IS printed on the receipt but the cash-register format still embeds
-  //      tax in the total. The report aggregator in lib/services/reports.ts treats
-  //      all 二聯式 input as embedded regardless of buyerTaxId (see the
-  //      `otherCertificates` × 5/105 extraction).
-  // We block (rather than auto-fold tax into sales) because non-zero tax on an
-  // embedded invoice would corrupt report aggregation, which assumes tax=0 and
-  // re-extracts via × 5/105. Forcing a manual correction keeps the user honest
-  // about whether the AI mis-classified invoiceType vs. mis-split sales/tax.
+  // Tax is embedded in totalSales (tax should be 0) when ANY of:
+  //   1. buyerTaxId is empty — consumer purchase; tax is embedded by law
+  //      regardless of format (most often a B2C 電子發票)
+  //   2. invoiceType is 二聯式 — cash-register / handwritten 二聯 always
+  //      embed tax, even when buyer 統編 is printed on a B2B 二聯式收銀機
+  // The two overlap on purpose; together they catch every case the report
+  // aggregator in lib/services/reports.ts treats as embedded
+  // (`!inv.buyerTaxId` for B2C, `otherCertificates` × 5/105 for 二聯式).
+  //
+  // We block on tax ≠ 0 rather than auto-folding tax into totalSales: the
+  // aggregator assumes tax=0 and re-extracts via × 5/105, so a non-zero
+  // tax would double-count. Manual fix also makes the user decide whether
+  // the AI mis-classified invoiceType vs. mis-split sales/tax.
   const isTaxEmbeddedInvoice =
     !buyerTaxId?.trim() ||
     invoiceType === "二聯式收銀機" ||

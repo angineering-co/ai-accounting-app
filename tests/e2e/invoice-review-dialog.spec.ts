@@ -175,6 +175,71 @@ test.describe("Consumer invoice validation", () => {
     const btn = confirmButton(page);
     await expect(btn).toBeEnabled();
   });
+
+  test("B2C invoice with non-二聯式 invoiceType still allows confirm when tax=0", async ({
+    page,
+  }) => {
+    // Invoice 8: buyerTaxId="", invoiceType="電子發票", totalSales=1050, tax=0
+    await openInvoiceDialog(page, "HH00000008");
+
+    const dialog = page.locator('[role="dialog"]');
+
+    // No tax-mismatch warning rendered — tax=0 is correct for B2C regardless of invoiceType
+    await expect(dialog.locator("text=與銷售額 5%")).not.toBeVisible();
+
+    const btn = confirmButton(page);
+    await expect(btn).toBeEnabled();
+  });
+
+  test("B2C invoice with non-zero tax is blocked with B2C-flavored reason", async ({
+    page,
+  }) => {
+    await openInvoiceDialog(page, "HH00000008");
+
+    const dialog = page.locator('[role="dialog"]');
+    const taxInput = dialog
+      .locator("label", { hasText: "稅額" })
+      .locator("..")
+      .locator("input");
+    await taxInput.fill("50");
+    await taxInput.blur();
+
+    // No buyer 統編 → message should call out the missing 統編
+    await expect(
+      dialog.locator("text=未填買方統編時，稅額應為 0"),
+    ).toBeVisible();
+
+    const btn = confirmButton(page);
+    await expect(btn).toBeDisabled();
+  });
+
+  test("B2B 二聯式收銀機 with non-zero tax is blocked with 二聯式-flavored reason", async ({
+    page,
+  }) => {
+    // Invoice 9: invoiceType="二聯式收銀機", buyerTaxId="91044604" (B2B), tax=0
+    // Cash-register 二聯式 receipts always embed tax even for B2B sales, so
+    // typing a non-zero tax should block with the 二聯式 message variant.
+    await openInvoiceDialog(page, "II00000009");
+
+    const dialog = page.locator('[role="dialog"]');
+    const taxInput = dialog
+      .locator("label", { hasText: "稅額" })
+      .locator("..")
+      .locator("input");
+    await taxInput.fill("50");
+    await taxInput.blur();
+
+    // Buyer 統編 IS present → message should reference the 二聯式 format, not the missing 統編
+    await expect(
+      dialog.locator("text=二聯式發票稅額應為 0"),
+    ).toBeVisible();
+    await expect(
+      dialog.locator("text=未填買方統編時"),
+    ).not.toBeVisible();
+
+    const btn = confirmButton(page);
+    await expect(btn).toBeDisabled();
+  });
 });
 
 // ─── Group 4: Computed total & AI mismatch warning ──────────────────────────

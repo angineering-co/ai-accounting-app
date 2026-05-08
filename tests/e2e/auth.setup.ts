@@ -295,6 +295,71 @@ setup("create test data and authenticate", async ({ page }) => {
       },
     },
     {
+      // Invoice 8: B2C with non-二聯式 invoiceType (regression — tax embedded by buyerTaxId, not invoiceType)
+      firm_id: firm.id,
+      client_id: client.id,
+      tax_filing_period_id: period.id,
+      filename: "e2e-b2c-electronic.pdf",
+      storage_path: `e2e/${testId}/b2c-electronic.pdf`,
+      in_or_out: "out" as const,
+      uploaded_by: userId,
+      status: "processed",
+      year_month: yearMonth,
+      invoice_serial_code: "HH00000008",
+      extracted_data: {
+        invoiceSerialCode: "HH00000008",
+        date: "2025/09/22",
+        // B2C convention: tax embedded in totalSales, tax field is 0 — even when
+        // invoiceType is 電子發票 rather than 二聯式. The dialog should rely on
+        // !buyerTaxId, not invoiceType, to decide tax-embedded validation.
+        totalSales: 1050,
+        tax: 0,
+        totalAmount: 1050,
+        sellerName: "我方公司",
+        sellerTaxId: "92000002",
+        buyerName: "",
+        buyerTaxId: "",
+        summary: "電商零售",
+        deductible: false,
+        account: "4101 營業收入",
+        taxType: "應稅",
+        invoiceType: "電子發票",
+        inOrOut: "銷項",
+      },
+    },
+    {
+      // Invoice 9: B2B 二聯式收銀機 (buyer 統編 IS present, but tax still embedded)
+      // Cash-register receipts in 二聯 format embed tax in totalSales even when
+      // issued for B2B sales — see lib/services/reports.ts otherCertificates branch.
+      firm_id: firm.id,
+      client_id: client.id,
+      tax_filing_period_id: period.id,
+      filename: "e2e-b2b-cashregister.pdf",
+      storage_path: `e2e/${testId}/b2b-cashregister.pdf`,
+      in_or_out: "in" as const,
+      uploaded_by: userId,
+      status: "processed",
+      year_month: yearMonth,
+      invoice_serial_code: "II00000009",
+      extracted_data: {
+        invoiceSerialCode: "II00000009",
+        date: "2025/09/23",
+        totalSales: 1050,
+        tax: 0,
+        totalAmount: 1050,
+        sellerName: "便利商店",
+        sellerTaxId: "12345675",
+        buyerName: "客戶公司",
+        buyerTaxId: "91044604",
+        summary: "辦公用品",
+        deductible: true,
+        account: "6112 文具用品",
+        taxType: "應稅",
+        invoiceType: "二聯式收銀機",
+        inOrOut: "進項",
+      },
+    },
+    {
       // Invoice 7: Zero-amount invoice (totalSales=0, tax=0)
       firm_id: firm.id,
       client_id: client.id,

@@ -238,16 +238,24 @@ export function InvoiceReviewDialog({
   const sellerTaxId = form.watch("sellerTaxId");
   const buyerTaxId = form.watch("buyerTaxId");
 
-  // Tax is embedded in the sales amount when the buyer is a consumer (no 統一編號),
-  // or when the invoice format is explicitly 二聯式. Mirrors the B2C aggregation rule
-  // in lib/services/reports.ts (the `!inv.buyerTaxId` branch).
+  // Tax is embedded in totalSales (i.e. tax should be 0) when EITHER:
+  //   1. the buyer is a consumer (no 統一編號) — covers B2C 電子發票 / 三聯式收銀機, and
+  //   2. the invoice format is 二聯式 — covers B2B 二聯式收銀機 where the buyer's
+  //      統編 IS printed on the receipt but the cash-register format still embeds
+  //      tax in the total. The report aggregator in lib/services/reports.ts treats
+  //      all 二聯式 input as embedded regardless of buyerTaxId (see the
+  //      `otherCertificates` × 5/105 extraction).
+  // We block (rather than auto-fold tax into sales) because non-zero tax on an
+  // embedded invoice would corrupt report aggregation, which assumes tax=0 and
+  // re-extracts via × 5/105. Forcing a manual correction keeps the user honest
+  // about whether the AI mis-classified invoiceType vs. mis-split sales/tax.
   const isTaxEmbeddedInvoice =
     !buyerTaxId?.trim() ||
     invoiceType === "二聯式收銀機" ||
     invoiceType === "手開二聯式";
 
   // null = no issue; "rounding" = off by exactly 1 (allowed, just warn);
-  // "mismatch" = off by more than 1 (block confirm); "embedded" = B2C with non-zero tax (block confirm)
+  // "mismatch" = off by more than 1 (block confirm); "embedded" = embedded-tax invoice with non-zero tax (block confirm)
   const taxAmountIssue = useMemo<"rounding" | "mismatch" | "embedded" | null>(() => {
     if (taxType !== "應稅") return null;
     const s = Number(totalSales) || 0;
@@ -358,9 +366,17 @@ export function InvoiceReviewDialog({
       if (typeof msg === "string") return msg;
     }
 
-    if (isTaxAmountBlocking) return taxAmountIssue === "embedded"
-      ? "未填買方統編時，稅額應為 0（稅額內含於銷售額）"
-      : "稅額與銷售額 5% 不符";
+    if (isTaxAmountBlocking) {
+      if (taxAmountIssue === "embedded") {
+        // When buyerTaxId is present, the embedded check fired via the 二聯式 format
+        // branch — i.e. a B2B 二聯式收銀機 receipt. Otherwise it's the B2C consumer
+        // branch. Phrase the reason accordingly so it isn't confusing in the B2B case.
+        return buyerTaxId?.trim()
+          ? "二聯式發票稅額應為 0（稅額內含於銷售額）"
+          : "未填買方統編時，稅額應為 0（稅額內含於銷售額）";
+      }
+      return "稅額與銷售額 5% 不符";
+    }
     if (isPeriodMismatch) return "日期與期別不符";
     if (isSellerTaxIdInvalid) return "賣方統一編號檢核碼不符";
     if (isBuyerTaxIdInvalid) return "買方統一編號檢核碼不符";
@@ -375,6 +391,7 @@ export function InvoiceReviewDialog({
     form.formState.isValid,
     isTaxAmountBlocking,
     taxAmountIssue,
+    buyerTaxId,
     isPeriodMismatch,
     isSellerTaxIdInvalid,
     isBuyerTaxIdInvalid,
@@ -1146,7 +1163,8 @@ export function InvoiceReviewDialog({
                       <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                       <span>
                         {taxAmountIssue === "embedded"
-                          ? `未填買方統編時，稅額應為 0（稅額內含於銷售額），目前稅額為 ${tax || 0}`
+                          // Mirror the dynamic copy in confirmDisabledReason — see the comment there.
+                          ? `${buyerTaxId?.trim() ? "二聯式發票" : "未填買方統編時，"}稅額應為 0（稅額內含於銷售額），目前稅額為 ${tax || 0}`
                           : taxAmountIssue === "rounding"
                             ? `稅額 (${tax || 0}) 與銷售額 5% (${Math.round((Number(totalSales) || 0) * 0.05)}) 相差 1 元，視為四捨五入差異，可儲存`
                             : `稅額 (${tax || 0}) 與銷售額 5% (${Math.round((Number(totalSales) || 0) * 0.05)}) 不符`}

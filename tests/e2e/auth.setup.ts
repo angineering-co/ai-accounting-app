@@ -328,6 +328,38 @@ setup("create test data and authenticate", async ({ page }) => {
       },
     },
     {
+      // Invoice 9: B2B 二聯式收銀機 (buyer 統編 IS present, but tax still embedded)
+      // Cash-register receipts in 二聯 format embed tax in totalSales even when
+      // issued for B2B sales — see lib/services/reports.ts otherCertificates branch.
+      firm_id: firm.id,
+      client_id: client.id,
+      tax_filing_period_id: period.id,
+      filename: "e2e-b2b-cashregister.pdf",
+      storage_path: `e2e/${testId}/b2b-cashregister.pdf`,
+      in_or_out: "in" as const,
+      uploaded_by: userId,
+      status: "processed",
+      year_month: yearMonth,
+      invoice_serial_code: "II00000009",
+      extracted_data: {
+        invoiceSerialCode: "II00000009",
+        date: "2025/09/23",
+        totalSales: 1050,
+        tax: 0,
+        totalAmount: 1050,
+        sellerName: "便利商店",
+        sellerTaxId: "12345675",
+        buyerName: "客戶公司",
+        buyerTaxId: "91044604",
+        summary: "辦公用品",
+        deductible: true,
+        account: "6112 文具用品",
+        taxType: "應稅",
+        invoiceType: "二聯式收銀機",
+        inOrOut: "進項",
+      },
+    },
+    {
       // Invoice 7: Zero-amount invoice (totalSales=0, tax=0)
       firm_id: firm.id,
       client_id: client.id,

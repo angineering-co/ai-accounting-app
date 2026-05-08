@@ -238,12 +238,16 @@ export function InvoiceReviewDialog({
   const sellerTaxId = form.watch("sellerTaxId");
   const buyerTaxId = form.watch("buyerTaxId");
 
-  // 二聯式 invoices have tax embedded in the sales amount by convention;
-  // the tax is extracted later during report generation.
-  const isTaxEmbeddedInvoice = invoiceType === "二聯式收銀機" || invoiceType === "手開二聯式";
+  // Tax is embedded in the sales amount when the buyer is a consumer (no 統一編號),
+  // or when the invoice format is explicitly 二聯式. Mirrors the B2C aggregation rule
+  // in lib/services/reports.ts (the `!inv.buyerTaxId` branch).
+  const isTaxEmbeddedInvoice =
+    !buyerTaxId?.trim() ||
+    invoiceType === "二聯式收銀機" ||
+    invoiceType === "手開二聯式";
 
   // null = no issue; "rounding" = off by exactly 1 (allowed, just warn);
-  // "mismatch" = off by more than 1 (block confirm); "embedded" = 二聯式 with non-zero tax (block confirm)
+  // "mismatch" = off by more than 1 (block confirm); "embedded" = B2C with non-zero tax (block confirm)
   const taxAmountIssue = useMemo<"rounding" | "mismatch" | "embedded" | null>(() => {
     if (taxType !== "應稅") return null;
     const s = Number(totalSales) || 0;
@@ -355,7 +359,7 @@ export function InvoiceReviewDialog({
     }
 
     if (isTaxAmountBlocking) return taxAmountIssue === "embedded"
-      ? "二聯式發票稅額應為 0（稅額內含於銷售額）"
+      ? "未填買方統編時，稅額應為 0（稅額內含於銷售額）"
       : "稅額與銷售額 5% 不符";
     if (isPeriodMismatch) return "日期與期別不符";
     if (isSellerTaxIdInvalid) return "賣方統一編號檢核碼不符";
@@ -1142,7 +1146,7 @@ export function InvoiceReviewDialog({
                       <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                       <span>
                         {taxAmountIssue === "embedded"
-                          ? `二聯式發票稅額應為 0（稅額內含於銷售額），目前稅額為 ${tax || 0}`
+                          ? `未填買方統編時，稅額應為 0（稅額內含於銷售額），目前稅額為 ${tax || 0}`
                           : taxAmountIssue === "rounding"
                             ? `稅額 (${tax || 0}) 與銷售額 5% (${Math.round((Number(totalSales) || 0) * 0.05)}) 相差 1 元，視為四捨五入差異，可儲存`
                             : `稅額 (${tax || 0}) 與銷售額 5% (${Math.round((Number(totalSales) || 0) * 0.05)}) 不符`}

@@ -175,6 +175,42 @@ test.describe("Consumer invoice validation", () => {
     const btn = confirmButton(page);
     await expect(btn).toBeEnabled();
   });
+
+  test("B2C invoice with non-二聯式 invoiceType still allows confirm when tax=0", async ({
+    page,
+  }) => {
+    // Invoice 8: buyerTaxId="", invoiceType="電子發票", totalSales=1050, tax=0
+    await openInvoiceDialog(page, "HH00000008");
+
+    const dialog = page.locator('[role="dialog"]');
+
+    // No tax-mismatch warning rendered — tax=0 is correct for B2C regardless of invoiceType
+    await expect(dialog.locator("text=與銷售額 5%")).not.toBeVisible();
+
+    const btn = confirmButton(page);
+    await expect(btn).toBeEnabled();
+  });
+
+  test("B2C invoice with non-zero tax is blocked with embedded-tax reason", async ({
+    page,
+  }) => {
+    await openInvoiceDialog(page, "HH00000008");
+
+    const dialog = page.locator('[role="dialog"]');
+    const taxInput = dialog
+      .locator("label", { hasText: "稅額" })
+      .locator("..")
+      .locator("input");
+    await taxInput.fill("50");
+    await taxInput.blur();
+
+    await expect(
+      dialog.locator("text=未填買方統編時，稅額應為 0"),
+    ).toBeVisible();
+
+    const btn = confirmButton(page);
+    await expect(btn).toBeDisabled();
+  });
 });
 
 // ─── Group 4: Computed total & AI mismatch warning ──────────────────────────

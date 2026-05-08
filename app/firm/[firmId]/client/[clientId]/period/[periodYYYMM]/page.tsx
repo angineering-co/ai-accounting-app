@@ -135,6 +135,17 @@ export default function PeriodDetailPage({
     pageSize: PAGE_SIZE,
   });
 
+  // Reset page to 0 when current page is beyond available data
+  // (e.g. after confirming/deleting items reduces the filtered count).
+  useEffect(() => {
+    if (invoicePage > 0 && invoicePage * PAGE_SIZE >= invoiceTotalCount) {
+      setInvoicePage(0);
+    }
+    if (allowancePage > 0 && allowancePage * PAGE_SIZE >= allowanceTotalCount) {
+      setAllowancePage(0);
+    }
+  }, [invoiceTotalCount, allowanceTotalCount, invoicePage, allowancePage]);
+
   // Status counts for filter bar badges
   const { counts: invoiceStatusCounts, mutate: mutateInvoiceStatusCounts } =
     useStatusCounts({ table: "invoices", periodId: period?.id ?? null });

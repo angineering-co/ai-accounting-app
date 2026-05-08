@@ -193,10 +193,10 @@ export default function PortalPeriodDetailPage({
 
   // Reset page to 0 when current page is beyond available data (e.g. after deletion)
   useEffect(() => {
-    if (inInvoiceTotalCount > 0 && inInvoicePage * PAGE_SIZE >= inInvoiceTotalCount) setInInvoicePage(0);
-    if (outInvoiceTotalCount > 0 && outInvoicePage * PAGE_SIZE >= outInvoiceTotalCount) setOutInvoicePage(0);
-    if (inAllowanceTotalCount > 0 && inAllowancePage * PAGE_SIZE >= inAllowanceTotalCount) setInAllowancePage(0);
-    if (outAllowanceTotalCount > 0 && outAllowancePage * PAGE_SIZE >= outAllowanceTotalCount) setOutAllowancePage(0);
+    if (inInvoicePage > 0 && inInvoicePage * PAGE_SIZE >= inInvoiceTotalCount) setInInvoicePage(0);
+    if (outInvoicePage > 0 && outInvoicePage * PAGE_SIZE >= outInvoiceTotalCount) setOutInvoicePage(0);
+    if (inAllowancePage > 0 && inAllowancePage * PAGE_SIZE >= inAllowanceTotalCount) setInAllowancePage(0);
+    if (outAllowancePage > 0 && outAllowancePage * PAGE_SIZE >= outAllowanceTotalCount) setOutAllowancePage(0);
   }, [inInvoiceTotalCount, outInvoiceTotalCount, inAllowanceTotalCount, outAllowanceTotalCount, inInvoicePage, outInvoicePage, inAllowancePage, outAllowancePage]);
 
   const handleFabFilesSelected = useCallback(

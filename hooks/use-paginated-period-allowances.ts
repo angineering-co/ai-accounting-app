@@ -39,7 +39,8 @@ export function usePaginatedPeriodAllowances({
         .select("*", { count: "exact" })
         .eq("client_id", clientId)
         .eq("tax_filing_period_id", periodId)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false });
 
       if (statusFilter !== "all") {
         query = query.eq("status", statusFilter);

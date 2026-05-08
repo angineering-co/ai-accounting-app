@@ -23,18 +23,17 @@ async function openInvoiceDialog(
   // Wait for the invoice table section to appear with loaded data
   await page.locator("text=發票").first().waitFor({ timeout: 10000 });
 
-  // Wait for SWR data to arrive — invoice count should be > 0
-  await page.waitForFunction(
-    () => {
-      const text = document.body.innerText;
-      // Match "發票 (N)" where N > 0
-      const match = text.match(/發票 \((\d+)\)/);
-      return match && parseInt(match[1]) > 0;
-    },
-    { timeout: 15000 },
-  );
-  // Click the row containing the serial code
-  await page.locator(`table tbody tr:has-text("${serialCode}")`).click();
+  // Default status filter is "uploaded" but seeded fixtures are processed/confirmed —
+  // switch to "全部" so all seeded invoices show up.
+  await page
+    .getByRole("button", { name: /^全部 \(\d+\)$/ })
+    .first()
+    .click();
+
+  // Wait for the matching row to appear
+  const row = page.locator(`table tbody tr:has-text("${serialCode}")`);
+  await row.waitFor({ timeout: 15000 });
+  await row.click();
   // Wait for dialog to appear
   await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 }
@@ -231,19 +230,80 @@ test.describe("Computed total and AI mismatch warning", () => {
       dialog.locator("text=AI 辨識總計為"),
     ).not.toBeVisible();
 
-    // Change sales to create mismatch with AI's extracted total
+    // Change sales+tax to a different valid pair (5% rule still satisfied) so the
+    // only mismatch is with AI's extracted total — keeps this test scoped to the
+    // AI-mismatch warning, not the tax-amount warning.
     const salesInput = dialog
       .locator("label", { hasText: "銷售額" })
       .locator("..")
       .locator("input");
-    await salesInput.fill("9999");
+    const taxInput = dialog
+      .locator("label", { hasText: "稅額" })
+      .locator("..")
+      .locator("input");
+    await salesInput.fill("4000");
+    await taxInput.fill("200");
 
-    // Warning should appear (AI total was 2100, computed is 9999+100=10099)
+    // Warning should appear (AI total was 2100, computed is 4200)
     await expect(
       dialog.locator("text=AI 辨識總計為 2100"),
     ).toBeVisible();
 
     // Confirm button should still be enabled (non-blocking warning)
     await expect(btn).toBeEnabled();
+  });
+});
+
+// ─── Group 5: Tax amount rounding warning ───────────────────────────────────
+
+test.describe("Tax amount rounding warning", () => {
+  test("tax off by exactly 1 shows rounding warning but does not block confirm", async ({
+    page,
+  }) => {
+    // Invoice 2: totalSales=2000, tax=100 (matches 5% exactly)
+    await openInvoiceDialog(page, "BB00000002");
+
+    const dialog = page.locator('[role="dialog"]');
+    const btn = confirmButton(page);
+
+    // No tax warning initially
+    await expect(dialog.locator("text=四捨五入差異")).not.toBeVisible();
+
+    // Edit tax to 99 — off by 1 from expected 100 → rounding case
+    const taxInput = dialog
+      .locator("label", { hasText: "稅額" })
+      .locator("..")
+      .locator("input");
+    await taxInput.fill("99");
+
+    // Rounding warning is shown
+    await expect(
+      dialog.locator("text=相差 1 元，視為四捨五入差異，可儲存"),
+    ).toBeVisible();
+
+    // Confirm remains enabled (non-blocking)
+    await expect(btn).toBeEnabled();
+  });
+
+  test("tax off by more than 1 shows mismatch warning and blocks confirm", async ({
+    page,
+  }) => {
+    // Invoice 2: totalSales=2000, tax=100
+    await openInvoiceDialog(page, "BB00000002");
+
+    const dialog = page.locator('[role="dialog"]');
+    const btn = confirmButton(page);
+
+    const taxInput = dialog
+      .locator("label", { hasText: "稅額" })
+      .locator("..")
+      .locator("input");
+    await taxInput.fill("95");
+
+    // Mismatch warning shown, confirm is blocked
+    await expect(
+      dialog.locator("text=稅額 (95) 與銷售額 5% (100) 不符"),
+    ).toBeVisible();
+    await expect(btn).toBeDisabled();
   });
 });

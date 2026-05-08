@@ -242,14 +242,24 @@ export function InvoiceReviewDialog({
   // the tax is extracted later during report generation.
   const isTaxEmbeddedInvoice = invoiceType === "二聯式收銀機" || invoiceType === "手開二聯式";
 
-  const isTaxAmountWarning = useMemo(() => {
-    if (taxType !== "應稅") return false;
+  // null = no issue; "rounding" = off by exactly 1 (allowed, just warn);
+  // "mismatch" = off by more than 1 (block confirm); "embedded" = 二聯式 with non-zero tax (block confirm)
+  const taxAmountIssue = useMemo<"rounding" | "mismatch" | "embedded" | null>(() => {
+    if (taxType !== "應稅") return null;
     const s = Number(totalSales) || 0;
     const t = Number(tax) || 0;
-    if (s === 0 && t === 0) return false;
-    if (isTaxEmbeddedInvoice) return t !== 0;
-    return t !== Math.round(s * 0.05);
+    if (s === 0 && t === 0) return null;
+    if (isTaxEmbeddedInvoice) return t !== 0 ? "embedded" : null;
+    const expected = Math.round(s * 0.05);
+    const diff = Math.abs(t - expected);
+    if (diff === 0) return null;
+    if (diff === 1) return "rounding";
+    return "mismatch";
   }, [taxType, isTaxEmbeddedInvoice, totalSales, tax]);
+
+  const isTaxAmountWarning = taxAmountIssue !== null;
+  const isTaxAmountBlocking =
+    taxAmountIssue === "embedded" || taxAmountIssue === "mismatch";
 
   const isSellerTaxIdInvalid = useMemo(() => {
     if (!sellerTaxId || sellerTaxId.length !== 8) return false;
@@ -310,12 +320,12 @@ export function InvoiceReviewDialog({
       return true;
     }
 
-    return !form.formState.isValid || isTaxAmountWarning || isPeriodMismatch || isSellerTaxIdInvalid || isBuyerTaxIdInvalid;
+    return !form.formState.isValid || isTaxAmountBlocking || isPeriodMismatch || isSellerTaxIdInvalid || isBuyerTaxIdInvalid;
   }, [
     localConfirmed,
     hasEdited,
     form.formState.isValid,
-    isTaxAmountWarning,
+    isTaxAmountBlocking,
     isPeriodMismatch,
     isSellerTaxIdInvalid,
     isBuyerTaxIdInvalid,
@@ -344,7 +354,7 @@ export function InvoiceReviewDialog({
       if (typeof msg === "string") return msg;
     }
 
-    if (isTaxAmountWarning) return isTaxEmbeddedInvoice
+    if (isTaxAmountBlocking) return taxAmountIssue === "embedded"
       ? "二聯式發票稅額應為 0（稅額內含於銷售額）"
       : "稅額與銷售額 5% 不符";
     if (isPeriodMismatch) return "日期與期別不符";
@@ -359,8 +369,8 @@ export function InvoiceReviewDialog({
     invoice?.status,
     form.formState.errors,
     form.formState.isValid,
-    isTaxAmountWarning,
-    isTaxEmbeddedInvoice,
+    isTaxAmountBlocking,
+    taxAmountIssue,
     isPeriodMismatch,
     isSellerTaxIdInvalid,
     isBuyerTaxIdInvalid,
@@ -1064,8 +1074,10 @@ export function InvoiceReviewDialog({
                           value={field.value ?? ""}
                           className={cn(
                             getConfidenceStyle("tax"),
-                            isTaxAmountWarning &&
+                            isTaxAmountBlocking &&
                               "ring-2 ring-red-400 ring-offset-1",
+                            taxAmountIssue === "rounding" &&
+                              "ring-2 ring-orange-400 ring-offset-1",
                           )}
                           disabled={isLocked || isExcelImport}
                           onChange={(e) => {
@@ -1119,12 +1131,21 @@ export function InvoiceReviewDialog({
                     </div>
                   )}
                   {isTaxAmountWarning && (
-                    <div className="flex items-center gap-1.5 text-sm font-medium text-red-600 bg-red-50 p-1.5 rounded border border-red-200">
+                    <div
+                      className={cn(
+                        "flex items-center gap-1.5 text-sm font-medium p-1.5 rounded border",
+                        taxAmountIssue === "rounding"
+                          ? "text-orange-600 bg-orange-50 border-orange-200"
+                          : "text-red-600 bg-red-50 border-red-200",
+                      )}
+                    >
                       <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                       <span>
-                        {isTaxEmbeddedInvoice
+                        {taxAmountIssue === "embedded"
                           ? `二聯式發票稅額應為 0（稅額內含於銷售額），目前稅額為 ${tax || 0}`
-                          : `稅額 (${tax || 0}) 與銷售額 5% (${Math.round((Number(totalSales) || 0) * 0.05)}) 不符`}
+                          : taxAmountIssue === "rounding"
+                            ? `稅額 (${tax || 0}) 與銷售額 5% (${Math.round((Number(totalSales) || 0) * 0.05)}) 相差 1 元，視為四捨五入差異，可儲存`
+                            : `稅額 (${tax || 0}) 與銷售額 5% (${Math.round((Number(totalSales) || 0) * 0.05)}) 不符`}
                       </span>
                     </div>
                   )}

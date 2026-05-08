@@ -1,23 +1,28 @@
 # Perf plan: trim list payloads + add composite indexes
 
-Status: **approved — ready to implement**
+Status: **partially shipped — payload trim merged, indexes deferred**
 
 ## Decisions
 
-- ✅ Include `in_or_out` composite indexes now (cheap maintenance, portal is the
-  client-perception surface).
-- ⏸ **Punt** the status-counts collapse. The RPC approach is the only way to do
-  `GROUP BY status` through PostgREST today, and we'd rather wait for Drizzle
-  (planned) to land so we can write native SQL in a server action. With the new
-  composite index in place each COUNT is an index-only scan and they run in
-  parallel, so wall-clock cost is ~1 RTT — the index captures most of the win.
-- ⏸ Leave `getInvoices(firmId)` alone for now; firm-level invoice page is a
-  follow-up PR (needs pagination, not just a column trim).
+- ✅ **Shipped**: list-query payload trim + dialog re-fetch (commits `0dea370`,
+  `61f20fb`). Reduces 50-row page payload from ~150–400 KB to ~15–30 KB.
+- ⏸ **Deferred**: composite indexes. Wait until query plans actually start to
+  drag on real data. The trim alone removed the user-visible slowness; index
+  cost is about scaling, not current pain. Pick this back up if/when the period
+  page feels slow on a real client's busy month, or if the Supabase dashboard
+  flags `invoices` / `allowances` reads as slow.
+- ⏸ **Deferred**: status-counts collapse. PostgREST has no `GROUP BY` without
+  RPC, and we'd rather wait for Drizzle (planned) to land and write native SQL
+  in a server action. Without the composite index this is 5×2 parallel COUNTs
+  per period open — fine in practice over HTTP/2; revisit if it shows up in
+  slow-query logs.
+- ⏸ **Deferred**: `getInvoices(firmId)` and the firm-level invoice page —
+  needs pagination, not just a column trim.
 
 ## Why
 
-The period-detail page and the firm-level invoice page are slow on first paint and
-on navigation. Two compounding causes:
+The period-detail page and the firm-level invoice page were slow on first paint
+and on navigation. Two compounding causes:
 
 1. List queries `select("*")`, which pulls the full `extracted_data` JSONB on every
    row — the table only displays 4 fields from it.
@@ -26,13 +31,21 @@ on navigation. Two compounding causes:
    scan + in-memory sort.
 
 After moving Vercel from `iad1` to `sin1`, server-side latency dropped sharply, so
-the remaining bottleneck is **payload size and round-trip count from the browser to
-Singapore**. Trimming columns attacks payload directly; the composite index removes
-sort cost and lets `count: "exact"` and the status fan-out run as index-only scans.
+the remaining bottleneck was **payload size and round-trip count from the browser
+to Singapore**. The shipped trim attacks payload directly. The composite index
+(deferred below) would remove sort cost and turn `count: "exact"` and the status
+fan-out into index-only scans — relevant once row counts grow.
 
-## Migration: composite indexes
+## Deferred: migration for composite indexes
 
-File: `supabase/migrations/<timestamp>_perf_period_list_indexes.sql`
+Not yet shipped. Keep this section as a copy-pasteable plan for when query plans
+actually start to drag. Validate first via `EXPLAIN ANALYZE` on the slow query —
+if the plan already shows "Index Scan ... ORDER BY ... LIMIT" without a Sort
+node, the existing single-column indexes are sufficient and these composites
+won't help.
+
+When you do apply, drop into a fresh migration file
+(`supabase/migrations/<timestamp>_perf_period_list_indexes.sql`):
 
 ```sql
 -- Period-detail page (staff): filters tax_filing_period_id + status, orders created_at DESC.

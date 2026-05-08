@@ -138,10 +138,10 @@ export default function PeriodDetailPage({
   // Reset page to 0 when current page is beyond available data
   // (e.g. after confirming/deleting items reduces the filtered count).
   useEffect(() => {
-    if (invoiceTotalCount > 0 && invoicePage * PAGE_SIZE >= invoiceTotalCount) {
+    if (invoicePage > 0 && invoicePage * PAGE_SIZE >= invoiceTotalCount) {
       setInvoicePage(0);
     }
-    if (allowanceTotalCount > 0 && allowancePage * PAGE_SIZE >= allowanceTotalCount) {
+    if (allowancePage > 0 && allowancePage * PAGE_SIZE >= allowanceTotalCount) {
       setAllowancePage(0);
     }
   }, [invoiceTotalCount, allowanceTotalCount, invoicePage, allowancePage]);

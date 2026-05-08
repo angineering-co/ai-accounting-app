@@ -294,6 +294,36 @@ setup("create test data and authenticate", async ({ page }) => {
         inOrOut: "銷項",
       },
     },
+    {
+      // Invoice 7: Zero-amount invoice (totalSales=0, tax=0)
+      firm_id: firm.id,
+      client_id: client.id,
+      tax_filing_period_id: period.id,
+      filename: "e2e-zero-amount.pdf",
+      storage_path: `e2e/${testId}/zero-amount.pdf`,
+      in_or_out: "in" as const,
+      uploaded_by: userId,
+      status: "processed",
+      year_month: yearMonth,
+      invoice_serial_code: "GG00000007",
+      extracted_data: {
+        invoiceSerialCode: "GG00000007",
+        date: "2025/09/21",
+        totalSales: 0,
+        tax: 0,
+        totalAmount: 0,
+        sellerName: "測試賣方G",
+        sellerTaxId: "12345675",
+        buyerName: "測試買方",
+        buyerTaxId: "12345670",
+        summary: "零元發票",
+        deductible: false,
+        account: "6112 文具用品",
+        taxType: "應稅",
+        invoiceType: "手開三聯式",
+        inOrOut: "進項",
+      },
+    },
   ];
 
   const { data: insertedInvoices, error: invoiceError } = await supabase

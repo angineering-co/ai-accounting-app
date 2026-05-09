@@ -69,15 +69,8 @@ import {
   SelectValue,
   SelectTrigger,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Calendar } from "@/components/ui/calendar";
+import { ImportedInvoicePreview } from "@/components/imported-invoice-preview";
 import {
   Popover,
   PopoverContent,
@@ -178,11 +171,7 @@ export function InvoiceReviewDialog({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewText, setPreviewText] = useState<string | null>(null);
-  const [excelData, setExcelData] = useState<{
-    headers: string[];
-    rows: unknown[][];
-  } | null>(null);
+  const [excelDownloadUrl, setExcelDownloadUrl] = useState<string | null>(null);
   const [linkedAllowances, setLinkedAllowances] = useState<Allowance[]>([]);
   const [localConfirmed, setLocalConfirmed] = useState(false);
   const [hasEdited, setHasEdited] = useState(false);
@@ -473,61 +462,27 @@ export function InvoiceReviewDialog({
           (invoice.in_or_out === "in" ? "進項" : "銷項"),
       } as InvoiceReviewFormValues);
 
-      // Get signed URL or text content for preview
+      // Get signed URL for preview / download
       const getPreview = async () => {
         const extracted = invoice.extracted_data as ExtractedInvoiceData & {
           source?: string;
         };
         const isExcelImport = extracted?.source === "import-excel";
-        const bucket = isExcelImport ? "electronic-invoices" : "invoices";
 
-        // Reset states
-        setExcelData(null);
+        setExcelDownloadUrl(null);
+        setPreviewUrl(null);
 
         if (isExcelImport) {
-          try {
-            const { data, error } = await supabase.storage
-              .from(bucket)
-              .download(invoice.storage_path);
-
-            if (error) throw error;
-
-            if (data) {
-              const buffer = await data.arrayBuffer();
-
-              // Dynamically import xlsx to keep bundle size small
-              const XLSX = await import("xlsx");
-
-              const workbook = XLSX.read(buffer, { type: "array" });
-              // Default to the first sheet
-              const sheetName = workbook.SheetNames[0];
-              const worksheet = workbook.Sheets[sheetName];
-
-              // Parse as array of arrays (header: 1)
-              const jsonData = XLSX.utils.sheet_to_json(worksheet, {
-                header: 1,
-              }) as unknown[][];
-
-              if (jsonData && jsonData.length > 0) {
-                const headers = jsonData[0] as string[];
-                const rows = jsonData.slice(1);
-                setExcelData({ headers, rows });
-                setPreviewText(null);
-                setPreviewUrl(null);
-              } else {
-                setPreviewText("Excel 檔案為空");
-              }
-            }
-          } catch (e) {
-            console.error("Error previewing excel:", e);
-            setPreviewText("無法預覽 Excel 檔案");
-          }
-        } else {
-          setPreviewText(null);
           const { data } = await supabase.storage
-            .from(bucket)
+            .from("electronic-invoices")
+            .createSignedUrl(invoice.storage_path, 3600, {
+              download: invoice.filename,
+            });
+          if (data) setExcelDownloadUrl(data.signedUrl);
+        } else {
+          const { data } = await supabase.storage
+            .from("invoices")
             .createSignedUrl(invoice.storage_path, 3600);
-
           if (data) setPreviewUrl(data.signedUrl);
         }
       };
@@ -549,8 +504,7 @@ export function InvoiceReviewDialog({
       fetchLinkedAllowances();
     } else {
       setPreviewUrl(null);
-      setPreviewText(null);
-      setExcelData(null);
+      setExcelDownloadUrl(null);
       setLinkedAllowances([]);
     }
   }, [invoice, isOpen, form, supabase.storage, supabase]);
@@ -651,26 +605,26 @@ export function InvoiceReviewDialog({
       switch (e.key) {
         case "+":
         case "=": // Also handle = key which is often same key as +
-          if (!previewText && !excelData) {
+          if (!isExcelImport) {
             e.preventDefault();
             setZoom((prev) => Math.min(prev + 0.1, 3));
           }
           break;
         case "-":
         case "_":
-          if (!previewText && !excelData) {
+          if (!isExcelImport) {
             e.preventDefault();
             setZoom((prev) => Math.max(prev - 0.1, 0.5));
           }
           break;
         case "ArrowLeft":
-          if (!previewText && !excelData) {
+          if (!isExcelImport) {
             e.preventDefault();
             setRotation((prev) => prev - 90);
           }
           break;
         case "ArrowRight":
-          if (!previewText && !excelData) {
+          if (!isExcelImport) {
             e.preventDefault();
             setRotation((prev) => prev + 90);
           }
@@ -688,13 +642,12 @@ export function InvoiceReviewDialog({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, previewText, excelData, onNext, onPrevious, form, handleSave]);
+  }, [isOpen, isExcelImport, onNext, onPrevious, form, handleSave]);
 
   const isPdf = invoice?.filename.toLowerCase().endsWith(".pdf");
-  const invoiceCode = invoice?.extracted_data?.invoiceSerialCode;
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if ((isPanMode || !isPdf) && previewUrl && !excelData) {
+    if ((isPanMode || !isPdf) && previewUrl && !isExcelImport) {
       e.preventDefault();
       setIsDragging(true);
       setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
@@ -760,7 +713,7 @@ export function InvoiceReviewDialog({
           {/* Preview Section */}
           <div
             className={`flex-1 min-h-[250px] min-w-0 border rounded-lg bg-muted flex items-center justify-center overflow-hidden relative group ${
-              (isPanMode || !isPdf) && previewUrl && !excelData
+              (isPanMode || !isPdf) && previewUrl && !isExcelImport
                 ? isDragging
                   ? "cursor-grabbing"
                   : "cursor-grab"
@@ -772,7 +725,7 @@ export function InvoiceReviewDialog({
             onMouseLeave={handleMouseUp}
           >
             {/* Image Controls Overlay */}
-            {!previewText && !excelData && previewUrl && (
+            {!isExcelImport && previewUrl && (
               <div className="absolute top-2 right-2 flex gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 p-1 rounded-lg backdrop-blur-sm">
                 <Button
                   type="button"
@@ -822,67 +775,11 @@ export function InvoiceReviewDialog({
               </div>
             )}
 
-            {previewText ? (
-              <div className="w-full h-full max-h-[600px] overflow-auto p-4 bg-white text-xs font-mono whitespace-pre text-left">
-                {previewText.split("\n").map((line, i) => {
-                  // Highlight line if it contains the invoice number
-                  const isMatch = invoiceCode && line.includes(invoiceCode);
-                  return (
-                    <div
-                      key={i}
-                      className={`${
-                        isMatch
-                          ? "bg-yellow-100 font-bold text-black"
-                          : "text-gray-600"
-                      }`}
-                    >
-                      {line}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : excelData ? (
-              <div className="w-full h-full max-h-[600px] overflow-auto bg-white">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      {excelData.headers.map((header, i) => (
-                        <TableHead
-                          key={i}
-                          className="whitespace-nowrap px-4 py-2 h-auto"
-                        >
-                          {header}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {excelData.rows.map((row, i) => {
-                      const isMatch =
-                        invoiceCode &&
-                        row.some((cell) => String(cell).includes(invoiceCode));
-
-                      return (
-                        <TableRow
-                          key={i}
-                          className={
-                            isMatch ? "bg-yellow-100 hover:bg-yellow-200" : ""
-                          }
-                        >
-                          {row.map((cell: unknown, cellIndex: number) => (
-                            <TableCell
-                              key={cellIndex}
-                              className="whitespace-nowrap px-4 py-2"
-                            >
-                              {String(cell ?? "")}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
+            {isExcelImport && invoice ? (
+              <ImportedInvoicePreview
+                invoice={invoice}
+                downloadUrl={excelDownloadUrl}
+              />
             ) : previewUrl ? (
               <div
                 className="w-full h-full flex items-center justify-center transition-transform duration-75 ease-linear"

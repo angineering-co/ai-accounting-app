@@ -57,15 +57,8 @@ import {
   SelectValue,
   SelectTrigger,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ImportedAllowancePreview } from "@/components/imported-allowance-preview";
 import Image from "next/image";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -151,10 +144,7 @@ export function AllowanceReviewDialog({
   onPrevious,
   isLocked = false,
 }: AllowanceReviewDialogProps) {
-  const [excelData, setExcelData] = useState<{
-    headers: string[];
-    rows: unknown[][];
-  } | null>(null);
+  const [excelDownloadUrl, setExcelDownloadUrl] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewText, setPreviewText] = useState<string | null>(null);
   const [rotation, setRotation] = useState(0);
@@ -281,62 +271,45 @@ export function AllowanceReviewDialog({
       // Load preview based on source
       const loadPreview = async () => {
         const isExcelImport = extractedData.source === "import-excel";
+
+        setExcelDownloadUrl(null);
+        setPreviewUrl(null);
+        setPreviewText(null);
+
         if (!allowance.storage_path) {
-          setExcelData(null);
-          setPreviewUrl(null);
-          setPreviewText("無文件預覽");
+          if (!isExcelImport) {
+            setPreviewText("無文件預覽");
+          }
           return;
         }
 
         setPreviewLoading(true);
         try {
           if (isExcelImport) {
-            const { data, error } = await supabase.storage
+            const { data } = await supabase.storage
               .from("electronic-invoices")
-              .download(allowance.storage_path);
-
-            if (error) throw error;
-
-            if (data) {
-              const buffer = await data.arrayBuffer();
-              const XLSX = await import("xlsx");
-              const workbook = XLSX.read(buffer, { type: "array" });
-              const sheetName = workbook.SheetNames[0];
-              const worksheet = workbook.Sheets[sheetName];
-              const jsonData = XLSX.utils.sheet_to_json(worksheet, {
-                header: 1,
-              }) as unknown[][];
-
-              if (jsonData && jsonData.length > 0) {
-                const headers = jsonData[0] as string[];
-                const rows = jsonData.slice(1);
-                setExcelData({ headers, rows });
-                setPreviewUrl(null);
-                setPreviewText(null);
-              } else {
-                setExcelData(null);
-                setPreviewText("Excel 檔案為空");
-              }
-            }
+              .createSignedUrl(allowance.storage_path, 3600, {
+                download: allowance.filename ?? undefined,
+              });
+            if (data) setExcelDownloadUrl(data.signedUrl);
           } else {
-            setExcelData(null);
-            setPreviewText(null);
             const { data } = await supabase.storage
               .from("invoices")
               .createSignedUrl(allowance.storage_path, 3600);
-
             if (data) setPreviewUrl(data.signedUrl);
           }
         } catch (e) {
-          console.error("Error previewing excel:", e);
-          setPreviewText("無法預覽檔案");
+          console.error("Error loading preview:", e);
+          if (!isExcelImport) {
+            setPreviewText("無法預覽檔案");
+          }
         } finally {
           setPreviewLoading(false);
         }
       };
       loadPreview();
     } else {
-      setExcelData(null);
+      setExcelDownloadUrl(null);
       setPreviewUrl(null);
       setPreviewText(null);
     }
@@ -398,26 +371,26 @@ export function AllowanceReviewDialog({
       switch (e.key) {
         case "+":
         case "=": // Also handle = key which is often same key as +
-          if (!previewText && !excelData) {
+          if (!previewText && !isExcelImport) {
             e.preventDefault();
             setZoom((prev) => Math.min(prev + 0.1, 3));
           }
           break;
         case "-":
         case "_":
-          if (!previewText && !excelData) {
+          if (!previewText && !isExcelImport) {
             e.preventDefault();
             setZoom((prev) => Math.max(prev - 0.1, 0.5));
           }
           break;
         case "ArrowLeft":
-          if (!previewText && !excelData) {
+          if (!previewText && !isExcelImport) {
             e.preventDefault();
             setRotation((prev) => prev - 90);
           }
           break;
         case "ArrowRight":
-          if (!previewText && !excelData) {
+          if (!previewText && !isExcelImport) {
             e.preventDefault();
             setRotation((prev) => prev + 90);
           }
@@ -435,13 +408,12 @@ export function AllowanceReviewDialog({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, previewText, excelData, onNext, onPrevious, form, handleSave]);
+  }, [isOpen, previewText, isExcelImport, onNext, onPrevious, form, handleSave]);
 
-  const allowanceCode = allowance?.allowance_serial_code;
   const isPdf = allowance?.filename?.toLowerCase().endsWith(".pdf");
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if ((isPanMode || !isPdf) && previewUrl && !excelData) {
+    if ((isPanMode || !isPdf) && previewUrl && !isExcelImport) {
       e.preventDefault();
       setIsDragging(true);
       setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
@@ -479,7 +451,7 @@ export function AllowanceReviewDialog({
           {/* Preview Section */}
           <div
             className={`border rounded-lg bg-muted flex items-center justify-center min-h-[300px] overflow-hidden relative group ${
-              (isPanMode || !isPdf) && previewUrl && !excelData
+              (isPanMode || !isPdf) && previewUrl && !isExcelImport
                 ? isDragging
                   ? "cursor-grabbing"
                   : "cursor-grab"
@@ -491,7 +463,7 @@ export function AllowanceReviewDialog({
             onMouseLeave={handleMouseUp}
           >
             {/* Image Controls Overlay */}
-            {!previewText && !excelData && previewUrl && (
+            {!previewText && !isExcelImport && previewUrl && (
               <div className="absolute top-2 right-2 flex gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 p-1 rounded-lg backdrop-blur-sm">
                 <Button
                   type="button"
@@ -545,50 +517,11 @@ export function AllowanceReviewDialog({
                 <Loader2 className="h-8 w-8 animate-spin" />
                 <p>載入預覽中...</p>
               </div>
-            ) : excelData ? (
-              <div className="w-full h-full max-h-[600px] overflow-auto bg-white">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      {excelData.headers.map((header, i) => (
-                        <TableHead
-                          key={i}
-                          className="whitespace-nowrap px-4 py-2 h-auto"
-                        >
-                          {header}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {excelData.rows.map((row, i) => {
-                      const isMatch =
-                        allowanceCode &&
-                        row.some((cell) =>
-                          String(cell).includes(allowanceCode),
-                        );
-
-                      return (
-                        <TableRow
-                          key={i}
-                          className={
-                            isMatch ? "bg-yellow-100 hover:bg-yellow-200" : ""
-                          }
-                        >
-                          {row.map((cell: unknown, cellIndex: number) => (
-                            <TableCell
-                              key={cellIndex}
-                              className="whitespace-nowrap px-4 py-2"
-                            >
-                              {String(cell ?? "")}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
+            ) : isExcelImport && allowance ? (
+              <ImportedAllowancePreview
+                allowance={allowance}
+                downloadUrl={excelDownloadUrl}
+              />
             ) : previewUrl ? (
               <div
                 className="w-full h-full flex items-center justify-center transition-transform duration-75 ease-linear"

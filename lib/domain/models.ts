@@ -187,6 +187,8 @@ export type UpdateInvoiceInput = z.infer<typeof updateInvoiceSchema>;
 export type InvoiceType = NonNullable<ExtractedInvoiceData["invoiceType"]>;
 export type InvoiceInOrOut = NonNullable<ExtractedInvoiceData["inOrOut"]>;
 
+export const IN_OR_OUT_LABELS = { in: "進項", out: "銷項" } as const;
+
 // ===== Allowance Schemas =====
 
 // Schema for extracted allowance data (stored in JSONB column)

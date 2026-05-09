@@ -472,18 +472,24 @@ export function InvoiceReviewDialog({
         setExcelDownloadUrl(null);
         setPreviewUrl(null);
 
-        if (isExcelImport) {
-          const { data } = await supabase.storage
-            .from("electronic-invoices")
-            .createSignedUrl(invoice.storage_path, 3600, {
-              download: invoice.filename,
-            });
-          if (data) setExcelDownloadUrl(data.signedUrl);
-        } else {
-          const { data } = await supabase.storage
-            .from("invoices")
-            .createSignedUrl(invoice.storage_path, 3600);
-          if (data) setPreviewUrl(data.signedUrl);
+        try {
+          if (isExcelImport) {
+            const { data, error } = await supabase.storage
+              .from("electronic-invoices")
+              .createSignedUrl(invoice.storage_path, 3600, {
+                download: invoice.filename,
+              });
+            if (error) throw error;
+            if (data) setExcelDownloadUrl(data.signedUrl);
+          } else {
+            const { data, error } = await supabase.storage
+              .from("invoices")
+              .createSignedUrl(invoice.storage_path, 3600);
+            if (error) throw error;
+            if (data) setPreviewUrl(data.signedUrl);
+          }
+        } catch (e) {
+          console.error("Error loading preview:", e);
         }
       };
       getPreview();

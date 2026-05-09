@@ -38,7 +38,7 @@ function parseInvoiceItems(summary?: string | null): ParsedItem[] | null {
   const lines = summary.split("\n").map((l) => l.trim()).filter(Boolean);
   if (lines.length === 0) return null;
 
-  const pattern = /^品名：(.*?), *數量：(.*?), *金額：(.*)$/;
+  const pattern = /^品名[：:](.*?)(?:[,，] *數量[：:])(.*?)(?:[,，] *金額[：:])(.*)$/;
   const items: ParsedItem[] = [];
   for (const line of lines) {
     const match = line.match(pattern);

@@ -286,16 +286,18 @@ export function AllowanceReviewDialog({
         setPreviewLoading(true);
         try {
           if (isExcelImport) {
-            const { data } = await supabase.storage
+            const { data, error } = await supabase.storage
               .from("electronic-invoices")
               .createSignedUrl(allowance.storage_path, 3600, {
                 download: allowance.filename ?? undefined,
               });
+            if (error) throw error;
             if (data) setExcelDownloadUrl(data.signedUrl);
           } else {
-            const { data } = await supabase.storage
+            const { data, error } = await supabase.storage
               .from("invoices")
               .createSignedUrl(allowance.storage_path, 3600);
+            if (error) throw error;
             if (data) setPreviewUrl(data.signedUrl);
           }
         } catch (e) {

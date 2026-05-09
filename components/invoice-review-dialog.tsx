@@ -1071,7 +1071,7 @@ export function InvoiceReviewDialog({
                           // Mirror the dynamic copy in confirmDisabledReason — see the comment there.
                           ? `${buyerTaxId?.trim() ? "二聯式發票" : "未填買方統編時，"}稅額應為 0（稅額內含於銷售額），目前稅額為 ${tax || 0}`
                           : taxAmountIssue === "rounding"
-                            ? `稅額 (${tax || 0}) 與銷售額 5% (${Math.round((Number(totalSales) || 0) * 0.05)}) 相差 1 元，視為四捨五入差異，可儲存`
+                            ? `稅額 (${tax || 0}) 與銷售額 5% (${Math.round((Number(totalSales) || 0) * 0.05)}) 相差 1 元，視為尾差，可儲存`
                             : `稅額 (${tax || 0}) 與銷售額 5% (${Math.round((Number(totalSales) || 0) * 0.05)}) 不符`}
                       </span>
                     </div>

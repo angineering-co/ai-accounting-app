@@ -112,7 +112,7 @@ export default function InvoicePage({
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    const normalized = query.trim().toUpperCase();
+    const normalized = query.replace(/\s+/g, "").toUpperCase();
     if (!normalized) return;
     if (!SERIAL_CODE_PATTERN.test(normalized)) {
       toast.error("字軌號碼格式錯誤，請使用 2 碼英文 + 8 碼數字");

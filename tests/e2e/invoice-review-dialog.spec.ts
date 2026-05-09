@@ -332,7 +332,7 @@ test.describe("Tax amount rounding warning", () => {
     const btn = confirmButton(page);
 
     // No tax warning initially
-    await expect(dialog.locator("text=四捨五入差異")).not.toBeVisible();
+    await expect(dialog.locator("text=視為尾差")).not.toBeVisible();
 
     // Edit tax to 99 — off by 1 from expected 100 → rounding case
     const taxInput = dialog
@@ -343,7 +343,7 @@ test.describe("Tax amount rounding warning", () => {
 
     // Rounding warning is shown
     await expect(
-      dialog.locator("text=相差 1 元，視為四捨五入差異，可儲存"),
+      dialog.locator("text=相差 1 元，視為尾差，可儲存"),
     ).toBeVisible();
 
     // Confirm remains enabled (non-blocking)

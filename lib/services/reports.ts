@@ -226,10 +226,6 @@ export async function generateTxtReport(
     const extracted = allowance.extracted_data;
     if (!extracted) return [];
 
-    const items = extracted.items?.length
-      ? extracted.items
-      : [{ amount: extracted.amount, taxAmount: extracted.taxAmount }];
-
     const inOrOut: InvoiceInOrOut =
       allowance.in_or_out === "in" ? "進項" : "銷項";
 
@@ -241,17 +237,37 @@ export async function generateTxtReport(
     const baseSerial =
       allowance.original_invoice_serial_code || extracted.originalInvoiceSerialCode!;
 
-    return items.map((item) => ({
+    const baseRow = {
       formatCode,
       inOrOut,
       date: extracted.date,
       buyerTaxId: extracted.buyerTaxId,
       sellerTaxId: extracted.sellerTaxId,
       invoiceSerialCode: baseSerial,
-      taxType: "應稅",
-      totalSales: item.amount ?? extracted.amount ?? 0,
-      tax: item.taxAmount ?? extracted.taxAmount ?? 0,
+      taxType: "應稅" as const,
       deductionCode: extracted.deductionCode,
+    };
+
+    // .TXT rows can't carry 0 sales or 0 tax. If any item is zero on either
+    // field, merge every item of this allowance into a single row using the
+    // top-level totals. Otherwise keep one row per item, which is what the
+    // spec/fixtures expect for well-formed multi-item allowances. (Assumption
+    // pending clarification of the underlying allowance-itemization rules.)
+    const items = extracted.items ?? [];
+    const hasZeroItem = items.some((it) => !it.amount || !it.taxAmount);
+
+    if (items.length === 0 || hasZeroItem) {
+      return [{
+        ...baseRow,
+        totalSales: extracted.amount ?? 0,
+        tax: extracted.taxAmount ?? 0,
+      }];
+    }
+
+    return items.map((item) => ({
+      ...baseRow,
+      totalSales: item.amount ?? 0,
+      tax: item.taxAmount ?? 0,
     }));
   });
 

@@ -495,6 +495,7 @@ export type Database = {
         Row: {
           client_id: string
           created_at: string
+          filing: Json
           firm_id: string
           id: string
           status: string
@@ -504,6 +505,7 @@ export type Database = {
         Insert: {
           client_id: string
           created_at?: string
+          filing?: Json
           firm_id: string
           id?: string
           status?: string
@@ -513,6 +515,7 @@ export type Database = {
         Update: {
           client_id?: string
           created_at?: string
+          filing?: Json
           firm_id?: string
           id?: string
           status?: string

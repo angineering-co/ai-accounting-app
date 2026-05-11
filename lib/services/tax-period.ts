@@ -2,13 +2,17 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { type SupabaseClient } from "@supabase/supabase-js";
-import { type Database } from "@/supabase/database.types";
+import { type Database, type Json } from "@/supabase/database.types";
 import {
   type CreateTaxFilingPeriodInput,
   type TaxFilingPeriod,
   taxFilingPeriodSchema,
   TaxPeriodStatus,
 } from "@/lib/domain/models";
+import { sanitizeFilenameForStorage } from "@/lib/utils";
+
+const VAT_TAX_FILINGS_BUCKET = "vat-tax-filings";
+const SIGNED_URL_TTL_SECONDS = 60;
 
 // This is for testing purposes only
 interface TaxPeriodServiceTestOptions {
@@ -123,4 +127,341 @@ export async function ensurePeriodEditable(
   if (period && (period.status === "locked" || period.status === "filed")) {
     throw new Error(errorMessage || "此期別已鎖定，無法進行變更。");
   }
+}
+
+// ===================================================================
+// Filing closure: snapshots + attachments + filed status transitions.
+// ===================================================================
+
+function snapshotStorageKey(
+  firmId: string,
+  yearMonth: string,
+  clientId: string,
+  taxId: string,
+  kind: "txt" | "tet_u",
+): string {
+  const ext = kind === "txt" ? "TXT" : "TET_U";
+  const safeTaxId = sanitizeFilenameForStorage(taxId);
+  return `${firmId}/${yearMonth}/${clientId}/${safeTaxId}.${ext}`;
+}
+
+function attachmentsFolder(
+  firmId: string,
+  yearMonth: string,
+  clientId: string,
+): string {
+  return `${firmId}/${yearMonth}/${clientId}/attachments`;
+}
+
+function deriveAttachmentStorageKey(
+  firmId: string,
+  yearMonth: string,
+  clientId: string,
+  filename: string,
+): string {
+  // Always prefix with a fresh uuid so storage keys are unique even when two
+  // different Unicode filenames sanitize to the same ASCII form. Dedup of
+  // re-uploads of the SAME filename is handled by addFilingAttachment looking
+  // up the existing entry by `filename` and reusing its path.
+  const folder = attachmentsFolder(firmId, yearMonth, clientId);
+  return `${folder}/${crypto.randomUUID()}_${sanitizeFilenameForStorage(filename)}`;
+}
+
+async function getClientTaxId(
+  clientId: string,
+  supabase: SupabaseClient<Database>,
+): Promise<string> {
+  const { data, error } = await supabase
+    .from("clients")
+    .select("tax_id")
+    .eq("id", clientId)
+    .single();
+  if (error || !data) throw new Error("找不到客戶");
+  return data.tax_id;
+}
+
+async function getPeriodOrThrow(
+  periodId: string,
+  supabase: SupabaseClient<Database>,
+): Promise<TaxFilingPeriod> {
+  const { data, error } = await supabase
+    .from("tax_filing_periods")
+    .select("*")
+    .eq("id", periodId)
+    .single();
+  if (error || !data) throw new Error("找不到此期別");
+  return taxFilingPeriodSchema.parse(data);
+}
+
+async function updateFiling(
+  periodId: string,
+  filing: object,
+  supabase: SupabaseClient<Database>,
+  options?: { status?: TaxPeriodStatus },
+): Promise<TaxFilingPeriod> {
+  // JSON.parse(JSON.stringify(...)) normalizes Date → ISO string so the value
+  // satisfies the Json column type (Date is not a JSON primitive).
+  const update: { filing: Json; status?: TaxPeriodStatus } = {
+    filing: JSON.parse(JSON.stringify(filing)) as Json,
+  };
+  if (options?.status) update.status = options.status;
+  const { data, error } = await supabase
+    .from("tax_filing_periods")
+    .update(update)
+    .eq("id", periodId)
+    .select()
+    .single();
+  if (error) throw error;
+  return taxFilingPeriodSchema.parse(data);
+}
+
+/**
+ * Persists the latest .TXT / .TET_U content as a snapshot, overwriting the
+ * previous file in storage and stamping filing.snapshots[kind].generated_at.
+ * Called from report-generation actions on every successful generation so the
+ * latest stored copy always matches what the admin downloaded last.
+ */
+export async function saveReportSnapshot(
+  clientId: string,
+  yearMonth: string,
+  taxId: string,
+  kind: "txt" | "tet_u",
+  content: string,
+  options?: TaxPeriodServiceTestOptions,
+): Promise<{ path: string; generatedAt: Date }> {
+  const supabase = options ? options.supabaseClient : await createClient();
+
+  let period = await getTaxPeriodByYYYMM(clientId, yearMonth, options);
+  if (!period) {
+    period = await createTaxPeriod(clientId, yearMonth);
+  }
+
+  const path = snapshotStorageKey(
+    period.firm_id,
+    yearMonth,
+    clientId,
+    taxId,
+    kind,
+  );
+  const { error: uploadError } = await supabase.storage
+    .from(VAT_TAX_FILINGS_BUCKET)
+    .upload(path, Buffer.from(content, "utf-8"), {
+      contentType: "text/plain; charset=utf-8",
+      upsert: true,
+    });
+  if (uploadError) throw uploadError;
+
+  const generatedAt = new Date();
+  const nextFiling = {
+    ...period.filing,
+    snapshots: {
+      ...period.filing.snapshots,
+      [kind]: { path, generated_at: generatedAt.toISOString() },
+    },
+  };
+
+  await updateFiling(period.id, nextFiling, supabase);
+  return { path, generatedAt };
+}
+
+/**
+ * Uploads one or more PDF attachments and registers them under filing.attachments.
+ * Dedup is keyed by filename — re-uploading the same filename overwrites the
+ * existing storage object and updates that entry's uploaded_at in place.
+ * Storage uploads happen in parallel; the row is updated once at the end.
+ * Throws if the period is already 'filed'.
+ *
+ * formData must contain one or more entries with key "file".
+ */
+export async function addFilingAttachments(
+  periodId: string,
+  formData: FormData,
+): Promise<TaxFilingPeriod> {
+  const supabase = await createClient();
+  const files = formData
+    .getAll("file")
+    .filter((v): v is File => v instanceof File);
+  if (files.length === 0) throw new Error("缺少檔案");
+
+  const period = await getPeriodOrThrow(periodId, supabase);
+  if (period.status === "filed") {
+    throw new Error("此期別已申報，請先取消申報再修改附件");
+  }
+
+  const existing = period.filing.attachments;
+  const byFilename = new Map(existing.map((a) => [a.filename, a]));
+
+  const uploads = files.map(async (file) => {
+    const path =
+      byFilename.get(file.name)?.path ??
+      deriveAttachmentStorageKey(
+        period.firm_id,
+        period.year_month,
+        period.client_id,
+        file.name,
+      );
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const { error } = await supabase.storage
+      .from(VAT_TAX_FILINGS_BUCKET)
+      .upload(path, buffer, {
+        contentType: file.type || "application/pdf",
+        upsert: true,
+      });
+    if (error) throw error;
+    return { path, filename: file.name };
+  });
+
+  const uploaded = await Promise.all(uploads);
+  const uploadedAt = new Date().toISOString();
+
+  // Merge: existing entries keep position; same-name re-uploads bump uploaded_at; new
+  // entries append in upload order.
+  const updated = new Map(byFilename);
+  const appended: typeof existing = [];
+  for (const u of uploaded) {
+    if (updated.has(u.filename)) {
+      const prev = updated.get(u.filename)!;
+      updated.set(u.filename, { ...prev, uploaded_at: new Date(uploadedAt) });
+    } else {
+      appended.push({
+        path: u.path,
+        filename: u.filename,
+        uploaded_at: new Date(uploadedAt),
+      });
+    }
+  }
+  const nextAttachments = [
+    ...existing.map((a) => updated.get(a.filename) ?? a),
+    ...appended,
+  ];
+
+  return await updateFiling(
+    periodId,
+    { ...period.filing, attachments: nextAttachments },
+    supabase,
+  );
+}
+
+/**
+ * Removes an attachment by filename (deletes the storage object too).
+ * Throws if the period is already 'filed'.
+ */
+export async function removeFilingAttachment(
+  periodId: string,
+  filename: string,
+): Promise<TaxFilingPeriod> {
+  const supabase = await createClient();
+  const period = await getPeriodOrThrow(periodId, supabase);
+  if (period.status === "filed") {
+    throw new Error("此期別已申報，請先取消申報再修改附件");
+  }
+
+  const target = period.filing.attachments.find((a) => a.filename === filename);
+  if (!target) return period;
+
+  const { error: removeError } = await supabase.storage
+    .from(VAT_TAX_FILINGS_BUCKET)
+    .remove([target.path]);
+  if (removeError) throw removeError;
+
+  return await updateFiling(
+    periodId,
+    {
+      ...period.filing,
+      attachments: period.filing.attachments.filter(
+        (a) => a.filename !== filename,
+      ),
+    },
+    supabase,
+  );
+}
+
+/**
+ * Transitions a period to 'filed'. Both snapshots and at least one attachment
+ * must be present. Sets filing.filed_at = now().
+ */
+export async function markPeriodAsFiled(
+  periodId: string,
+): Promise<TaxFilingPeriod> {
+  const supabase = await createClient();
+  const period = await getPeriodOrThrow(periodId, supabase);
+
+  const filing = period.filing;
+  if (!filing.snapshots.txt?.path || !filing.snapshots.tet_u?.path) {
+    throw new Error("請先產生 .TXT 與 .TET_U 申報檔");
+  }
+  if (filing.attachments.length === 0) {
+    throw new Error("請至少上傳一份國稅局申報附件");
+  }
+
+  const nextFiling = {
+    ...filing,
+    filed_at: new Date().toISOString(),
+  };
+  return await updateFiling(periodId, nextFiling, supabase, {
+    status: "filed",
+  });
+}
+
+/**
+ * Reverses 'filed' to 'open'. Keeps snapshots + attachments so the audit trail
+ * survives an unfile/refile cycle.
+ */
+export async function unfilePeriod(
+  periodId: string,
+): Promise<TaxFilingPeriod> {
+  const supabase = await createClient();
+  const period = await getPeriodOrThrow(periodId, supabase);
+  if (period.status !== "filed") return period;
+
+  const { filed_at: _filedAt, ...nextFiling } = period.filing;
+  void _filedAt;
+
+  return await updateFiling(periodId, nextFiling, supabase, {
+    status: "open",
+  });
+}
+
+/**
+ * Short-lived signed URL for downloading an attachment by filename.
+ */
+export async function getFilingAttachmentSignedUrl(
+  periodId: string,
+  filename: string,
+): Promise<string | null> {
+  const supabase = await createClient();
+  const period = await getPeriodOrThrow(periodId, supabase);
+  const target = period.filing.attachments.find((a) => a.filename === filename);
+  if (!target) return null;
+  const { data, error } = await supabase.storage
+    .from(VAT_TAX_FILINGS_BUCKET)
+    .createSignedUrl(target.path, SIGNED_URL_TTL_SECONDS, {
+      download: filename,
+    });
+  if (error || !data?.signedUrl) return null;
+  return data.signedUrl;
+}
+
+/**
+ * Short-lived signed URL for downloading a snapshot. The browser-facing
+ * filename is the client's tax_id (e.g. "12345678.TXT") to match the format
+ * the admin originally downloaded and uploaded to the IRS.
+ */
+export async function getSnapshotSignedUrl(
+  periodId: string,
+  kind: "txt" | "tet_u",
+): Promise<string | null> {
+  const supabase = await createClient();
+  const period = await getPeriodOrThrow(periodId, supabase);
+  const snapshot = period.filing.snapshots[kind];
+  if (!snapshot) return null;
+  const taxId = await getClientTaxId(period.client_id, supabase);
+  const downloadName = `${taxId}.${kind === "txt" ? "TXT" : "TET_U"}`;
+  const { data, error } = await supabase.storage
+    .from(VAT_TAX_FILINGS_BUCKET)
+    .createSignedUrl(snapshot.path, SIGNED_URL_TTL_SECONDS, {
+      download: downloadName,
+    });
+  if (error || !data?.signedUrl) return null;
+  return data.signedUrl;
 }

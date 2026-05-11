@@ -13,6 +13,7 @@ import { InvoiceTable } from "@/components/invoice-table";
 import { AllowanceTable } from "@/components/allowance-table";
 import { RangeManagement } from "@/components/range-management";
 import { ReportGeneration } from "@/components/report-generation";
+import { PeriodFilingCard } from "@/components/period-filing-card";
 import { StatusFilterBar } from "@/components/status-filter-bar";
 import { TablePagination } from "@/components/table-pagination";
 import { toast } from "sonner";
@@ -27,7 +28,7 @@ import {
   getTaxPeriodByYYYMM,
   updateTaxPeriodStatus,
 } from "@/lib/services/tax-period";
-import { Badge } from "@/components/ui/badge";
+import { PeriodStatusBadge } from "@/components/period-status-badge";
 import { InvoiceReviewDialog } from "@/components/invoice-review-dialog";
 import { extractInvoiceDataAction } from "@/lib/services/invoice";
 import { InvoiceUploadDialog } from "@/components/invoice/invoice-upload-dialog";
@@ -477,11 +478,7 @@ export default function PeriodDetailPage({
           <div>
             <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
               {rocPeriod.format()}
-              <Badge
-                variant={period.status === "locked" ? "secondary" : "default"}
-              >
-                {period.status === "locked" ? "已鎖定" : "進行中"}
-              </Badge>
+              <PeriodStatusBadge period={period} showIcon={false} />
             </h1>
             <p className="text-muted-foreground mt-1">
               {client.name} (統編: {client.tax_id})
@@ -490,20 +487,22 @@ export default function PeriodDetailPage({
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            variant={period.status === "locked" ? "outline" : "secondary"}
-            onClick={handleToggleLock}
-          >
-            {period.status === "locked" ? (
-              <>
-                <Unlock className="mr-2 h-4 w-4" /> 解鎖期別
-              </>
-            ) : (
-              <>
-                <Lock className="mr-2 h-4 w-4" /> 鎖定期別
-              </>
-            )}
-          </Button>
+          {period.status !== "filed" && (
+            <Button
+              variant={period.status === "locked" ? "outline" : "secondary"}
+              onClick={handleToggleLock}
+            >
+              {period.status === "locked" ? (
+                <>
+                  <Unlock className="mr-2 h-4 w-4" /> 解鎖期別
+                </>
+              ) : (
+                <>
+                  <Lock className="mr-2 h-4 w-4" /> 鎖定期別
+                </>
+              )}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -647,12 +646,14 @@ export default function PeriodDetailPage({
           />
         </TabsContent>
 
-        <TabsContent value="reports" className="mt-6">
+        <TabsContent value="reports" className="mt-6 space-y-6">
           <ReportGeneration
             client={client}
             period={rocPeriod}
             hasUnconfirmedDocuments={hasUnconfirmedDocuments}
+            onGenerated={() => mutatePeriod()}
           />
+          <PeriodFilingCard period={period} onChanged={() => mutatePeriod()} />
         </TabsContent>
       </Tabs>
 

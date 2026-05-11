@@ -50,12 +50,14 @@ interface ReportGenerationProps {
   client: Client;
   period: RocPeriod;
   hasUnconfirmedDocuments: boolean;
+  onGenerated?: () => void;
 }
 
 export function ReportGeneration({
   client,
   period,
   hasUnconfirmedDocuments,
+  onGenerated,
 }: ReportGenerationProps) {
   const clientId = client.id;
   const taxId = client.tax_id;
@@ -133,6 +135,7 @@ export function ReportGeneration({
       const content = await generateTxtReport(clientId, period.toString());
       downloadFile(content, `${taxId}.TXT`);
       toast.success(".TXT 報表產生成功");
+      onGenerated?.();
     } catch (error) {
       toast.error(
         ".TXT 報表產生失敗: " +
@@ -149,6 +152,7 @@ export function ReportGeneration({
       downloadFile(content, `${taxId}.TET_U`);
       toast.success(".TET_U 報表產生成功");
       setIsTetUModalOpen(false);
+      onGenerated?.();
     } catch (error) {
       toast.error(
         ".TET_U 報表產生失敗: " +

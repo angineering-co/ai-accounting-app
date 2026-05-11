@@ -98,3 +98,18 @@ export function toGregorianDate(rocYearMonth: string): Date {
 export const hasEnvVars =
   process.env.NEXT_PUBLIC_SUPABASE_URL &&
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
+/**
+ * Sanitize a filename so it's safe to use as a Supabase storage object key.
+ * Replaces any character outside [A-Za-z0-9.\-_] with `_` (covers spaces,
+ * parentheses, zh-TW/CJK, smart punctuation, etc), strips leading dots so the
+ * result isn't a hidden file, and falls back to "file" if everything got
+ * stripped.
+ *
+ * Note: this only sanitizes — it does NOT guarantee uniqueness. Callers that
+ * need uniqueness should prefix with a uuid (e.g. `${uuid}_${sanitized}`).
+ */
+export function sanitizeFilenameForStorage(name: string): string {
+  const cleaned = name.replace(/[^a-zA-Z0-9.\-_]/g, "_").replace(/^\.+/, "");
+  return cleaned || "file";
+}

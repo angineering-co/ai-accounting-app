@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import useSWR from "swr";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -40,6 +41,7 @@ import {
   type TetUConfig,
 } from "@/lib/domain/models";
 import { generateTxtReport, generateTetUReport } from "@/lib/services/reports";
+import { getFirmSettings } from "@/lib/services/firm";
 import { toast } from "sonner";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { Download, FileText, Loader2 } from "lucide-react";
@@ -60,6 +62,11 @@ export function ReportGeneration({
   const [isTetUModalOpen, setIsTetUModalOpen] = useState(false);
   const [isGeneratingTxt, setIsGeneratingTxt] = useState(false);
   const disabledReason = "請先確認所有發票與折讓單，才能產生報表";
+
+  const { data: firm } = useSWR(
+    ["firm-settings", client.firm_id],
+    () => getFirmSettings(client.firm_id),
+  );
 
   const tetUForm = useForm<TetUConfig>({
     resolver: zodResolver(tetUConfigSchema),
@@ -82,6 +89,26 @@ export function ReportGeneration({
       midYearClosureTaxRefundable: 0,
     },
   });
+
+  // Pre-fill firm-level fields once when settings first load. Guarding with a
+  // ref prevents SWR revalidations from clobbering edits the user has already
+  // typed into the dialog. User can still override any field per report.
+  const hasPrefilledRef = useRef(false);
+  useEffect(() => {
+    if (hasPrefilledRef.current) return;
+    const s = firm?.settings;
+    if (!s) return;
+    hasPrefilledRef.current = true;
+    tetUForm.reset({
+      ...tetUForm.getValues(),
+      agentRegistrationNumber: s.agent_registration_number ?? "",
+      declarerName: s.declarer_name ?? "",
+      declarerId: s.declarer_id ?? "",
+      declarerPhoneAreaCode: s.declarer_phone_area_code ?? "",
+      declarerPhone: s.declarer_phone ?? "",
+      declarerPhoneExtension: s.declarer_phone_extension ?? "",
+    });
+  }, [firm, tetUForm]);
 
   const downloadFile = (content: string, filename: string) => {
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });

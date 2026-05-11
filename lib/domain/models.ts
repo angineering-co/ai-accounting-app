@@ -63,13 +63,19 @@ export type PlatformCredentials = z.infer<typeof platformCredentialsSchema>;
 export type Landlord = z.infer<typeof landlordSchema>;
 export type InvoicePurchasing = z.infer<typeof invoicePurchasingSchema>;
 
+// ===== Shared primitives =====
+export const taxIdValidator = z
+  .string()
+  .min(8, "統一編號格式錯誤")
+  .max(8, "統一編號格式錯誤");
+
 // ===== Client Schemas =====
 export const clientSchema = z.object({
   id: z.string().uuid(),
   firm_id: z.string().uuid(),
   name: z.string().min(1, "客戶名稱為必填"),
   contact_person: z.string().nullable().optional(),
-  tax_id: z.string().min(8, "統一編號格式錯誤").max(8, "統一編號格式錯誤"),
+  tax_id: taxIdValidator,
   tax_payer_id: z.string().min(1, "稅籍編號為必填"),
   industry: z.string().nullable().optional(),
   address: z.string().nullable().optional(),
@@ -102,7 +108,7 @@ export const createClientSchema = clientSchema.pick({
 
 export const updateClientSettingsSchema = z.object({
   name: z.string().min(1, "客戶名稱為必填").optional(),
-  tax_id: z.string().min(8, "統一編號格式錯誤").max(8, "統一編號格式錯誤").optional(),
+  tax_id: taxIdValidator.optional(),
   tax_payer_id: z.string().min(1, "稅籍編號為必填").optional(),
   address: z.string().optional(),
   mailing_address: z.string().optional(),
@@ -295,6 +301,34 @@ export const createInvoiceRangeSchema = invoiceRangeSchema.omit({
 
 export type InvoiceRange = z.infer<typeof invoiceRangeSchema>;
 export type CreateInvoiceRangeInput = z.infer<typeof createInvoiceRangeSchema>;
+
+// ===== Firm Schemas =====
+export const firmSettingsBlobSchema = z.object({
+  agent_registration_number: z.string().optional(),
+  declarer_name: z.string().optional(),
+  declarer_id: z.string().optional(),
+  declarer_phone_area_code: z.string().optional(),
+  declarer_phone: z.string().optional(),
+  declarer_phone_extension: z.string().optional(),
+});
+
+export const firmSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1, "事務所名稱為必填"),
+  tax_id: taxIdValidator,
+  settings: firmSettingsBlobSchema.nullable().optional(),
+  created_at: z.coerce.date().nullable().optional(),
+});
+
+export const updateFirmSettingsSchema = z.object({
+  name: z.string().min(1, "事務所名稱為必填").optional(),
+  tax_id: taxIdValidator.optional(),
+  settings: firmSettingsBlobSchema.partial().optional(),
+});
+
+export type Firm = z.infer<typeof firmSchema>;
+export type FirmSettingsBlob = z.infer<typeof firmSettingsBlobSchema>;
+export type UpdateFirmSettingsInput = z.infer<typeof updateFirmSettingsSchema>;
 
 // ===== TET_U Config Schemas =====
 export const tetUConfigSchema = z.object({

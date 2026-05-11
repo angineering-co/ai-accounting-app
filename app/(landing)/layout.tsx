@@ -19,13 +19,15 @@ export default function LandingLayout({
       {/* Sticky Navigation */}
       <header className="sticky top-0 z-50 w-full border-b border-slate-100/50 bg-white/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between px-5">
-          <Link href="/" aria-label="SnapBooks.ai">
+          <Link href="/">
             <Image
               src="/snapbooks.svg"
-              alt="SnapBooks.ai 速博 Logo"
-              width={220}
-              height={64}
+              alt="SnapBooks.ai 速博"
+              width={165}
+              height={48}
               className="h-12 w-auto"
+              priority
+              unoptimized
             />
           </Link>
           <div className="flex items-center gap-4 md:gap-6">

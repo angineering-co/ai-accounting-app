@@ -303,6 +303,10 @@ export type InvoiceRange = z.infer<typeof invoiceRangeSchema>;
 export type CreateInvoiceRangeInput = z.infer<typeof createInvoiceRangeSchema>;
 
 // ===== Firm Schemas =====
+// passthrough(): the read-modify-write merge in updateFirmSettings parses the
+// existing JSONB to spread known keys; without passthrough, any keys not yet
+// modeled here (e.g. set by a newer version, or admin tooling) would be
+// stripped on the next save.
 export const firmSettingsBlobSchema = z.object({
   agent_registration_number: z.string().optional(),
   declarer_name: z.string().optional(),
@@ -310,7 +314,7 @@ export const firmSettingsBlobSchema = z.object({
   declarer_phone_area_code: z.string().optional(),
   declarer_phone: z.string().optional(),
   declarer_phone_extension: z.string().optional(),
-});
+}).passthrough();
 
 export const firmSchema = z.object({
   id: z.string().uuid(),

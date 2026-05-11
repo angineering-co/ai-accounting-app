@@ -106,6 +106,32 @@ describe("Firm settings service", () => {
     expect(firm.settings?.agent_registration_number).toBe("AG-003");
   });
 
+  it("preserves unknown keys already present in settings JSONB (passthrough)", async () => {
+    // Simulate an unknown key (e.g. from a future feature or admin tooling)
+    // already in the JSONB, then perform a normal update that touches a
+    // different known key. The unknown key must survive the merge.
+    await supabase
+      .from("firms")
+      .update({ settings: { unknown_future_key: "keep-me" } as never })
+      .eq("id", fixture.firmId);
+
+    await updateFirmSettings(
+      fixture.firmId,
+      { settings: { declarer_name: "新增名稱" } },
+      { supabaseClient: supabase },
+    );
+
+    const { data } = await supabase
+      .from("firms")
+      .select("settings")
+      .eq("id", fixture.firmId)
+      .single();
+    const stored = data?.settings as Record<string, unknown>;
+
+    expect(stored.unknown_future_key).toBe("keep-me");
+    expect(stored.declarer_name).toBe("新增名稱");
+  });
+
   it("rejects invalid tax_id length via Zod validation", async () => {
     await expect(
       updateFirmSettings(

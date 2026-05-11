@@ -90,24 +90,29 @@ export function ReportGeneration({
     },
   });
 
-  // Pre-fill firm-level fields once when settings first load. Guarding with a
-  // ref prevents SWR revalidations from clobbering edits the user has already
-  // typed into the dialog. User can still override any field per report.
+  // Pre-fill firm-level fields once settings load. Per-field setValue (only
+  // when the field is still empty) so we never clobber input the user typed
+  // before the SWR fetch returned. A ref also short-circuits SWR revalidations.
   const hasPrefilledRef = useRef(false);
   useEffect(() => {
     if (hasPrefilledRef.current) return;
     const s = firm?.settings;
     if (!s) return;
     hasPrefilledRef.current = true;
-    tetUForm.reset({
-      ...tetUForm.getValues(),
-      agentRegistrationNumber: s.agent_registration_number ?? "",
-      declarerName: s.declarer_name ?? "",
-      declarerId: s.declarer_id ?? "",
-      declarerPhoneAreaCode: s.declarer_phone_area_code ?? "",
-      declarerPhone: s.declarer_phone ?? "",
-      declarerPhoneExtension: s.declarer_phone_extension ?? "",
-    });
+    const fillIfEmpty = (
+      field: keyof TetUConfig,
+      value: string | undefined,
+    ) => {
+      if (!value) return;
+      if (tetUForm.getValues(field)) return;
+      tetUForm.setValue(field, value);
+    };
+    fillIfEmpty("agentRegistrationNumber", s.agent_registration_number);
+    fillIfEmpty("declarerName", s.declarer_name);
+    fillIfEmpty("declarerId", s.declarer_id);
+    fillIfEmpty("declarerPhoneAreaCode", s.declarer_phone_area_code);
+    fillIfEmpty("declarerPhone", s.declarer_phone);
+    fillIfEmpty("declarerPhoneExtension", s.declarer_phone_extension);
   }, [firm, tetUForm]);
 
   const downloadFile = (content: string, filename: string) => {

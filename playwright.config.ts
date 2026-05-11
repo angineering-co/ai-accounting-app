@@ -43,12 +43,17 @@ export default defineConfig({
     command: "npm run dev",
     url: "http://localhost:3000",
     reuseExistingServer: !process.env.CI,
-    // Cloudflare's always-pass test keys so Turnstile auto-completes in headless
-    // browsers. Overrides whatever real key the developer has in .env.local —
-    // tests must be deterministic regardless of local environment.
+    // Inject the test environment so Playwright runs are deterministic
+    // regardless of the developer's .env.local (or its absence in CI).
     env: {
+      // Cloudflare's always-pass test keys for Turnstile auto-completion.
       NEXT_PUBLIC_TURNSTILE_SITE_KEY: "1x00000000000000000000AA",
       TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
+      // Dummy GA id so <GoogleAnalytics> mounts in app/layout.tsx. Without
+      // it, sendGAEvent in @next/third-parties bails early because its
+      // module-level currDataLayerName is never initialized — and the
+      // apply-form tests' dataLayer assertions never see the event.
+      NEXT_PUBLIC_GA_ID: "G-TESTXXXXXX",
     },
   },
 });

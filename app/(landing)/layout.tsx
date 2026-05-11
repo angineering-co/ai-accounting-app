@@ -26,6 +26,7 @@ export default function LandingLayout({
               width={220}
               height={64}
               className="h-12 w-auto"
+              priority
             />
           </Link>
           <div className="flex items-center gap-4 md:gap-6">

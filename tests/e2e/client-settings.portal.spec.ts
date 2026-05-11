@@ -120,9 +120,18 @@ test.describe("Portal settings — invoice purchasing", () => {
 
     const section = getSection(page, "代購發票");
 
-    await section.locator("label", { hasText: "需要代購發票" }).click();
+    // Idempotent enable — the admin invoice-purchasing test runs in a parallel
+    // worker against the same client and may have already enabled it.
+    const enableLabel = section.locator("label", { hasText: "需要代購發票" });
+    const enableCheckbox = enableLabel.locator("..").locator('button[role="checkbox"]');
+    if ((await enableCheckbox.getAttribute("data-state")) !== "checked") {
+      await enableLabel.click();
+    }
+    await expect(enableCheckbox).toHaveAttribute("data-state", "checked");
 
-    const quantityInputs = section.locator('.rounded-md.border input');
+    // Scope to inputmode="numeric" so we don't pick up the Radix Checkbox
+    // hidden inputs rendered for the 加副聯 toggles on the manual rows.
+    const quantityInputs = section.locator('input[inputmode="numeric"]');
     await expect(quantityInputs).toHaveCount(4);
     await quantityInputs.first().fill("2");
 
@@ -131,7 +140,7 @@ test.describe("Portal settings — invoice purchasing", () => {
 
     await goToSettings(page);
     const s = getSection(page, "代購發票");
-    await expect(s.locator('.rounded-md.border input').first()).toHaveValue("2");
+    await expect(s.locator('input[inputmode="numeric"]').first()).toHaveValue("2");
   });
 });
 

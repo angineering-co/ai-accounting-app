@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import useSWR from "swr";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -40,6 +41,7 @@ import {
   type TetUConfig,
 } from "@/lib/domain/models";
 import { generateTxtReport, generateTetUReport } from "@/lib/services/reports";
+import { getFirmSettings } from "@/lib/services/firm";
 import { toast } from "sonner";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { Download, FileText, Loader2 } from "lucide-react";
@@ -60,6 +62,11 @@ export function ReportGeneration({
   const [isTetUModalOpen, setIsTetUModalOpen] = useState(false);
   const [isGeneratingTxt, setIsGeneratingTxt] = useState(false);
   const disabledReason = "請先確認所有發票與折讓單，才能產生報表";
+
+  const { data: firm } = useSWR(
+    ["firm-settings", client.firm_id],
+    () => getFirmSettings(client.firm_id),
+  );
 
   const tetUForm = useForm<TetUConfig>({
     resolver: zodResolver(tetUConfigSchema),
@@ -82,6 +89,31 @@ export function ReportGeneration({
       midYearClosureTaxRefundable: 0,
     },
   });
+
+  // Pre-fill firm-level fields once settings load. Per-field setValue (only
+  // when the field is still empty) so we never clobber input the user typed
+  // before the SWR fetch returned. A ref also short-circuits SWR revalidations.
+  const hasPrefilledRef = useRef(false);
+  useEffect(() => {
+    if (hasPrefilledRef.current) return;
+    const s = firm?.settings;
+    if (!s) return;
+    hasPrefilledRef.current = true;
+    const fillIfEmpty = (
+      field: keyof TetUConfig,
+      value: string | undefined,
+    ) => {
+      if (!value) return;
+      if (tetUForm.getValues(field)) return;
+      tetUForm.setValue(field, value);
+    };
+    fillIfEmpty("agentRegistrationNumber", s.agent_registration_number);
+    fillIfEmpty("declarerName", s.declarer_name);
+    fillIfEmpty("declarerId", s.declarer_id);
+    fillIfEmpty("declarerPhoneAreaCode", s.declarer_phone_area_code);
+    fillIfEmpty("declarerPhone", s.declarer_phone);
+    fillIfEmpty("declarerPhoneExtension", s.declarer_phone_extension);
+  }, [firm, tetUForm]);
 
   const downloadFile = (content: string, filename: string) => {
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });

@@ -175,11 +175,19 @@ test.describe("Client settings — invoice purchasing", () => {
 
     const section = page.locator("text=代購發票").locator("..").locator("..");
 
-    // Enable invoice purchasing
-    await section.locator("label", { hasText: "需要代購發票" }).click();
+    // Enable invoice purchasing — idempotent because the portal test (running
+    // in a parallel worker against the same client) may have already toggled it.
+    const enableLabel = section.locator("label", { hasText: "需要代購發票" });
+    const enableCheckbox = enableLabel.locator("..").locator('button[role="checkbox"]');
+    if ((await enableCheckbox.getAttribute("data-state")) !== "checked") {
+      await enableLabel.click();
+    }
+    await expect(enableCheckbox).toHaveAttribute("data-state", "checked");
 
-    // Quantity inputs should appear
-    const quantityInputs = section.locator('.rounded-md.border input');
+    // Quantity inputs should appear — one per invoice type (4 in INVOICE_TYPES).
+    // Scope to inputmode="numeric" so we don't pick up the Radix Checkbox
+    // hidden inputs rendered for the 加副聯 toggles on the manual rows.
+    const quantityInputs = section.locator('input[inputmode="numeric"]');
     await expect(quantityInputs).toHaveCount(4);
 
     // Fill in a quantity
@@ -191,6 +199,6 @@ test.describe("Client settings — invoice purchasing", () => {
     // Verify after reload
     await goToBasicTab(page);
     const sectionAfter = page.locator("text=代購發票").locator("..").locator("..");
-    await expect(sectionAfter.locator('.rounded-md.border input').first()).toHaveValue("3");
+    await expect(sectionAfter.locator('input[inputmode="numeric"]').first()).toHaveValue("3");
   });
 });

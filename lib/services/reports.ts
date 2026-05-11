@@ -254,7 +254,11 @@ export async function generateTxtReport(
     // spec/fixtures expect for well-formed multi-item allowances. (Assumption
     // pending clarification of the underlying allowance-itemization rules.)
     const items = extracted.items ?? [];
-    const hasZeroItem = items.some((it) => !it.amount || !it.taxAmount);
+    // Match format9's Math.round behavior so a fractional value like 0.4
+    // (which would render as "0" in the .TXT row) still triggers the merge.
+    const hasZeroItem = items.some(
+      (it) => Math.round(it.amount ?? 0) === 0 || Math.round(it.taxAmount ?? 0) === 0,
+    );
 
     if (items.length === 0 || hasZeroItem) {
       return [{

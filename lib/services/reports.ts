@@ -12,7 +12,6 @@ import {
 } from "@/lib/domain/models";
 import { getAllowanceFormatCode, getInvoiceFormatCode } from "@/lib/domain/format-codes";
 import {
-  ensurePeriodEditable,
   getTaxPeriodByYYYMM,
   saveReportSnapshot,
 } from "@/lib/services/tax-period";
@@ -176,12 +175,12 @@ export async function generateTxtReport(
 
   const period = RocPeriod.fromYYYMM(serializedReportPeriod);
 
-  if (!options?.supabaseClient) {
-    await ensurePeriodEditable(
-      clientId,
-      period.toString(),
-      "此期別已申報，無法重新產生申報檔",
-    );
+  const taxPeriod = await getTaxPeriodByYYYMM(clientId, period.toString(), {
+    supabaseClient: supabase,
+  });
+
+  if (!options?.supabaseClient && taxPeriod?.status === "filed") {
+    throw new Error("此期別已申報，無法重新產生申報檔");
   }
 
   // 1. Fetch Client
@@ -192,9 +191,6 @@ export async function generateTxtReport(
     .single();
   if (clientError || !client) throw new Error("Client not found");
 
-  const taxPeriod = await getTaxPeriodByYYYMM(clientId, period.toString(), {
-    supabaseClient: supabase,
-  });
   const taxPeriodId = taxPeriod?.id;
 
   // 2. Fetch Invoices for the period (Confirmed status)
@@ -578,17 +574,14 @@ export async function generateTetUReport(
 
   const period = RocPeriod.fromYYYMM(serializedReportPeriod);
 
-  if (!options?.supabaseClient) {
-    await ensurePeriodEditable(
-      clientId,
-      period.toString(),
-      "此期別已申報，無法重新產生申報檔",
-    );
-  }
-
   const taxPeriod = await getTaxPeriodByYYYMM(clientId, period.toString(), {
     supabaseClient: supabase,
   });
+
+  if (!options?.supabaseClient && taxPeriod?.status === "filed") {
+    throw new Error("此期別已申報，無法重新產生申報檔");
+  }
+
   const taxPeriodId = taxPeriod?.id;
 
   // 1. Fetch Client

@@ -221,17 +221,29 @@ async function updateFiling(
  * Called from report-generation actions on every successful generation so the
  * latest stored copy always matches what the admin downloaded last.
  */
+interface SaveReportSnapshotOptions {
+  supabaseClient?: SupabaseClient<Database>;
+  period?: TaxFilingPeriod;
+}
+
 export async function saveReportSnapshot(
   clientId: string,
   yearMonth: string,
   taxId: string,
   kind: "txt" | "tet_u",
   content: string,
-  options?: TaxPeriodServiceTestOptions,
+  options?: SaveReportSnapshotOptions,
 ): Promise<{ path: string; generatedAt: Date }> {
-  const supabase = options ? options.supabaseClient : await createClient();
+  const supabase = options?.supabaseClient ?? (await createClient());
 
-  let period = await getTaxPeriodByYYYMM(clientId, yearMonth, options);
+  let period = options?.period ?? null;
+  if (!period) {
+    period = await getTaxPeriodByYYYMM(
+      clientId,
+      yearMonth,
+      options?.supabaseClient ? { supabaseClient: options.supabaseClient } : undefined,
+    );
+  }
   if (!period) {
     period = await createTaxPeriod(clientId, yearMonth);
   }

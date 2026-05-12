@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import Link from "next/link";
-import { type TaxFilingPeriod } from "@/lib/domain/models";
-import { cn } from "@/lib/utils";
+import { type TaxFilingPeriod, type TaxFilingSummary } from "@/lib/domain/models";
+import { cn, formatNTD } from "@/lib/utils";
 import { PeriodStatusBadge } from "@/components/period-status-badge";
 
 interface PeriodCardProps {
@@ -18,6 +18,44 @@ interface PeriodCardProps {
   actionLabel?: string;
 }
 
+const SUMMARY_FIELDS: ReadonlyArray<{ label: string; key: keyof TaxFilingSummary }> = [
+  { label: "總銷售額", key: "total_sales" },
+  { label: "總進項", key: "total_purchases" },
+  { label: "應繳稅額", key: "tax_payable" },
+  { label: "留抵稅額", key: "credit_carryover" },
+];
+
+function FilingSummaryGrid({
+  summary,
+  variant,
+}: {
+  summary: TaxFilingSummary;
+  variant: "default" | "primary";
+}) {
+  return (
+    <div
+      className={cn(
+        "grid grid-cols-2 gap-x-4 gap-y-3 my-4",
+        variant === "primary" && "md:my-6 md:gap-y-4",
+      )}
+    >
+      {SUMMARY_FIELDS.map(({ label, key }) => (
+        <div key={key}>
+          <p className="text-sm font-medium text-muted-foreground">{label}</p>
+          <p
+            className={cn(
+              "text-base font-semibold font-mono text-slate-900",
+              variant === "primary" && "md:text-lg",
+            )}
+          >
+            {formatNTD(summary[key])}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function PeriodCard({
   period,
   firmId,
@@ -27,11 +65,8 @@ export function PeriodCard({
   actionLabel = "管理發票",
 }: PeriodCardProps) {
   const rocPeriod = RocPeriod.fromYYYMM(period.year_month);
-
-  // TODO: Implement this
-  // const sales = 0; // Placeholder until integrated with real data
-  // const tax = 0; // Placeholder until integrated with real data
-  // const count = 0; // Placeholder until integrated with real data
+  const filedSummary =
+    period.status === "filed" ? period.filing.summary : undefined;
 
   return (
     <Card
@@ -55,28 +90,11 @@ export function PeriodCard({
         </div>
       </CardHeader>
       <CardContent>
-        <div
-          className={cn(
-            "grid grid-cols-2 gap-4 my-4",
-            variant === "primary" && "md:my-6",
-          )}
-        >
-          {/* <div>
-            <p className="text-sm font-medium text-muted-foreground">銷售額</p>
-            <p className={cn("text-xl font-bold font-mono", variant === "primary" && "md:text-2xl")}>
-              ${sales.toLocaleString()}
-            </p>
-          </div>
-          <div>
-            <p className="text-sm font-medium text-muted-foreground">稅額</p>
-            <p className={cn("text-xl font-bold font-mono", variant === "primary" && "md:text-2xl")}>
-              ${tax.toLocaleString()}
-            </p>
-          </div> */}
-        </div>
+        {filedSummary ? (
+          <FilingSummaryGrid summary={filedSummary} variant={variant} />
+        ) : null}
 
-        <div className="mt-4 flex items-center justify-between">
-          {/* <p className="text-xs text-muted-foreground">{count} 張發票</p> */}
+        <div className="mt-4 flex items-center justify-end">
           <Button
             asChild
             size={variant === "primary" ? "default" : "sm"}

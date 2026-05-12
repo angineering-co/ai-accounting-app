@@ -6,6 +6,7 @@ import { type Database, type Json } from "@/supabase/database.types";
 import {
   type CreateTaxFilingPeriodInput,
   type TaxFilingPeriod,
+  type TaxFilingSummary,
   taxFilingPeriodSchema,
   TaxPeriodStatus,
 } from "@/lib/domain/models";
@@ -224,6 +225,9 @@ async function updateFiling(
 interface SaveReportSnapshotOptions {
   supabaseClient?: SupabaseClient<Database>;
   period?: TaxFilingPeriod;
+  // Headline figures from the .TET_U report; persisted alongside the snapshot
+  // when kind === "tet_u" so the client portal can show a filed summary.
+  summary?: TaxFilingSummary;
 }
 
 export async function saveReportSnapshot(
@@ -270,6 +274,9 @@ export async function saveReportSnapshot(
       ...period.filing.snapshots,
       [kind]: { path, generated_at: generatedAt.toISOString() },
     },
+    ...(kind === "tet_u" && options?.summary
+      ? { summary: options.summary }
+      : {}),
   };
 
   await updateFiling(period.id, nextFiling, supabase);

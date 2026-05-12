@@ -377,6 +377,15 @@ export const taxFilingAttachmentSchema = z.object({
   uploaded_at: z.coerce.date(),
 });
 
+// Headline figures captured from the .TET_U report so the client portal can
+// surface a filed-period summary without anyone reading the encoded snapshot.
+export const taxFilingSummarySchema = z.object({
+  total_sales: z.number().int(),       // .TET_U Field 14: 合計(銷售額)
+  total_purchases: z.number().int(),   // .TET_U Field 58: 合計-進貨及費用
+  tax_payable: z.number().int(),       // .TET_U Field 91: 本期應實繳稅額
+  credit_carryover: z.number().int(),  // .TET_U Field 95: 本期累積留抵稅額
+});
+
 export const taxFilingSchema = z
   .object({
     snapshots: z
@@ -387,11 +396,13 @@ export const taxFilingSchema = z
       .default({}),
     attachments: z.array(taxFilingAttachmentSchema).default([]),
     filed_at: z.coerce.date().optional(),
+    summary: taxFilingSummarySchema.optional(),
   })
   .default({ snapshots: {}, attachments: [] });
 
 export type TaxFilingSnapshot = z.infer<typeof taxFilingSnapshotSchema>;
 export type TaxFilingAttachment = z.infer<typeof taxFilingAttachmentSchema>;
+export type TaxFilingSummary = z.infer<typeof taxFilingSummarySchema>;
 export type TaxFiling = z.infer<typeof taxFilingSchema>;
 
 // ===== Tax Filing Period Schemas =====

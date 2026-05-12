@@ -6,6 +6,7 @@ import type { Database } from "@/supabase/database.types";
 import {
   type ExtractedAllowanceData,
   type ExtractedInvoiceData,
+  type TaxFilingSummary,
   type TetUConfig,
   type InvoiceInOrOut,
   type InvoiceType,
@@ -805,13 +806,20 @@ export async function generateTetUReport(
   const content = fields.join('|');
 
   if (!options?.supabaseClient) {
+    const summary: TaxFilingSummary = {
+      total_sales: aggregated.output.totalSales,
+      total_purchases: aggregated.input.totalPurchasesAndExpenses,
+      tax_payable: field91,
+      credit_carryover: field95,
+    };
+
     await saveReportSnapshot(
       clientId,
       period.toString(),
       client.tax_id,
       "tet_u",
       content,
-      taxPeriod ? { period: taxPeriod } : undefined,
+      { ...(taxPeriod ? { period: taxPeriod } : {}), summary },
     );
   }
 

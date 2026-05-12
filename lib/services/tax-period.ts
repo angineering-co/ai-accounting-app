@@ -274,9 +274,7 @@ export async function saveReportSnapshot(
       ...period.filing.snapshots,
       [kind]: { path, generated_at: generatedAt.toISOString() },
     },
-    ...(kind === "tet_u" && options?.summary
-      ? { summary: options.summary }
-      : {}),
+    ...(kind === "tet_u" ? { summary: options?.summary } : {}),
   };
 
   await updateFiling(period.id, nextFiling, supabase);

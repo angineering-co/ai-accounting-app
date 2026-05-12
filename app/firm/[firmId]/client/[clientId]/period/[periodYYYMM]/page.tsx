@@ -75,10 +75,9 @@ export default function PeriodDetailPage({
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // Pagination & filter state
-  const [invoiceStatusFilter, setInvoiceStatusFilter] = useState("uploaded");
+  const [invoiceStatusFilter, setInvoiceStatusFilter] = useState("all");
   const [invoicePage, setInvoicePage] = useState(0);
-  const [allowanceStatusFilter, setAllowanceStatusFilter] =
-    useState("uploaded");
+  const [allowanceStatusFilter, setAllowanceStatusFilter] = useState("all");
   const [allowancePage, setAllowancePage] = useState(0);
 
   // Auto-advance refs

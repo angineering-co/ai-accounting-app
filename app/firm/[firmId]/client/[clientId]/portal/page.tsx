@@ -62,9 +62,31 @@ export default function PortalDashboardPage({
           clientId,
           currentUnclosedYearMonth,
         );
+
         if (!existing) {
           await createTaxPeriod(clientId, currentUnclosedYearMonth);
           await mutatePeriods();
+          return;
+        }
+
+        // Current-unclosed period was filed early. Roll forward to the next
+        // bi-monthly period once it has actually started, so the client has a
+        // place to upload new invoices without seeing an empty card weeks ahead
+        // of the period.
+        if (existing.status === "filed") {
+          const nextPeriod = RocPeriod.fromYYYMM(currentUnclosedYearMonth)
+            .nextPeriod();
+          if (new Date() >= nextPeriod.startDate) {
+            const nextYearMonth = nextPeriod.toString();
+            const nextExisting = await getTaxPeriodByYYYMM(
+              clientId,
+              nextYearMonth,
+            );
+            if (!nextExisting) {
+              await createTaxPeriod(clientId, nextYearMonth);
+              await mutatePeriods();
+            }
+          }
         }
       } catch (error) {
         console.error(error);

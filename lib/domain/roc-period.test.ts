@@ -84,4 +84,18 @@ describe('RocPeriod', () => {
     expect(RocPeriod.getCurrentUnclosedPeriod(new Date(2025, 10, 17)).toString()).toBe("11409");
     expect(RocPeriod.getCurrentUnclosedPeriod(new Date(2025, 10, 18)).toString()).toBe("11411");
   });
+
+  it("should compute next bi-monthly period", () => {
+    expect(new RocPeriod(115, 3).nextPeriod().toString()).toBe("11505");
+    expect(new RocPeriod(115, 9).nextPeriod().toString()).toBe("11511");
+  });
+
+  it("should roll next period over to January of the following year", () => {
+    expect(new RocPeriod(115, 11).nextPeriod().toString()).toBe("11601");
+  });
+
+  it("should expose the period start date as the 1st of its start month", () => {
+    expect(new RocPeriod(115, 5).startDate).toEqual(new Date(2026, 4, 1));
+    expect(new RocPeriod(115, 11).startDate).toEqual(new Date(2026, 10, 1));
+  });
 });

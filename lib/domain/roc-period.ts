@@ -125,6 +125,23 @@ export class RocPeriod {
     return new RocPeriod(this.rocYear, this.startMonth - 2);
   }
 
+  /**
+   * Next bi-monthly period.
+   */
+  nextPeriod(): RocPeriod {
+    if (this.startMonth === 11) {
+      return new RocPeriod(this.rocYear + 1, 1);
+    }
+    return new RocPeriod(this.rocYear, this.startMonth + 2);
+  }
+
+  /**
+   * First calendar day of this period (the 1st of its start month).
+   */
+  get startDate(): Date {
+    return new Date(this.gregorianYear, this.startMonth - 1, 1);
+  }
+
   private static adjustWeekendCutoffToMonday(cutoffDate: Date): Date {
     const dayOfWeek = cutoffDate.getDay();
     if (dayOfWeek === 6) {

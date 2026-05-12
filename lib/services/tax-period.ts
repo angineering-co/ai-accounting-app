@@ -414,8 +414,8 @@ export async function unfilePeriod(
   const period = await getPeriodOrThrow(periodId, supabase);
   if (period.status !== "filed") return period;
 
-  const { filed_at: _filedAt, ...nextFiling } = period.filing;
-  void _filedAt;
+  const nextFiling = { ...period.filing };
+  delete nextFiling.filed_at;
 
   return await updateFiling(periodId, nextFiling, supabase, {
     status: "open",

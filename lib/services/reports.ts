@@ -11,7 +11,11 @@ import {
   type InvoiceType,
 } from "@/lib/domain/models";
 import { getAllowanceFormatCode, getInvoiceFormatCode } from "@/lib/domain/format-codes";
-import { getTaxPeriodByYYYMM } from "@/lib/services/tax-period";
+import {
+  ensurePeriodEditable,
+  getTaxPeriodByYYYMM,
+  saveReportSnapshot,
+} from "@/lib/services/tax-period";
 import { getInvoiceRanges } from "./invoice-range";
 import { toRocYearMonth } from "@/lib/utils";
 import { RocPeriod } from "@/lib/domain/roc-period";
@@ -169,8 +173,16 @@ export async function generateTxtReport(
   options?: ReportServiceOptions
 ) {
   const supabase = options?.supabaseClient ?? await createSupabaseClient();
-  
+
   const period = RocPeriod.fromYYYMM(serializedReportPeriod);
+
+  if (!options?.supabaseClient) {
+    await ensurePeriodEditable(
+      clientId,
+      period.toString(),
+      "此期別已申報，無法重新產生申報檔",
+    );
+  }
 
   // 1. Fetch Client
   const { data: client, error: clientError } = await supabase
@@ -466,7 +478,21 @@ export async function generateTxtReport(
     });
   });
 
-  return rows.join('\n');
+  const content = rows.join('\n');
+
+  // Persist the latest snapshot so the period record always points at what was
+  // downloaded last. Skip when running with an injected supabase client (tests).
+  if (!options?.supabaseClient) {
+    await saveReportSnapshot(
+      clientId,
+      period.toString(),
+      client.tax_id,
+      "txt",
+      content,
+    );
+  }
+
+  return content;
 }
 
 const COUNTY_CITY_CODES: Record<string, string> = {
@@ -549,8 +575,16 @@ export async function generateTetUReport(
   options?: ReportServiceOptions
 ) {
   const supabase = options?.supabaseClient ?? await createSupabaseClient();
-  
+
   const period = RocPeriod.fromYYYMM(serializedReportPeriod);
+
+  if (!options?.supabaseClient) {
+    await ensurePeriodEditable(
+      clientId,
+      period.toString(),
+      "此期別已申報，無法重新產生申報檔",
+    );
+  }
 
   const taxPeriod = await getTaxPeriodByYYYMM(clientId, period.toString(), {
     supabaseClient: supabase,
@@ -773,8 +807,20 @@ export async function generateTetUReport(
   // Section 15: 銀行業、保險業經營本業收入 (5%) (403/404 適用), fill with zeros for 401
   fields.push(formatS9(0, 12));  // Field 111: 銷售額
   fields.push(formatS9(0, 10));  // Field 112: 稅額
-  
-  return fields.join('|');
+
+  const content = fields.join('|');
+
+  if (!options?.supabaseClient) {
+    await saveReportSnapshot(
+      clientId,
+      period.toString(),
+      client.tax_id,
+      "tet_u",
+      content,
+    );
+  }
+
+  return content;
 }
 
 function aggregateInvoiceData(

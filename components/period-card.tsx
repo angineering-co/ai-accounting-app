@@ -1,13 +1,13 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Lock, Unlock } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import Link from "next/link";
 import { type TaxFilingPeriod } from "@/lib/domain/models";
 import { cn } from "@/lib/utils";
+import { PeriodStatusBadge } from "@/components/period-status-badge";
 
 interface PeriodCardProps {
   period: TaxFilingPeriod;
@@ -51,24 +51,7 @@ export function PeriodCard({
           {rocPeriod.format()}
         </CardTitle>
         <div className="flex items-center gap-2">
-          <Badge
-            variant="outline"
-            className={cn(
-              "rounded-full border-slate-200 bg-slate-50 px-3 py-1 text-slate-700",
-              period.status !== "locked" &&
-                "border-emerald-200 bg-emerald-50 text-emerald-700",
-            )}
-          >
-            {period.status === "locked" ? (
-              <span className="flex items-center gap-1">
-                <Lock className="h-3 w-3" /> 已鎖定
-              </span>
-            ) : (
-              <span className="flex items-center gap-1">
-                <Unlock className="h-3 w-3" /> 進行中
-              </span>
-            )}
-          </Badge>
+          <PeriodStatusBadge period={period} />
         </div>
       </CardHeader>
       <CardContent>

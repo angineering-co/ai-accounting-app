@@ -365,6 +365,35 @@ export type TetUConfig = z.infer<typeof tetUConfigSchema>;
 export const TAX_PERIOD_STATUS = ['open', 'locked', 'filed'] as const;
 export type TaxPeriodStatus = typeof TAX_PERIOD_STATUS[number];
 
+// ===== Tax Filing (closure) Schemas =====
+export const taxFilingSnapshotSchema = z.object({
+  path: z.string(),
+  generated_at: z.coerce.date(),
+});
+
+export const taxFilingAttachmentSchema = z.object({
+  path: z.string(),
+  filename: z.string(),
+  uploaded_at: z.coerce.date(),
+});
+
+export const taxFilingSchema = z
+  .object({
+    snapshots: z
+      .object({
+        txt: taxFilingSnapshotSchema.optional(),
+        tet_u: taxFilingSnapshotSchema.optional(),
+      })
+      .default({}),
+    attachments: z.array(taxFilingAttachmentSchema).default([]),
+    filed_at: z.coerce.date().optional(),
+  })
+  .default({ snapshots: {}, attachments: [] });
+
+export type TaxFilingSnapshot = z.infer<typeof taxFilingSnapshotSchema>;
+export type TaxFilingAttachment = z.infer<typeof taxFilingAttachmentSchema>;
+export type TaxFiling = z.infer<typeof taxFilingSchema>;
+
 // ===== Tax Filing Period Schemas =====
 export const taxFilingPeriodSchema = z.object({
   id: z.string().uuid(),
@@ -372,6 +401,7 @@ export const taxFilingPeriodSchema = z.object({
   client_id: z.string().uuid(),
   year_month: z.string().length(5, "期別格式錯誤 (YYYMM)"),
   status: z.enum(TAX_PERIOD_STATUS).default('open'),
+  filing: taxFilingSchema,
 
   created_at: z.coerce.date(),
   updated_at: z.coerce.date(),

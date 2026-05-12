@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { useSupabaseUpload } from "@/hooks/use-supabase-upload";
 import { processElectronicInvoiceFile } from "@/lib/services/invoice-import";
+import { sanitizeFilenameForStorage } from "@/lib/utils";
 
 interface InvoiceImportDialogProps {
   open: boolean;
@@ -57,11 +58,8 @@ export function InvoiceImportDialog({
     ],
     maxFiles: 4, // Allow up to 4 files (in/out invoices + in/out allowances)
     maxFileSize: 5 * 1024 * 1024,
-    getStorageKey: (file) => {
-      // Sanitize filename to ensure valid storage key and avoid conflicts
-      const cleanName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-      return `${crypto.randomUUID()}_${cleanName}`;
-    },
+    getStorageKey: (file) =>
+      `${crypto.randomUUID()}_${sanitizeFilenameForStorage(file.name)}`,
   });
 
   const {

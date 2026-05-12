@@ -3,12 +3,16 @@
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import dynamic from "next/dynamic";
-import { ArrowLeft, FileText, Loader2, Receipt } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Download, FileText, Loader2, Receipt } from "lucide-react";
+import { toast } from "sonner";
 import Link from "next/link";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { clientSchema } from "@/lib/domain/models";
-import { getTaxPeriodByYYYMM } from "@/lib/services/tax-period";
+import {
+  getFilingAttachmentSignedUrl,
+  getTaxPeriodByYYYMM,
+} from "@/lib/services/tax-period";
 import { usePaginatedPeriodInvoices } from "@/hooks/use-paginated-period-invoices";
 import { usePaginatedPeriodAllowances } from "@/hooks/use-paginated-period-allowances";
 import {
@@ -21,8 +25,8 @@ import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { PortalUploadFab } from "@/components/portal-upload-fab";
 import { TablePagination } from "@/components/table-pagination";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PeriodStatusBadge } from "@/components/period-status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -229,6 +233,30 @@ export default function PortalPeriodDetailPage({
   }
 
   const isLocked = period.status === "locked" || period.status === "filed";
+  const isFiled = period.status === "filed";
+
+  const handleDownloadFilingAttachment = async (filename: string) => {
+    try {
+      const url = await getFilingAttachmentSignedUrl(period.id, filename);
+      if (!url) {
+        toast.error("無法取得下載連結");
+        return;
+      }
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      toast.error(
+        `下載失敗: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  };
+
+  const filedDateLabel = isFiled && period.filing.filed_at
+    ? new Date(period.filing.filed_at).toLocaleDateString("zh-TW", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      })
+    : "";
 
   const overviewItems = [
     {
@@ -272,16 +300,11 @@ export default function PortalPeriodDetailPage({
           <div>
             <h1 className="flex flex-col items-start gap-3 text-2xl font-bold leading-tight tracking-tight text-slate-900 sm:flex-row sm:flex-wrap sm:items-center sm:text-3xl">
               <span className="whitespace-nowrap">{rocPeriod.format()}</span>
-              <Badge
-                variant="outline"
-                className={
-                  isLocked
-                    ? "w-fit shrink-0 rounded-full border-slate-200 bg-slate-100 px-3 py-1 text-slate-700"
-                    : "w-fit shrink-0 rounded-full border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700"
-                }
-              >
-                {isLocked ? "已鎖定" : "進行中"}
-              </Badge>
+              <PeriodStatusBadge
+                period={period}
+                className="w-fit shrink-0"
+                showIcon={isFiled}
+              />
             </h1>
             <p className="mt-2 text-base text-slate-600">
               {client.name}（統編: {client.tax_id}）
@@ -289,6 +312,48 @@ export default function PortalPeriodDetailPage({
           </div>
         </div>
       </section>
+
+      {isFiled && (
+        <Card className="border-indigo-200/70 bg-white shadow-sm shadow-slate-200/60">
+          <CardHeader className="border-b border-indigo-100/80">
+            <CardTitle className="flex items-center gap-2 text-slate-900">
+              <CheckCircle2 className="h-5 w-5 text-indigo-600" />
+              申報資訊
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 pt-6">
+            <p className="text-base text-slate-700">
+              本期已於 {filedDateLabel} 完成申報。
+            </p>
+            {period.filing.attachments.length === 0 ? (
+              <p className="text-sm text-slate-500">尚未提供任何申報附件。</p>
+            ) : (
+              <ul className="divide-y divide-slate-100 rounded-2xl border border-slate-200">
+                {period.filing.attachments.map((a) => (
+                  <li
+                    key={a.filename}
+                    className="flex items-center justify-between gap-3 px-4 py-3"
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <FileText className="h-4 w-4 shrink-0 text-slate-400" />
+                      <p className="truncate text-base text-slate-900">
+                        {a.filename}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDownloadFilingAttachment(a.filename)}
+                    >
+                      <Download className="mr-1 h-4 w-4" /> 下載
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid h-auto w-full grid-cols-4 rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1.5">

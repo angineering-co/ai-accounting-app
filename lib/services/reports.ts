@@ -485,6 +485,7 @@ export async function generateTxtReport(
       client.tax_id,
       "txt",
       content,
+      taxPeriod ? { period: taxPeriod } : undefined,
     );
   }
 
@@ -810,6 +811,7 @@ export async function generateTetUReport(
       client.tax_id,
       "tet_u",
       content,
+      taxPeriod ? { period: taxPeriod } : undefined,
     );
   }
 

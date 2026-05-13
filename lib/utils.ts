@@ -25,6 +25,31 @@ export function formatNTD(amount: number): string {
   return ntdFormatter.format(amount);
 }
 
+const zhTwDateFormatter = new Intl.DateTimeFormat("zh-TW", {
+  timeZone: "Asia/Taipei",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+const zhTwDateTimeFormatter = new Intl.DateTimeFormat("zh-TW", {
+  timeZone: "Asia/Taipei",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+export function formatDateZhTW(date: Date): string {
+  return zhTwDateFormatter.format(date);
+}
+
+export function formatDateTimeZhTW(date: Date): string {
+  return zhTwDateTimeFormatter.format(date);
+}
+
 export function normalizeDateInput(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const trimmed = value.trim();

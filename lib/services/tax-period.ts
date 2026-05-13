@@ -10,7 +10,11 @@ import {
   taxFilingPeriodSchema,
   TaxPeriodStatus,
 } from "@/lib/domain/models";
+import { RocPeriod } from "@/lib/domain/roc-period";
+import { sendLineMessage } from "@/lib/services/line";
 import { sanitizeFilenameForStorage } from "@/lib/utils";
+import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 
 const VAT_TAX_FILINGS_BUCKET = "vat-tax-filings";
 const SIGNED_URL_TTL_SECONDS = 60;
@@ -457,6 +461,88 @@ export async function getFilingAttachmentSignedUrl(
     });
   if (error || !data?.signedUrl) return null;
   return data.signedUrl;
+}
+
+/**
+ * Idempotent: re-calling after the timestamp is set is a no-op (no re-ping).
+ */
+export async function markClientReady(
+  periodId: string,
+): Promise<TaxFilingPeriod> {
+  const supabase = await createClient();
+  const period = await getPeriodOrThrow(periodId, supabase);
+
+  if (period.status === "locked" || period.status === "filed") {
+    throw new Error("此期別已鎖定，無法通知。");
+  }
+
+  const rocPeriod = RocPeriod.fromYYYMM(period.year_month);
+  if (Date.now() < rocPeriod.nextPeriod().startDate.getTime()) {
+    throw new Error("本期尚未結束，請於期別結束後再通知事務所。");
+  }
+
+  if (period.client_ready_at) {
+    return period;
+  }
+
+  const { data, error } = await supabase
+    .from("tax_filing_periods")
+    .update({ client_ready_at: new Date().toISOString() })
+    .eq("id", periodId)
+    .select()
+    .single();
+  if (error) throw error;
+  const updated = taxFilingPeriodSchema.parse(data);
+
+  after(async () => {
+    try {
+      const result = await sendLineMessage(
+        period.client_id,
+        `客戶已通知完成上傳 ${rocPeriod.format()} 申報期的發票與折讓單，事務所可開始審核。`,
+      );
+      if (!result.success) {
+        console.warn("LINE notification failed:", result.error);
+      }
+    } catch (err) {
+      console.warn("LINE notification threw:", err);
+    }
+  });
+
+  revalidatePath(`/firm/${period.firm_id}/client/${period.client_id}`);
+  revalidatePath(`/firm/${period.firm_id}/dashboard`);
+
+  return updated;
+}
+
+export interface PeriodReadyForReview {
+  period_id: string;
+  client_id: string;
+  client_name: string;
+  year_month: string;
+  client_ready_at: Date;
+}
+
+export async function listPeriodsReadyForReview(
+  firmId: string,
+): Promise<PeriodReadyForReview[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("tax_filing_periods")
+    .select("id, client_id, year_month, client_ready_at, client:clients!inner(name)")
+    .eq("firm_id", firmId)
+    .eq("status", "open")
+    .not("client_ready_at", "is", null)
+    .order("client_ready_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    period_id: row.id,
+    client_id: row.client_id,
+    client_name: row.client.name,
+    year_month: row.year_month,
+    client_ready_at: new Date(row.client_ready_at!),
+  }));
 }
 
 /**

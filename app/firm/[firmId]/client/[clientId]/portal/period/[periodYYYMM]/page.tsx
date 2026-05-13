@@ -3,15 +3,25 @@
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import dynamic from "next/dynamic";
-import { ArrowLeft, CheckCircle2, Download, FileText, Loader2, Receipt } from "lucide-react";
+import {
+  ArrowLeft,
+  BellRing,
+  CheckCircle2,
+  Download,
+  FileText,
+  Loader2,
+  Receipt,
+} from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
+import { cn, formatDateTimeZhTW } from "@/lib/utils";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { clientSchema } from "@/lib/domain/models";
 import {
   getFilingAttachmentSignedUrl,
   getTaxPeriodByYYYMM,
+  markClientReady,
 } from "@/lib/services/tax-period";
 import { usePaginatedPeriodInvoices } from "@/hooks/use-paginated-period-invoices";
 import { usePaginatedPeriodAllowances } from "@/hooks/use-paginated-period-allowances";
@@ -93,6 +103,7 @@ export default function PortalPeriodDetailPage({
     null,
   );
   const [activeTab, setActiveTab] = useState("overview");
+  const [isMarkingReady, setIsMarkingReady] = useState(false);
   const [inInvoicePage, setInInvoicePage] = useState(0);
   const [outInvoicePage, setOutInvoicePage] = useState(0);
   const [inAllowancePage, setInAllowancePage] = useState(0);
@@ -235,6 +246,26 @@ export default function PortalPeriodDetailPage({
   const isLocked = period.status === "locked" || period.status === "filed";
   const isFiled = period.status === "filed";
 
+  const isPeriodOver = Date.now() >= rocPeriod.nextPeriod().startDate.getTime();
+  const readyAtLabel = period.client_ready_at
+    ? formatDateTimeZhTW(period.client_ready_at)
+    : null;
+
+  const handleMarkReady = async () => {
+    setIsMarkingReady(true);
+    try {
+      await markClientReady(period.id);
+      await mutatePeriod();
+      toast.success("已通知事務所開始審核");
+    } catch (err) {
+      toast.error(
+        `通知失敗: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      setIsMarkingReady(false);
+    }
+  };
+
   const handleDownloadFilingAttachment = async (filename: string) => {
     try {
       const url = await getFilingAttachmentSignedUrl(period.id, filename);
@@ -312,6 +343,70 @@ export default function PortalPeriodDetailPage({
           </div>
         </div>
       </section>
+
+      {!isLocked && (
+        <Card
+          className={cn(
+            "border-slate-200/80 bg-white shadow-sm shadow-slate-200/60",
+            readyAtLabel && "border-amber-200/80 bg-amber-50/40",
+          )}
+        >
+          <CardHeader className="border-b border-slate-100/80">
+            <CardTitle className="flex items-center gap-2 text-slate-900">
+              {readyAtLabel ? (
+                <>
+                  <BellRing className="h-5 w-5 text-amber-600" />
+                  已通知事務所
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                  完成上傳？
+                </>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 pt-6">
+            {readyAtLabel ? (
+              <p className="text-base text-slate-700">
+                已於 {readyAtLabel} 通知事務所，事務所將開始審核。
+                如果還有遺漏的發票或折讓單，仍可繼續上傳。
+              </p>
+            ) : (
+              <>
+                <p className="text-base text-slate-700">
+                  整理完所有發票與折讓單後，點下方按鈕通知事務所開始審核。
+                  如果之後還有發票，仍可繼續上傳，事務所會看到。
+                </p>
+                <div className="flex flex-col items-start gap-2">
+                  <Button
+                    onClick={handleMarkReady}
+                    disabled={!isPeriodOver || isMarkingReady}
+                    className="rounded-full bg-emerald-600 text-white hover:bg-emerald-500"
+                  >
+                    {isMarkingReady ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        通知中...
+                      </>
+                    ) : (
+                      <>
+                        <BellRing className="h-4 w-4" />
+                        通知事務所開始審核
+                      </>
+                    )}
+                  </Button>
+                  {!isPeriodOver && (
+                    <p className="text-sm text-slate-500">
+                      本期需於 {rocPeriod.formatEndDate()} 後才能通知事務所。
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {isFiled && (
         <Card className="border-indigo-200/70 bg-white shadow-sm shadow-slate-200/60">

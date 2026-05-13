@@ -6,7 +6,7 @@ import { ArrowRight } from "lucide-react";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import Link from "next/link";
 import { type TaxFilingPeriod, type TaxFilingSummary } from "@/lib/domain/models";
-import { cn, formatNTD } from "@/lib/utils";
+import { cn, formatDateZhTW, formatNTD } from "@/lib/utils";
 import { PeriodStatusBadge } from "@/components/period-status-badge";
 
 interface PeriodCardProps {
@@ -67,6 +67,10 @@ export function PeriodCard({
   const rocPeriod = RocPeriod.fromYYYMM(period.year_month);
   const filedSummary =
     period.status === "filed" ? period.filing.summary : undefined;
+  const readyAtLabel =
+    period.status === "open" && period.client_ready_at
+      ? formatDateZhTW(period.client_ready_at)
+      : null;
 
   return (
     <Card
@@ -90,6 +94,11 @@ export function PeriodCard({
         </div>
       </CardHeader>
       <CardContent>
+        {readyAtLabel ? (
+          <p className="mt-4 text-sm text-amber-700">
+            客戶於 {readyAtLabel} 已通知，可開始審核。
+          </p>
+        ) : null}
         {filedSummary ? (
           <FilingSummaryGrid summary={filedSummary} variant={variant} />
         ) : null}

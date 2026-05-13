@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Lock, Unlock } from "lucide-react";
+import { BellRing, CheckCircle2, Lock, Unlock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDateToYYYYMMDD } from "@/lib/utils";
 import { type TaxFilingPeriod, type TaxPeriodStatus } from "@/lib/domain/models";
@@ -41,21 +41,32 @@ export function PeriodStatusBadge({
     showFiledDate && period.status === "filed" && period.filing.filed_at
       ? ` · ${formatDateToYYYYMMDD(new Date(period.filing.filed_at))}`
       : "";
+  const showReadyBadge =
+    period.status === "open" && period.client_ready_at != null;
 
   return (
-    <Badge
-      variant="outline"
-      className={cn(
-        "rounded-full px-3 py-1",
-        STATUS_STYLES[period.status],
-        className,
+    <span className={cn("inline-flex items-center gap-2", className)}>
+      <Badge
+        variant="outline"
+        className={cn("rounded-full px-3 py-1", STATUS_STYLES[period.status])}
+      >
+        <span className="flex items-center gap-1">
+          {showIcon && <Icon className="h-3 w-3" />}
+          {label}
+          {filedSuffix}
+        </span>
+      </Badge>
+      {showReadyBadge && (
+        <Badge
+          variant="outline"
+          className="rounded-full border-amber-200 bg-amber-50 px-3 py-1 text-amber-700"
+        >
+          <span className="flex items-center gap-1">
+            {showIcon && <BellRing className="h-3 w-3" />}
+            待審核
+          </span>
+        </Badge>
       )}
-    >
-      <span className="flex items-center gap-1">
-        {showIcon && <Icon className="h-3 w-3" />}
-        {label}
-        {filedSuffix}
-      </span>
-    </Badge>
+    </span>
   );
 }

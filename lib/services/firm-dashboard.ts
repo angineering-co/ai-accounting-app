@@ -111,45 +111,32 @@ export async function getCurrentPeriodUploadCounts(
 
   const periodRows = periodsRes.data ?? [];
   if (periodRows.length === 0) return [];
-  const periodIds = periodRows.map((p) => p.id);
 
-  const [invoicesRes, allowancesRes] = await Promise.all([
-    supabase
-      .from("invoices")
-      .select("tax_filing_period_id")
-      .in("tax_filing_period_id", periodIds),
-    supabase
-      .from("allowances")
-      .select("tax_filing_period_id")
-      .in("tax_filing_period_id", periodIds),
-  ]);
-  if (invoicesRes.error) throw invoicesRes.error;
-  if (allowancesRes.error) throw allowancesRes.error;
-
-  const counts = new Map<string, { i: number; a: number }>();
-  for (const row of invoicesRes.data ?? []) {
-    if (!row.tax_filing_period_id) continue;
-    const entry = counts.get(row.tax_filing_period_id) ?? { i: 0, a: 0 };
-    entry.i += 1;
-    counts.set(row.tax_filing_period_id, entry);
-  }
-  for (const row of allowancesRes.data ?? []) {
-    if (!row.tax_filing_period_id) continue;
-    const entry = counts.get(row.tax_filing_period_id) ?? { i: 0, a: 0 };
-    entry.a += 1;
-    counts.set(row.tax_filing_period_id, entry);
-  }
-
-  return periodRows
-    .map<ClientPeriodUploadCounts>((row) => {
-      const c = counts.get(row.id) ?? { i: 0, a: 0 };
+  const rows = await Promise.all(
+    periodRows.map(async (row) => {
+      const [invoiceRes, allowanceRes] = await Promise.all([
+        supabase
+          .from("invoices")
+          .select("id", { count: "exact", head: true })
+          .eq("tax_filing_period_id", row.id),
+        supabase
+          .from("allowances")
+          .select("id", { count: "exact", head: true })
+          .eq("tax_filing_period_id", row.id),
+      ]);
+      if (invoiceRes.error) throw invoiceRes.error;
+      if (allowanceRes.error) throw allowanceRes.error;
       return {
         client_id: row.client_id,
         client_name: row.client.name,
         period: taxFilingPeriodSchema.parse(row),
-        invoice_count: c.i,
-        allowance_count: c.a,
+        invoice_count: invoiceRes.count ?? 0,
+        allowance_count: allowanceRes.count ?? 0,
       };
-    })
-    .sort((a, b) => a.client_name.localeCompare(b.client_name, "zh-Hant"));
+    }),
+  );
+
+  return rows.sort((a, b) =>
+    a.client_name.localeCompare(b.client_name, "zh-Hant"),
+  );
 }

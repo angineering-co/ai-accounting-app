@@ -494,6 +494,7 @@ export type Database = {
       tax_filing_periods: {
         Row: {
           client_id: string
+          client_ready_at: string | null
           created_at: string
           filing: Json
           firm_id: string
@@ -504,6 +505,7 @@ export type Database = {
         }
         Insert: {
           client_id: string
+          client_ready_at?: string | null
           created_at?: string
           filing?: Json
           firm_id: string
@@ -514,6 +516,7 @@ export type Database = {
         }
         Update: {
           client_id?: string
+          client_ready_at?: string | null
           created_at?: string
           filing?: Json
           firm_id?: string

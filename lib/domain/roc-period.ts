@@ -142,6 +142,19 @@ export class RocPeriod {
     return new Date(this.gregorianYear, this.startMonth - 1, 1);
   }
 
+  get endDate(): Date {
+    // Day 0 of (endMonth + 1) === last day of endMonth in JS month indexing.
+    return new Date(this.gregorianYear, this.endMonth, 0);
+  }
+
+  /**
+   * Human readable end-date format, e.g., "民國 113 年 2 月 28 日".
+   */
+  formatEndDate(): string {
+    const end = this.endDate;
+    return `民國 ${this.rocYear} 年 ${end.getMonth() + 1} 月 ${end.getDate()} 日`;
+  }
+
   private static adjustWeekendCutoffToMonday(cutoffDate: Date): Date {
     const dayOfWeek = cutoffDate.getDay();
     if (dayOfWeek === 6) {

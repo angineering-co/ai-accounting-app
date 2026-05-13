@@ -413,6 +413,7 @@ export const taxFilingPeriodSchema = z.object({
   year_month: z.string().length(5, "期別格式錯誤 (YYYMM)"),
   status: z.enum(TAX_PERIOD_STATUS).default('open'),
   filing: taxFilingSchema,
+  client_ready_at: z.coerce.date().nullable().default(null),
 
   created_at: z.coerce.date(),
   updated_at: z.coerce.date(),

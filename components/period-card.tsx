@@ -69,7 +69,7 @@ export function PeriodCard({
     period.status === "filed" ? period.filing.summary : undefined;
   const readyAtLabel =
     period.status === "open" && period.client_ready_at
-      ? formatDateZhTW(new Date(period.client_ready_at))
+      ? formatDateZhTW(period.client_ready_at)
       : null;
 
   return (

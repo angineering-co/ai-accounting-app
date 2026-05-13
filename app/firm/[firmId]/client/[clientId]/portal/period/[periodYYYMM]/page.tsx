@@ -246,9 +246,9 @@ export default function PortalPeriodDetailPage({
   const isLocked = period.status === "locked" || period.status === "filed";
   const isFiled = period.status === "filed";
 
-  const isPeriodOver = Date.now() > rocPeriod.endDate.getTime();
+  const isPeriodOver = Date.now() >= rocPeriod.nextPeriod().startDate.getTime();
   const readyAtLabel = period.client_ready_at
-    ? formatDateTimeZhTW(new Date(period.client_ready_at))
+    ? formatDateTimeZhTW(period.client_ready_at)
     : null;
 
   const handleMarkReady = async () => {

@@ -45,14 +45,10 @@ export function PeriodStatusBadge({
     period.status === "open" && period.client_ready_at != null;
 
   return (
-    <>
+    <span className={cn("inline-flex items-center gap-2", className)}>
       <Badge
         variant="outline"
-        className={cn(
-          "rounded-full px-3 py-1",
-          STATUS_STYLES[period.status],
-          className,
-        )}
+        className={cn("rounded-full px-3 py-1", STATUS_STYLES[period.status])}
       >
         <span className="flex items-center gap-1">
           {showIcon && <Icon className="h-3 w-3" />}
@@ -71,6 +67,6 @@ export function PeriodStatusBadge({
           </span>
         </Badge>
       )}
-    </>
+    </span>
   );
 }

@@ -477,7 +477,7 @@ export async function markClientReady(
   }
 
   const rocPeriod = RocPeriod.fromYYYMM(period.year_month);
-  if (Date.now() <= rocPeriod.endDate.getTime()) {
+  if (Date.now() < rocPeriod.nextPeriod().startDate.getTime()) {
     throw new Error("本期尚未結束，請於期別結束後再通知事務所。");
   }
 

@@ -173,12 +173,44 @@ export interface ClassifyDocumentArgs {
 export interface DocumentClassification {
   docType: 'invoice' | 'allowance' | 'other';
   inOrOut: 'in' | 'out' | null;
-  isVoided: boolean;
+  voided: boolean;                                // 與 §4.2 JSONB 欄位同名, 落庫零映射
   confidence: 'low' | 'medium' | 'high';
 }
 
 export async function classifyDocument(args: ClassifyDocumentArgs): Promise<DocumentClassification>;
 ```
+
+> `model` 與 `classified_at` 不在本函式回傳值內 — 它們是落庫邊界 (Server
+> Action 包成 `classifier_hint` 物件時) 才填入的 metadata, 不該與模型實際
+> 產出混淆。
+
+### 5.2a 檔案大小: 20MB inline_data 上限的處理
+
+應用層 (`components/document-upload-section.tsx:90`、`portal-upload-fab.tsx:63`、
+`invoice/invoice-upload-dialog.tsx:114`) 允許單檔最大 **50MB**, 但 Gemini
+`generateContent` 的 `inline_data` 上限是 **20MB**, 且 base64 編碼會放大
+約 33%, 所以原始檔超過 ~15MB 即會被拒絕。
+
+擷取流程 (extraction-worker) 也吃同樣的上限, 但分類器更挑剔 —— 真實 50MB
+PDF 雖罕見, 仍需保護。處理策略:
+
+1. **影像 (PNG/JPEG/WebP/GIF)**: 若 `fileData.byteLength > 15 * 1024 * 1024`,
+   先用 server-side image processing 縮放至長邊 ≤ 2048px、品質 0.85 JPEG。
+   `sharp` 已是 Next.js 預設可用相依。分類器只看版面/印章/稅號, 解析度
+   2048px 足夠。
+2. **PDF**: 若同樣超過 ~15MB, 用 `pdf-lib` 或 `pdfjs-dist` 只擷取第 1 頁
+   後另存; 統一發票/折讓單實務上幾乎都是單頁文件, 第 1 頁就有所需訊號
+   (賣方/買方稅號、作廢章、文件抬頭)。
+3. **超過 ~15MB 且既非影像亦非可處理 PDF**: 直接回傳 `classifier_hint =
+   { error: 'file_too_large', ... }`, 走 §3 故障處理的「靜默通過」路徑。
+   使用者選擇被信任, 不阻擋上傳。
+
+此降採樣只用於**分類器路徑**; 擷取 worker 仍讀原檔 (`extractInvoiceCore`
+不變)。分類器與擷取兩段對檔案有不同 fidelity 需求, 不需共用同一份預處
+理結果。
+
+成本/延遲補充: 縮放/拆頁本身 < 200ms (server-side), 反而能讓 Gemini 呼叫
+更快, 因為 payload 更小。
 
 ### 5.2 Prompt 設計原則
 

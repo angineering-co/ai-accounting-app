@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { taxFilingPeriodSchema, type TaxFilingPeriod } from "@/lib/domain/models";
 
 const STUCK_PROCESSING_THRESHOLD_MS = 10 * 60 * 1000;
 
@@ -90,6 +91,7 @@ export async function listStuckOrFailedExtractions(
 export interface ClientPeriodUploadCounts {
   client_id: string;
   client_name: string;
+  period: TaxFilingPeriod;
   invoice_count: number;
   allowance_count: number;
 }
@@ -100,49 +102,54 @@ export async function getCurrentPeriodUploadCounts(
 ): Promise<ClientPeriodUploadCounts[]> {
   const supabase = await createClient();
 
-  const [clientsRes, invoicesRes, allowancesRes] = await Promise.all([
-    supabase
-      .from("clients")
-      .select("id, name")
-      .eq("firm_id", firmId)
-      .order("name", { ascending: true }),
+  const periodsRes = await supabase
+    .from("tax_filing_periods")
+    .select("*, client:clients!inner(name)")
+    .eq("firm_id", firmId)
+    .eq("year_month", currentYYYMM);
+  if (periodsRes.error) throw periodsRes.error;
+
+  const periodRows = periodsRes.data ?? [];
+  if (periodRows.length === 0) return [];
+  const periodIds = periodRows.map((p) => p.id);
+
+  const [invoicesRes, allowancesRes] = await Promise.all([
     supabase
       .from("invoices")
-      .select("client_id, period:tax_filing_periods!inner(year_month)")
-      .eq("firm_id", firmId)
-      .eq("tax_filing_periods.year_month", currentYYYMM),
+      .select("tax_filing_period_id")
+      .in("tax_filing_period_id", periodIds),
     supabase
       .from("allowances")
-      .select("client_id, period:tax_filing_periods!inner(year_month)")
-      .eq("firm_id", firmId)
-      .eq("tax_filing_periods.year_month", currentYYYMM),
+      .select("tax_filing_period_id")
+      .in("tax_filing_period_id", periodIds),
   ]);
-
-  if (clientsRes.error) throw clientsRes.error;
   if (invoicesRes.error) throw invoicesRes.error;
   if (allowancesRes.error) throw allowancesRes.error;
 
-  const counts = new Map<string, ClientPeriodUploadCounts>();
-  for (const c of clientsRes.data ?? []) {
-    counts.set(c.id, {
-      client_id: c.id,
-      client_name: c.name,
-      invoice_count: 0,
-      allowance_count: 0,
-    });
-  }
-
+  const counts = new Map<string, { i: number; a: number }>();
   for (const row of invoicesRes.data ?? []) {
-    if (!row.client_id) continue;
-    const entry = counts.get(row.client_id);
-    if (entry) entry.invoice_count += 1;
+    if (!row.tax_filing_period_id) continue;
+    const entry = counts.get(row.tax_filing_period_id) ?? { i: 0, a: 0 };
+    entry.i += 1;
+    counts.set(row.tax_filing_period_id, entry);
   }
-
   for (const row of allowancesRes.data ?? []) {
-    if (!row.client_id) continue;
-    const entry = counts.get(row.client_id);
-    if (entry) entry.allowance_count += 1;
+    if (!row.tax_filing_period_id) continue;
+    const entry = counts.get(row.tax_filing_period_id) ?? { i: 0, a: 0 };
+    entry.a += 1;
+    counts.set(row.tax_filing_period_id, entry);
   }
 
-  return Array.from(counts.values());
+  return periodRows
+    .map<ClientPeriodUploadCounts>((row) => {
+      const c = counts.get(row.id) ?? { i: 0, a: 0 };
+      return {
+        client_id: row.client_id,
+        client_name: row.client.name,
+        period: taxFilingPeriodSchema.parse(row),
+        invoice_count: c.i,
+        allowance_count: c.a,
+      };
+    })
+    .sort((a, b) => a.client_name.localeCompare(b.client_name, "zh-Hant"));
 }

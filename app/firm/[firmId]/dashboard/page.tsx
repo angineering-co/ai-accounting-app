@@ -9,6 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PeriodStatusBadge } from "@/components/period-status-badge";
 import { listPeriodsReadyForReview } from "@/lib/services/tax-period";
 import {
   getCurrentPeriodUploadCounts,
@@ -48,7 +49,7 @@ export default async function DashboardPage({
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight">記帳事務所首頁</h1>
+        <h1 className="text-3xl font-bold tracking-tight">總覽</h1>
         <p className={countdownClass}>
           本期：{currentPeriod.format()} · 截止日 {formatDateToYYYYMMDD(cutoff)} · 距今 {daysRemaining} 天
         </p>
@@ -152,41 +153,40 @@ export default async function DashboardPage({
         </CardHeader>
         <CardContent>
           {uploadCounts.length === 0 ? (
-            <p className="text-base text-muted-foreground">尚無客戶。</p>
+            <p className="text-base text-muted-foreground">
+              尚無客戶開立本期。
+            </p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>客戶</TableHead>
+                  <TableHead>狀態</TableHead>
                   <TableHead className="text-right">發票</TableHead>
                   <TableHead className="text-right">折讓</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {uploadCounts.map((row) => {
-                  const isEmpty =
-                    row.invoice_count === 0 && row.allowance_count === 0;
-                  return (
-                    <TableRow
-                      key={row.client_id}
-                      className={cn(isEmpty && "text-muted-foreground")}
-                    >
-                      <TableCell>
-                        <Link
-                          href={`/firm/${firmId}/client/${row.client_id}/period/${currentPeriod.toString()}`}
-                        >
-                          {row.client_name}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {row.invoice_count}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {row.allowance_count}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                {uploadCounts.map((row) => (
+                  <TableRow key={row.client_id}>
+                    <TableCell>
+                      <Link
+                        href={`/firm/${firmId}/client/${row.client_id}/period/${currentPeriod.toString()}`}
+                      >
+                        {row.client_name}
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <PeriodStatusBadge period={row.period} showIcon={false} />
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {row.invoice_count}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {row.allowance_count}
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           )}

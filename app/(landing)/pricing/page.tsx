@@ -22,6 +22,21 @@ export const metadata: Metadata = {
     url: "https://snapbooks.ai/pricing",
     siteName: "SnapBooks.ai",
     type: "website",
+    images: [
+      {
+        url: "https://snapbooks.ai/opengraph-image.png",
+        width: 1200,
+        height: 630,
+        alt: "SnapBooks.ai 速博 - 服務價格",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "服務價格｜SnapBooks.ai 速博 - 記帳報稅 NT$1,260/月起",
+    description:
+      "SnapBooks.ai 記帳報稅每月 NT$1,260 起，設立登記 NT$6,500 起。透明定價，無隱藏費用。",
+    images: ["https://snapbooks.ai/opengraph-image.png"],
   },
 };
 

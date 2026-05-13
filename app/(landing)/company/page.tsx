@@ -1,4 +1,20 @@
+import type { Metadata } from "next";
 import { CheckCircle2 } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: "關於我們｜速博 SnapBooks.ai - AI 記帳事務所創辦團隊",
+  description:
+    "認識速博智慧有限公司：結合 AI 自動化技術與 10 年+ 會計實務經驗的 AI 記帳事務所。創辦人 Joe（四大會計師事務所背景）與 Ang（Google/Square 技術主管）共同打造。",
+  alternates: { canonical: "https://snapbooks.ai/company" },
+  openGraph: {
+    title: "關於我們｜速博 SnapBooks.ai - AI 記帳事務所創辦團隊",
+    description:
+      "認識速博智慧有限公司：結合 AI 自動化技術與 10 年+ 會計實務經驗的 AI 記帳事務所創辦團隊。",
+    url: "https://snapbooks.ai/company",
+    siteName: "SnapBooks.ai",
+    type: "website",
+  },
+};
 
 export default function CompanyPage() {
   return (

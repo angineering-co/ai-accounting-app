@@ -8,6 +8,29 @@ export const metadata: Metadata = {
   description:
     "免費線上行號與公司稅負比較計算機，輸入營業額與淨利率，即時試算兩種組織型態的綜合所得稅與營所稅差異。",
   alternates: { canonical: "https://snapbooks.ai/tools/tax-calculator" },
+  openGraph: {
+    title: "創業節稅試算｜速博 SnapBooks.ai 小工具",
+    description:
+      "免費線上行號與公司稅負比較計算機，輸入營業額與淨利率，即時試算兩種組織型態的綜合所得稅與營所稅差異。",
+    url: "https://snapbooks.ai/tools/tax-calculator",
+    siteName: "SnapBooks.ai",
+    type: "website",
+    images: [
+      {
+        url: "https://snapbooks.ai/opengraph-image.png",
+        width: 1200,
+        height: 630,
+        alt: "創業節稅試算｜速博 SnapBooks.ai",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "創業節稅試算｜速博 SnapBooks.ai 小工具",
+    description:
+      "免費線上行號與公司稅負比較計算機，輸入營業額與淨利率，即時試算兩種組織型態的綜合所得稅與營所稅差異。",
+    images: ["https://snapbooks.ai/opengraph-image.png"],
+  },
 };
 
 export default function TaxCalculatorPage() {

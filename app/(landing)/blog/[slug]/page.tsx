@@ -46,8 +46,44 @@ export default async function BlogPostPage({ params }: Props) {
 
   const { default: Content } = await import(`@/content/blog/${slug}.mdx`);
 
+  const canonicalUrl = `https://snapbooks.ai/blog/${post.slug}`;
+  const imageUrl = post.coverImage
+    ? `https://snapbooks.ai${post.coverImage}`
+    : "https://snapbooks.ai/opengraph-image.png";
+  const articleSchema = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: post.title,
+    description: post.description,
+    image: imageUrl,
+    datePublished: post.date,
+    dateModified: post.date,
+    author: {
+      "@type": "Organization",
+      name: post.author,
+      url: "https://snapbooks.ai",
+    },
+    publisher: {
+      "@type": "Organization",
+      name: "SnapBooks.ai",
+      logo: {
+        "@type": "ImageObject",
+        url: "https://snapbooks.ai/snapbooks.svg",
+      },
+    },
+    mainEntityOfPage: {
+      "@type": "WebPage",
+      "@id": canonicalUrl,
+    },
+    keywords: post.tags.join(", "),
+  };
+
   return (
     <main className="flex-1">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(articleSchema) }}
+      />
       {/* Post header */}
       <header className="mx-auto max-w-3xl px-5 pt-10 md:pt-14">
         <Link

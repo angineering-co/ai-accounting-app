@@ -15,6 +15,21 @@ export const metadata: Metadata = {
     url: "https://snapbooks.ai/apply",
     siteName: "SnapBooks.ai",
     type: "website",
+    images: [
+      {
+        url: "https://snapbooks.ai/opengraph-image.png",
+        width: 1200,
+        height: 630,
+        alt: "SnapBooks.ai 速博 - 線上申請",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "線上申請｜公司設立與記帳服務 - 速博 SnapBooks.ai",
+    description:
+      "線上申請公司設立登記或委託記帳報稅服務。填寫簡單表單，加入 LINE 好友即刻開始。",
+    images: ["https://snapbooks.ai/opengraph-image.png"],
   },
 };
 

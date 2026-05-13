@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { isValidElement, type ReactNode } from "react";
 import Link from "next/link";
 import { LINE_URL } from "@/lib/pricing";
 
@@ -19,9 +20,42 @@ export const metadata: Metadata = {
   alternates: { canonical: "https://snapbooks.ai/faq" },
 };
 
+function reactNodeToText(node: ReactNode): string {
+  if (node == null || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(reactNodeToText).join("");
+  if (isValidElement(node)) {
+    const props = node.props as { children?: ReactNode };
+    return reactNodeToText(props.children);
+  }
+  return "";
+}
+
+const faqSchema = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: faqCategories.flatMap((category) =>
+    category.items.map((item) => ({
+      "@type": "Question",
+      name: item.question,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text:
+          typeof item.answer === "string"
+            ? item.answer
+            : reactNodeToText(item.answer),
+      },
+    }))
+  ),
+};
+
 export default function FaqPage() {
   return (
     <main className="flex-1 bg-slate-50 px-5 py-24 md:py-32">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
+      />
       {/* Hero */}
       <div className="mx-auto max-w-4xl text-center mb-12 md:mb-16">
         <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 md:text-5xl">

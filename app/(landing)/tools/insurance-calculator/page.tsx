@@ -19,6 +19,29 @@ export const metadata: Metadata = {
     "職災保險",
   ],
   alternates: { canonical: "https://snapbooks.ai/tools/insurance-calculator" },
+  openGraph: {
+    title: "勞健保計算機 - 勞保、健保、勞退雇主負擔試算｜速博 SnapBooks.ai",
+    description:
+      "免費線上勞健保計算機，輸入員工薪資即時試算勞保、健保、勞退及職災保險的個人與雇主負擔金額，支援 114/115 年度級距。",
+    url: "https://snapbooks.ai/tools/insurance-calculator",
+    siteName: "SnapBooks.ai",
+    type: "website",
+    images: [
+      {
+        url: "https://snapbooks.ai/opengraph-image.png",
+        width: 1200,
+        height: 630,
+        alt: "勞健保計算機｜速博 SnapBooks.ai",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "勞健保計算機 - 勞保、健保、勞退雇主負擔試算｜速博 SnapBooks.ai",
+    description:
+      "免費線上勞健保計算機，輸入員工薪資即時試算雇主負擔金額。",
+    images: ["https://snapbooks.ai/opengraph-image.png"],
+  },
 };
 
 export default function InsuranceCalculatorPage() {

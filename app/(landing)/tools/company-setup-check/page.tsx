@@ -7,6 +7,29 @@ export const metadata: Metadata = {
   description:
     "免費線上公司設立健檢工具，1 分鐘回答簡單問題，自動產生專屬企業設立藍圖與稅務建議。",
   alternates: { canonical: "https://snapbooks.ai/tools/company-setup-check" },
+  openGraph: {
+    title: "公司設立健檢｜速博 SnapBooks.ai 小工具",
+    description:
+      "免費線上公司設立健檢工具，1 分鐘回答簡單問題，自動產生專屬企業設立藍圖與稅務建議。",
+    url: "https://snapbooks.ai/tools/company-setup-check",
+    siteName: "SnapBooks.ai",
+    type: "website",
+    images: [
+      {
+        url: "https://snapbooks.ai/opengraph-image.png",
+        width: 1200,
+        height: 630,
+        alt: "公司設立健檢｜速博 SnapBooks.ai",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "公司設立健檢｜速博 SnapBooks.ai 小工具",
+    description:
+      "免費線上公司設立健檢工具，1 分鐘回答簡單問題，自動產生專屬企業設立藍圖與稅務建議。",
+    images: ["https://snapbooks.ai/opengraph-image.png"],
+  },
 };
 
 export default function CompanySetupCheckPage() {

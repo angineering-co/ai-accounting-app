@@ -20,6 +20,29 @@ export const metadata: Metadata = {
     "扣繳試算",
   ],
   alternates: { canonical: "https://snapbooks.ai/tools/withholding-tax-calculator" },
+  openGraph: {
+    title: "扣繳計算機 - 勞報單、勞務報酬、租金扣繳試算｜速博 SnapBooks.ai",
+    description:
+      "免費線上扣繳計算機，輸入金額即時試算代扣稅額與二代健保補充保費。支援勞務報酬、執行業務所得與租金扣繳，可下載勞報單(勞務報酬單) PDF。",
+    url: "https://snapbooks.ai/tools/withholding-tax-calculator",
+    siteName: "SnapBooks.ai",
+    type: "website",
+    images: [
+      {
+        url: "https://snapbooks.ai/opengraph-image.png",
+        width: 1200,
+        height: 630,
+        alt: "扣繳計算機｜速博 SnapBooks.ai",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "扣繳計算機 - 勞報單、勞務報酬、租金扣繳試算｜速博 SnapBooks.ai",
+    description:
+      "免費線上扣繳計算機，輸入金額即時試算代扣稅額與二代健保補充保費。",
+    images: ["https://snapbooks.ai/opengraph-image.png"],
+  },
 };
 
 export default function WithholdingTaxCalculatorPage() {

@@ -7,6 +7,29 @@ export const metadata: Metadata = {
   description:
     "免費線上手開統一發票輔助工具，即時預覽發票格式，支援二聯式與三聯式統一發票。",
   alternates: { canonical: "https://snapbooks.ai/tools/invoice-helper" },
+  openGraph: {
+    title: "手開發票小幫手｜速博 SnapBooks.ai 小工具",
+    description:
+      "免費線上手開統一發票輔助工具，即時預覽發票格式，支援二聯式與三聯式統一發票。",
+    url: "https://snapbooks.ai/tools/invoice-helper",
+    siteName: "SnapBooks.ai",
+    type: "website",
+    images: [
+      {
+        url: "https://snapbooks.ai/opengraph-image.png",
+        width: 1200,
+        height: 630,
+        alt: "手開發票小幫手｜速博 SnapBooks.ai",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "手開發票小幫手｜速博 SnapBooks.ai 小工具",
+    description:
+      "免費線上手開統一發票輔助工具，即時預覽發票格式，支援二聯式與三聯式統一發票。",
+    images: ["https://snapbooks.ai/opengraph-image.png"],
+  },
 };
 
 export default function InvoiceHelperPage() {

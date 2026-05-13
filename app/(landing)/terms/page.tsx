@@ -1,4 +1,13 @@
+import type { Metadata } from "next";
 import { Info } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: "服務條款｜速博 SnapBooks.ai",
+  description:
+    "速博 SnapBooks.ai 服務條款：服務範圍、費用與付款方式、使用者義務、服務終止、免責聲明與條款修改規定。",
+  alternates: { canonical: "https://snapbooks.ai/terms" },
+  robots: { index: true, follow: true },
+};
 
 export default function TermsPage() {
   return (

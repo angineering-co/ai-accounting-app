@@ -21,6 +21,29 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "https://snapbooks.ai/tools/incorporation-flow",
   },
+  openGraph: {
+    title: "開公司流程圖 - 公司與行號設立步驟全攻略｜速博 SnapBooks.ai",
+    description:
+      "互動式公司設立流程圖，完整呈現公司與行號的設立步驟、所需時間與常見問題。從名稱預查到稅籍登記，一步步帶你了解開公司的完整流程。",
+    url: "https://snapbooks.ai/tools/incorporation-flow",
+    siteName: "SnapBooks.ai",
+    type: "website",
+    images: [
+      {
+        url: "https://snapbooks.ai/opengraph-image.png",
+        width: 1200,
+        height: 630,
+        alt: "開公司流程圖｜速博 SnapBooks.ai",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "開公司流程圖 - 公司與行號設立步驟全攻略｜速博 SnapBooks.ai",
+    description:
+      "互動式公司設立流程圖，完整呈現公司與行號的設立步驟、所需時間與常見問題。",
+    images: ["https://snapbooks.ai/opengraph-image.png"],
+  },
 };
 
 export default function IncorporationFlowPage() {

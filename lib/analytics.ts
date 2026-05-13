@@ -36,12 +36,28 @@ const APPLY_CONVERSION_VALUE_TWD: Record<ApplyFormPath, number> = {
   bookkeeping: 15120,
 };
 
+// Full send_to string for the Google Ads "apply submit" conversion action,
+// in the form "AW-XXXXXXXXXX/AbCdEfGhIj1234". Sourced from the conversion
+// action page in Google Ads. When unset, the Ads conversion is skipped and
+// only the GA4 event fires.
+const GOOGLE_ADS_APPLY_SEND_TO =
+  process.env.NEXT_PUBLIC_GOOGLE_ADS_APPLY_SEND_TO;
+
 export function trackApplySubmit(path: ApplyFormPath) {
+  const value = APPLY_CONVERSION_VALUE_TWD[path];
   sendGAEvent("event", "apply_submit", {
     apply_path: path,
-    value: APPLY_CONVERSION_VALUE_TWD[path],
+    value,
     currency: "TWD",
   });
+  if (GOOGLE_ADS_APPLY_SEND_TO) {
+    sendGAEvent("event", "conversion", {
+      send_to: GOOGLE_ADS_APPLY_SEND_TO,
+      value,
+      currency: "TWD",
+      transaction_id: `apply_${Date.now()}_${path}`,
+    });
+  }
 }
 
 export function trackCouponGeneration(location: string, code: string) {

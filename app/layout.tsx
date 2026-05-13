@@ -5,6 +5,7 @@ import { GoogleAnalytics } from "@next/third-parties/google";
 import "./globals.css";
 import { Toaster } from "sonner";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
+import { GoogleAds } from "@/components/google-ads";
 
 const defaultUrl =
   process.env.NODE_ENV === "production"
@@ -14,7 +15,6 @@ const defaultUrl =
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
   viewportFit: "cover",
 };
 
@@ -47,7 +47,7 @@ const geistSans = Geist({
 const notoSerifTC = Noto_Serif_TC({
   variable: "--font-noto-serif-tc",
   display: "swap",
-  subsets: ["latin"],
+  preload: false,
   weight: ["400", "700", "900"],
 });
 
@@ -71,6 +71,9 @@ export default function RootLayout({
         </ThemeProvider>
         {process.env.NEXT_PUBLIC_GA_ID && (
           <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GA_ID} />
+        )}
+        {process.env.NEXT_PUBLIC_GOOGLE_ADS_ID && (
+          <GoogleAds adsId={process.env.NEXT_PUBLIC_GOOGLE_ADS_ID} />
         )}
       </body>
     </html>

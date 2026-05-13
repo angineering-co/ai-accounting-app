@@ -1,3 +1,13 @@
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "隱私權政策｜速博 SnapBooks.ai",
+  description:
+    "速博 SnapBooks.ai 隱私權政策：資料蒐集目的與類別、利用方式、安全保護、與第三人共用政策。",
+  alternates: { canonical: "https://snapbooks.ai/privacy" },
+  robots: { index: true, follow: true },
+};
+
 export default function PrivacyPage() {
   return (
     <div className="min-h-screen bg-slate-50 selection:bg-emerald-100 selection:text-emerald-900 font-sans text-slate-900 px-5 py-24 md:py-32">

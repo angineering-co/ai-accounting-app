@@ -103,7 +103,7 @@
 | `client_id` | UUID NOT NULL | FK → `clients` ON DELETE CASCADE |
 | `doc_date` | DATE NOT NULL | 文件日期（發票/收據/保單上的日期） |
 | `type` | TEXT NOT NULL | `VAT`（營業稅相關）/ `NON_VAT`（非營業稅相關） |
-| `doc_type` | TEXT NOT NULL | `invoice` / `allowance` / `receipt` / `payroll` / `insurance` / `manual`（無實體憑證的手動建單） |
+| `doc_type` | TEXT NOT NULL | `invoice` / `allowance` / `other`（非發票/折讓的文件，v1 不入 TET_U、不參與 IS/BS） |
 | `file_url` | TEXT NULL | 來源檔案路徑（Supabase Storage） |
 | `ocr_status` | TEXT NULL | `pending` / `done` / `failed`；非掃描類為 NULL |
 | `amount` | BIGINT NULL | 共通金額（便於列表查詢；正負號規則待 §10 Q11 決議） |
@@ -111,6 +111,20 @@
 | `status` | TEXT NOT NULL | `active` / `duplicate` / `void` / `deleted`，預設 `active` |
 | `created_by` | UUID NOT NULL | FK → `profiles` |
 | `created_at` / `updated_at` | TIMESTAMPTZ | `updated_at` 隱式記錄「最後狀態變動時間」 |
+
+> **為何只有三值 `doc_type`**：
+> - **v1 真正會被自動分流的 doc_type 只有三類**：VAT 模組的 `invoice` / `allowance`（各有對應子表）、非 VAT 的 `other`（documents-only，無子表）
+> - 原設計草案曾列 `receipt` / `payroll` / `insurance` 作為 v2+ 子表的 forward-looking 桶，**但在 v1 行為上與 `'other'` 完全相同**（不跑 OCR、不入 TET_U、不自動生分錄）；過早區分只是占用 enum 空間
+> - 原 `manual`（無實體憑證之系統/手動分錄）場景由 `journal_entries.document_id = NULL` 表達（§3.3 已明文支持），不需要 placeholder document row
+> - 分類器（`UPLOAD_CLASSIFIER_PLAN.md`）的 verdict 本就只輸出 `invoice / allowance / other`，schema 與分類器對齊
+>
+> **v2+ 擴展策略**：當引入具體業務子表（如 `receipts` 收據子表）時：
+> 1. 新增該 doc_type 值到 enum（如 `'receipt'`）
+> 2. 建對應子表 + `document_id UNIQUE NOT NULL FK`
+> 3. 既有 `doc_type='other'` row 由人工或啟發式 migration 重 tag 到具體 doc_type（視業務需求決定是否需要）
+> 4. 新文件依分流邏輯直接落到正確 doc_type
+>
+> 因此 `'other'` **不是**「永遠的孤兒桶」，而是「v1 容納未細分文件的 staging area」，v2+ 自然演化。
 
 > **無 `voided_at/by`、`marked_duplicate_at/by`、`deleted_at/by`、`void_reason`**：v1 刻意不加這些 audit metadata 欄位。理由：
 > - 80%+ 的 row 為 `active`，這些欄位常駐 NULL，污染 schema

@@ -2,7 +2,9 @@
 
 > **狀態追蹤**
 > - ✅ Phase 1 完成（domain types + fake generator + dev store；72/72 測試綠）
-> - ⏳ Phase 2 待啟動（傳票 UI）
+> - ✅ Phase 2 完成（傳票 UI 全套：列表 / 詳情 / 編輯 dialog / 審計歷史 / 批次過帳 / 沖銷 dialog / sidebar 入口 / 期別頁雙處連結）
+> - ⏳ Phase 3 待啟動（損益表 / 資產負債表 UI）
+> - 📋 Phase 5.5（新增）：upload pipeline refactor 為 documents-first（為 Upload Classifier 計畫鋪路）
 >
 > **配套文件**：[`VOUCHER_JOURNAL_ENTRY_PLAN.md`](./VOUCHER_JOURNAL_ENTRY_PLAN.md) — 已收斂的設計提案（Decisions #1–#12）。本文件中所有 §x.y 章節編號皆指向設計提案。
 
@@ -17,9 +19,11 @@
 4. **Invoice 改動處同步處理 allowance**：Allowance 在 CTI / generation / posted edit 連動 / review dialog 等所有面向都要鏡像 invoice 的改法。
 5. **fiscal_year_closes guard 隨各 RPC 一起加**，最終的「關帳動作 + UI」才是獨立階段。
 
-**關於 /documents 頁面**：v1 不做。`documents` 表在 v1 純為 CTI 父表（後端概念，依 Q13 建議），唯二的 `doc_type` 是 `invoice` / `allowance`，期別頁（`/period/[periodYYYMM]`）已分別呈現。當 v2+ 加入非 VAT 子表（`receipt` / `payroll` / `insurance` / `manual`）時，一個「其他憑證」頁面才會有業務價值；schema 從 day 1 就能容納，無遷移負擔。
+**關於 /documents 頁面**：本 Voucher 計畫範圍內 v1 不做。`documents` 表在本計畫的 v1 純為 CTI 父表（後端概念，依 Q13 建議），唯二的 `doc_type` 是 `invoice` / `allowance`，期別頁（`/period/[periodYYYMM]`）已分別呈現。當 Upload Classifier 計畫進場後（見 `UPLOAD_CLASSIFIER_PLAN.md`），`doc_type='other'` 才會真正產生 documents-only 的 row,屆時「最簡 /documents 列表」（只列 `doc_type='other'` 的待分類文件 + 重分類動作）會納入 **Classifier 計畫**範圍，不在本 Voucher 計畫內。
 
-**v1 範圍外**：固定資產 / 攤提（§3.7、§3.8）、發票同期作廢 void（§5.6）、補申報、`extracted_data.account` 雙表示法收斂、account_period_balances rollup、/documents 獨立頁面。
+**Documents-first upload pipeline（Phase 5.5 起）**：原 phased plan 預設「`createInvoice` / `createAllowance` 連動建 documents」（subtable-first），是為了減少對既有 upload 入口的改動。但此方向與 Upload Classifier 的天然語意（判決寫 documents、`other` 結果停留 documents、子表是衍生）擰著。Phase 5.5 把 upload pipeline 倒置為 **documents-first**：所有上傳第一時間建 documents row，再依使用者選擇（或日後 classifier 判決）路由到 invoice/allowance 子表。Phase 5.5 內 UI **不變**（使用者仍預先選 in/out），只是內部 service 拆解 + OCR 觸發點改繫到 documents insert；`doc_type='other'` 的路徑要等 classifier 進場才會啟用（本計畫 v1 範圍內不會出現 `other`）。
+
+**v1 範圍外**：固定資產 / 攤提（§3.7、§3.8）、發票同期作廢 void（§5.6）、補申報、`extracted_data.account` 雙表示法收斂、account_period_balances rollup、/documents 獨立頁面（最簡列表由 Classifier 計畫帶入）。
 
 ---
 
@@ -41,7 +45,9 @@
 
 ---
 
-## Phase 2 — 傳票 UI 全套（讀 fake generator、互動更新 in-memory store）
+## ✅ Phase 2 — 傳票 UI 全套（讀 fake generator、互動更新 in-memory store）
+
+**狀態**：完成。
 
 **目標**：把使用者可看到 / 互動的所有傳票 UI 一次畫完，與使用者敲定 UX。**所有讀寫都走 phase 1 的 in-memory store**。
 
@@ -154,9 +160,80 @@
 
 ---
 
+## Phase 5.5 — Upload pipeline refactor 為 documents-first
+
+**目標**：把所有上傳入口改為「**先建 documents row，再依使用者選擇路由到 invoice / allowance 子表**」。UI **不變**（使用者仍預先選 in/out）；改的是內部 service 拆解 + OCR 觸發點。為日後 Upload Classifier 進場（`doc_type='other'` 才能停在 documents、判決天然寫 documents）鋪路，但本階段 classifier 尚未進場，`doc_type` 仍只會是 `invoice` / `allowance`。
+
+**設計重點**：
+- 原既有路徑（subtable-first）：`createInvoice(args)` → INSERT invoices → 觸發 OCR；`createAllowance(args)` → INSERT allowances → 觸發 OCR。documents 在 Phase 6 backfill 補上、之後由 Phase 7 RPC 維護 upsert。
+- 新路徑（documents-first）：`createDocument(args)` → INSERT documents → 觸發 OCR；之後 `linkInvoiceToDocument(documentId, ...)` / `linkAllowanceToDocument(documentId, ...)` 建立對應子表 row。
+- OCR 觸發點隨之改變：從「invoice / allowance row insert 後觸發擷取」改為「**document row insert 且 `doc_type ∈ {invoice, allowance}` 時**觸發擷取」。本階段 `doc_type` 永遠是這兩者之一,觸發行為等同既有。
+- 既有 invoice / allowance 子表結構不變（仍透過 `document_id` 反向 FK 連到 documents）；改的只是「先後順序」。
+
+**Storage bucket 重新命名（隨本階段一起做）**：
+
+現況：所有 invoice / allowance 檔案都存於 Supabase Storage 的 **`invoices`** bucket（`lib/services/invoice.ts:233`、`lib/services/allowance.ts:166` 等多處硬編碼）。這個名稱已是歷史誤命名（實際同時存兩種 doc_type），documents-first 之後再加 `'other'`（Classifier 階段）會讓誤命名更尷尬。Phase 5.5 把這個技術債一次清掉。
+
+**改動**：
+1. 建立新 bucket `documents`（migration 或 dashboard 操作）；RLS / policy 與既有 `invoices` bucket 一致
+2. 把既有 `invoices` bucket 內所有檔案搬到 `documents` bucket（保留原路徑 `{firmId}/{periodYYYMM}/{clientId}/{uuid}.{ext}`）。建議用 `supabase storage cp` 或 SQL `storage.objects` table 批次 UPDATE bucket_id（後者較快、需小心 RLS）
+3. 全面替換程式碼中的 bucket 名稱：
+   - `lib/services/invoice.ts`：lines 233（remove）、~379-381（download）
+   - `lib/services/allowance.ts`：lines 166（download）、~296+（remove）
+   - `lib/services/document.ts`（Phase 5.5 新增的 `createDocument`）：上傳寫入點
+   - 任何 `<components>` / `<hooks>` 中對 `supabase.storage.from('invoices')` 的呼叫
+   - `useSupabaseUpload` hook（如有寫死 bucket 名稱）
+4. 舊 bucket `invoices` 於確認新流程穩定後刪除（建議保留 1-2 個 release cycle 作 rollback 緩衝）
+
+**為何這個一定要做**：
+- 概念一致：父表叫 documents、bucket 叫 invoices,Classifier 進來後又會塞 `doc_type='other'` 的文件進「invoices」bucket,讀程式碼會困惑
+- 一次過：搬一次 bucket 比每次新增 doc_type 都解釋為什麼非 invoice 的文件存在 invoices bucket 簡單得多
+- Classifier 計畫的 `doc_type='other'` 才能語意一致地存在 `documents` bucket
+
+**驗證 bucket 搬遷**：
+- 寫一個 integration test：列出 `invoices` bucket 與 `documents` bucket 的物件清單,assert `documents` bucket 包含所有 `invoices` bucket 的物件且路徑一致
+- 手動：找一筆既有的 invoice + 一筆 allowance,download → 確認讀的是新 bucket、檔案內容不變
+- Worker 端：extraction-worker 對新 bucket 路徑能讀檔
+- 既有期別頁的「下載原檔」按鈕仍可運作（更新所有 signed URL 來源）
+
+**改動**：
+- `lib/services/document.ts`：新增 `createDocument(args)` server action — auth + 授權 → storage upload（沿用 `useSupabaseUpload` 之上傳結果路徑）→ INSERT documents（`doc_type` 從 args 帶入，預設來自使用者選擇；`status='active'`、`ocr_status='pending'`）→ 觸發 OCR worker（pgmq enqueue，沿用既有 extraction-worker pattern）→ 回傳 `documentId`
+- `lib/services/invoice.ts::createInvoice`：拆成兩個函式：
+  - `createInvoice(args)`：對外向後相容的入口，內部呼叫 `createDocument` + `linkInvoiceToDocument`（一個 transaction 內完成）。既有所有呼叫端（`document-upload-section.tsx`、`invoice-upload-dialog.tsx`、portal upload parent）**不需改動**
+  - `linkInvoiceToDocument(documentId, vatArgs)`：純表操作 — INSERT invoices（`document_id` 指定、VAT 專屬欄位從 args 帶入）
+- `lib/services/allowance.ts::createAllowance`：**鏡像 invoice 的拆法** — `createAllowance` 內部呼叫 `createDocument` + `linkAllowanceToDocument`
+- OCR 觸發點移轉：原 `createInvoice` / `createAllowance` 內的 enqueue 改到 `createDocument` 內（依 `doc_type` 條件 enqueue）。`extraction-worker` 本身**不需改**（仍讀 file_url、寫 invoice / allowance.extracted_data），因為 worker 走的是 document_id 反向 join 找子表 row。
+- `extraction-worker`：worker 內部從 documents.id 找到對應子表 row 寫入 `extracted_data`。若同期有 invoice / allowance 子表 row 尚未建立的時間窗（理論上 `createDocument` + `linkInvoiceToDocument` 同 transaction 應不會發生），加 retry / skip-and-log 機制。
+- `lib/domain/models.ts`：`createDocumentSchema` Zod schema（args 形狀）
+- `tests/integration/services/document.test.ts`：新增——createDocument happy、與 linkInvoiceToDocument 合併 transaction 失敗時 documents row 不殘留（rollback）、單元測試 createInvoice 對外行為與 phase 5 前完全一致
+
+**Phase 6 / Phase 7 的連帶影響**：
+- Phase 6 backfill 邏輯**不變**：仍是「對既有 invoice / allowance 建 documents row」（舊資料,subtable-first 留下的）。backfill 方向與新 upload 流程的方向相反,但邏輯獨立、可共存。
+- Phase 7 `confirm_invoice` / `confirm_allowance` RPC **簡化**：documents 已在上傳時存在,RPC 不再需要 `upsert documents`,只需要「取 invoice/allowance → 建立 entry」。詳見 Phase 7。
+
+**Reuse 既有**：
+- Storage upload pattern（`useSupabaseUpload`、storage path convention `{firmId}/{periodYYYMM}/{clientId}/{uuid}.{ext}`）
+- pgmq enqueue pattern（`extraction-worker` 上游）
+- Auth + 授權 pattern（`lib/services/invoice.ts:76-104`）
+
+**驗證**：
+- Integration test：透過 `createInvoice` / `createAllowance` 上傳一張檔案 → DB 內 documents row 與 invoice / allowance row 同 transaction 出現（兩者皆存在或都不存在,無中間態）
+- Integration test：transaction rollback case — 模擬 `linkInvoiceToDocument` 失敗,documents row 不殘留
+- `extraction-worker` 整合測試：對新流程上傳的 row 仍可正常 OCR、寫入 `extracted_data`、翻 status 到 `processed`
+- 手動：上傳 1 張 invoice + 1 張 allowance 跑全流程 → AI extract → review → confirm → 期別頁渲染、TET_U 匯出生成,**完全不退步**
+- 既有 invoice / allowance 整合測試全綠（對外行為不變）
+
+**退出條件**：所有上傳走 documents-first；對外 service API 保持向後相容；既有 invoice / allowance UI 與報表完全不退步。
+
+> **重要**：本階段**不**做 `doc_type='other'` 支援、**不**做 /documents 列表、**不**改 `documents.doc_type` enum。這些都留給 Upload Classifier 計畫進場時帶入（詳見 `UPLOAD_CLASSIFIER_PLAN.md`）。本階段純粹是「為 classifier 鋪路、保持既有功能完全不退步」的內部重構。
+
+---
+
 ## Phase 6 — `documents` CTI backfill（invoices + **allowances 同步**）
 
-**目標**：把既有 invoices 與 allowances 收斂到 documents 之下。Phase 5 已建空表；本階段做 backfill + 加 `NOT NULL UNIQUE`。
+**目標**：把**既有**（Phase 5.5 之前留下的、subtable-first 路徑建立的）invoices 與 allowances 收斂到 documents 之下。Phase 5 已建空表；Phase 5.5 之後新建的 invoice / allowance 已是 documents-first 流程、不需 backfill。本階段做 backfill + 加 `NOT NULL UNIQUE`。
+
+> **方向說明**：Phase 6 backfill 是「subtable → documents」（舊資料補建父表 row），Phase 5.5 之後的新流程是「documents → subtable」。兩者方向相反但邏輯獨立、可共存；Phase 6 結束後 `invoices.document_id` / `allowances.document_id` 之 `NOT NULL UNIQUE` 對新舊資料一體適用。
 
 **改動**：
 - Migration `<ts>_backfill_documents_from_invoices_allowances.sql`：
@@ -186,8 +263,10 @@
 
 **目標**：把 phase 4 的純邏輯接上 DB，原子地產生 draft entries。Phase 2 的傳票 UI 此刻開始顯示真實 draft entries。**Invoice 與 allowance 兩條 confirm 路徑都要處理**。
 
+> **與原計畫的差異**：Phase 5.5 起 documents 已在上傳當下建立、Phase 6 之後既有資料也都有對應 documents row,所以 confirm RPC **不再需要 `upsert documents`**,只負責「取 invoice/allowance → 建立 entry → replace lines」。RPC 邏輯更簡單、語意更清楚。
+
 **改動**：
-- Migration `<ts>_create_confirm_invoice_rpc.sql`：PL/pgSQL — 取 invoice → upsert documents → upsert journal_entry（status=draft、voucher_no=NULL、document_id 指對應 documents）→ replace lines。Idempotent。
+- Migration `<ts>_create_confirm_invoice_rpc.sql`：PL/pgSQL — 取 invoice → upsert journal_entry（status=draft、voucher_no=NULL、`document_id = invoice.document_id`）→ replace lines。Idempotent。若 `invoice.document_id` 為 NULL（理論上不會發生,Phase 6 之後有 `NOT NULL` 約束保護）→ RAISE EXCEPTION fail loud。
 - Migration `<ts>_create_confirm_allowance_rpc.sql`：**同樣邏輯處理 allowance**（樣板不同：進項折讓 / 銷項折讓兩種）
 - Migration `<ts>_create_regenerate_draft_entry_rpc.sql`：吃 `entity_type` + `entity_id`（invoice 或 allowance），要求對應 entry.status='draft' 否則 RAISE EXCEPTION。Lines wholesale DELETE + INSERT，header in-place UPDATE 保 entry.id（§5 重生策略）
 - `lib/services/invoice.ts::updateInvoice`：status 翻到 confirmed → `supabase.rpc('confirm_invoice')`；編輯 confirmed invoice 且 entry='draft' → `regenerate_draft_entry`
@@ -298,7 +377,8 @@
 - `account_period_balances` 月度 rollup（觸發條件見 §6.3）
 - `extracted_data.account` 雙表示法收斂（目前 invoice 端存 `"5102 旅費"`、entry line 端存 `"5102"`）
 - audit_trails 全面寫入（v1 僅 posted entry edit / reverse 必填）
-- **/documents 獨立頁面**（v2+ 加入非 VAT `doc_type` 後才有業務意義）
+- **/documents 獨立頁面**（最簡列表由 Upload Classifier 計畫帶入；v2+ 加入非 VAT `doc_type` 後擴充為完整文件管理）
+- **`doc_type='other'` 支援**（由 Upload Classifier 計畫帶入,本 Voucher 計畫範圍內 `doc_type` 永遠 ∈ {invoice, allowance}）
 
 ---
 
@@ -326,6 +406,10 @@
 - `supabase/migrations/<ts>_create_audit_trails.sql`
 - `lib/services/journal-entry.ts`、`document.ts`、`audit-trail.ts`（read helpers）
 
+**新增 — Phase 5.5（upload pipeline refactor）**：
+- `lib/services/document.ts`：補 `createDocument(args)` server action（write 路徑;Phase 5 只有 read helpers）
+- `tests/integration/services/document.test.ts`：新增（createDocument + linkInvoiceToDocument 合併 transaction 行為）
+
 **新增 — Phase 6 起**：
 - `supabase/migrations/<ts>_backfill_documents_from_invoices_allowances.sql`（phase 6，**雙子表同步**）
 - `supabase/migrations/<ts>_create_confirm_invoice_rpc.sql`（phase 7）
@@ -337,8 +421,10 @@
 - `lib/services/fiscal-year-close.ts` + `fiscal-year-close/page.tsx`（phase 11）
 
 **修改**：
-- `lib/services/invoice.ts`（phase 7 接 confirm/regenerate RPC、phase 9 派發至 editPostedEntry）
-- `lib/services/allowance.ts`（**phase 7、phase 9 鏡像 invoice 的所有改動**）
+- `lib/services/invoice.ts`（**phase 5.5 拆為 createDocument + linkInvoiceToDocument,對外 createInvoice 行為保持不變**；phase 7 接 confirm/regenerate RPC、phase 9 派發至 editPostedEntry）
+- `lib/services/allowance.ts`（**phase 5.5 / 7 / 9 全部鏡像 invoice 的改動**）
+- `supabase/functions/extraction-worker/`（**phase 5.5** OCR 觸發點從 invoice/allowance row 改為 document row;worker 內部從 documents.id 反向 join 找子表 row 寫入 extracted_data;**bucket 名稱從 `invoices` 改為 `documents`**）
+- **Storage bucket rename `invoices` → `documents`（phase 5.5）**:影響所有 `supabase.storage.from('invoices')` 呼叫點 — `lib/services/invoice.ts:233/379-381`、`lib/services/allowance.ts:166/296+`、`lib/services/document.ts`(新增 createDocument)、`useSupabaseUpload` hook 與其他元件中的 storage 呼叫。詳見 Phase 5.5 內 "Storage bucket 重新命名" 段
 - `lib/data/accounts.ts`（phase 4 加 extractAccountCode + 格式 lint）
 - `lib/domain/models.ts`（每階段相應 schema）
 - `components/invoice-review-dialog.tsx`（phase 2 加 reason 欄位 + 警示條外觀；phase 9 真接 editPostedEntry）

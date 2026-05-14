@@ -1,11 +1,16 @@
 # 上傳分類器 (Upload Classifier) — 設計與實作計畫
 
-> **狀態**: 延後實作。等待 `VOUCHER_JOURNAL_ENTRY_PHASED_PLAN.md` Phase 5
-> (`documents` 表落地) 後再回頭執行。
+> **狀態**: 延後實作。啟動條件 = `VOUCHER_JOURNAL_ENTRY_PHASED_PLAN.md`
+> **Phase 5 + Phase 5.5 + Phase 6** 全部完成。Phase 5.5 把 upload pipeline 倒置為
+> documents-first 是本計畫的關鍵前提 (見 §3、§5)。
 >
 > **配套文件**: [`VOUCHER_JOURNAL_ENTRY_PLAN.md`](./VOUCHER_JOURNAL_ENTRY_PLAN.md) §3.1
-> (`documents` schema)、§3.2 (CTI 關係)。本文件假設 `documents` 已存在,
-> `invoices` / `allowances` 已具備 `document_id` 反向指標。
+> (`documents` schema)、§3.2 (CTI 關係);
+> [`VOUCHER_JOURNAL_ENTRY_PHASED_PLAN.md`](./VOUCHER_JOURNAL_ENTRY_PHASED_PLAN.md) Phase 5.5
+> (documents-first upload refactor)。本文件假設 `documents` 已存在、
+> `invoices` / `allowances` 已具備 `document_id` 反向指標、且 upload 流程已是
+> documents-first (`createDocument` 為主入口、`linkInvoiceToDocument` /
+> `linkAllowanceToDocument` 為子表掛接動作)。
 
 ## 1. 動機
 
@@ -34,50 +39,109 @@
 擷取 prompt 維持原樣 (它是 happy-path 準確度的支柱); 過了這道門, `in_or_out`
 即視為可信。
 
-## 2. v1 範圍外
+**與 documents-first upload pipeline 的契合**: Phase 5.5 把上傳流程倒置為「先建
+documents row、再依分類路由到子表」之後, classifier 從原本的「上傳前警告比對」
+升級為**路由分流工具**。`verdict='other'` (非發票/折讓) 不再需要被強迫塞進 invoice
+/ allowance 或取消;documents row 可以直接以 `doc_type='other'` 留在 documents 表,
+**不建子表**, 不參與 TET_U / IS-BS, 直到使用者於 /documents 列表手動重新分類或刪除。
+這讓 classifier 的「四類 + other」設計名實相符。
 
+## 2. v1 範圍 / 範圍外
+
+**本計畫 v1 範圍內**(在 Voucher Phase 5.5 已落地的 documents-first 基礎上新增):
+- 上傳當下同步分類器 (4 類 + other + voided)
+- `documents.classifier_hint` JSONB 欄位 + 寫入
+- 批次審核 dialog (含 `other` 卡片變體)
+- 啟用 `doc_type='other'` 路徑 (Voucher §3.1 已將 enum 簡化為 `invoice / allowance / other`;Phase 5 schema 已含 'other',本計畫只是讓 'other' row 真正被自動產生 + 提供管理 UI)
+- **最簡 /documents 列表頁** (僅列 `doc_type='other'` 的文件 + 重分類 / 刪除動作) — 因為 'other' 文件在期別頁不出現,沒這頁等於孤兒
+- Eval harness scaffold
+
+**v1 範圍外**:
 - 修改擷取 prompt 本身。
 - 同次上傳內快取分類結果 (參考 PR #138 FIA 快取分析: 節省約 2–10%, 不值得
   維護成本)。
 - 任何硬阻擋 (hard block); 所有不一致都僅為軟性警告, 含 doc type 不符。
 - 跨上傳記憶使用者覆蓋 (briefing 中提到的「N 次連續確認後不再問」)。等有
   分類不符率資料後再評估。
+- 完整 /documents 文件管理頁面 (含 invoice / allowance 與所有子表的跨類查找、
+  進階篩選等);v1 的 /documents 列表**僅服務 `doc_type='other'` 的待分類文件**,
+  既有 invoice / allowance 仍以期別頁為主入口。完整版留待 v2+ 引入非 VAT 子表
+  時擴充。
 
-## 3. 流程設計 (Batch-first)
+## 3. 流程設計 (documents-first + Batch)
 
 `components/document-upload-section.tsx` 桌機支援拖放最多 10 份檔案,
 手機 portal FAB 也支援多選, 單檔流程是批次流程的 N=1 特例。所以以批次為主
 設計, 單檔自動兼容。
 
+**核心改變 (vs Phase 5.5 之前的設計草案)**: 此計畫**依賴 documents-first upload pipeline**
+(由 Voucher Phase 5.5 落地)。每份檔案上傳第一時間建 documents row, classifier
+判決決定**接下來掛不掛子表**,而不是「分類後才決定要建 invoice 還是 allowance」。
+這讓 `verdict='other'` 真正有歸宿 (停在 documents、不建子表)。
+
 ```
-使用者拖放 1–10 份檔案 + 選擇分類
+使用者拖放 1–10 份檔案 + 選擇分類 (doc_type, in_or_out)
         │
         ▼
-所有檔案平行上傳至 Supabase Storage (沿用 useSupabaseUpload)
+所有檔案平行 Storage upload + createDocument
+   Promise.all(files.map(f => createDocumentAction({
+     storagePath, mimeType, clientId,
+     doc_type: userChoice.docType,    // 初值 = 使用者選擇
+     in_or_out: userChoice.inOrOut,   // 寫入未來會建的子表用
+   })))
+   → 每份檔案: documents row (status='active', classifier_hint=NULL) 已存在
+   → OCR worker 已 enqueue (Phase 5.5 起 OCR 觸發點在 documents insert)
         │
         ▼
 [NEW] 所有檔案平行分類:
-   Promise.all(files.map(f => classifyDocumentAction({ storagePath, mimeType, clientId })))
+   Promise.all(docs.map(d => classifyDocumentAction({ documentId })))
    牆鐘時間 ≈ 最慢的一個呼叫 ≈ 1-2s, 並非 N × 1-2s
+   → 每份檔案: documents.classifier_hint 寫入 verdict
         │
         ▼
 [NEW] 分群結果:
-   - agreed[]      → 靜默通過, 不打斷使用者
-   - disagreed[]   → 統整於一個批次審核畫面
-   - failed[]      → 寫 log, 退回靜默通過 (不因分類器故障阻擋上傳)
+   - agreed[]      → 立刻呼叫 linkInvoiceToDocument / linkAllowanceToDocument
+                     (依使用者選擇 = classifier verdict)
+                     classifier_hint.disagreed = false
+   - disagreed[]   → 統整於一個批次審核畫面 (見下)
+                     子表「暫不建立」, 等使用者決策
+   - failed[]      → 寫 log, 退回「依使用者選擇 link 子表」
+                     classifier_hint = { error: '...', disagreed: false }
         │
         ▼
-disagreed[] 為空: 全部 documents + 子表 row 建立完成, 無 UI 中斷
+disagreed[] 為空: agreed 全部建好 invoice / allowance 子表, 無 UI 中斷
         │
 disagreed[] 非空: 顯示 <DocumentClassifierBatchReview>
-   每份檔案一張卡片: 縮圖 + 偵測結果 vs 使用者選擇 + [改成 X] / [維持] / [取消此筆]
+   每份檔案一張卡片, verdict 不同卡片變體不同:
+   - verdict ∈ {invoice, allowance}: [改成 X] / [維持原選擇] / [取消此筆]
+   - verdict='other': [改為其他憑證 (留在 documents、不建子表)] /
+                       [維持原選擇 (仍建 invoice/allowance)] / [取消此筆]
    底部單一「繼續上傳」按鈕 (所有 row 都選好才啟用)
    agreed[] 已於背景建好, 不出現在此畫面
         │
+        ▼ 依各 row 決策派發:
+[改成 X]                 → 改 documents.doc_type=X + linkXToDocument
+[維持原選擇] (vs invoice/allowance verdict)
+                         → linkXToDocument(用使用者原選擇) + classifier_hint.disagreed=true
+[改為其他憑證] (verdict='other')
+                         → UPDATE documents SET doc_type='other'
+                            (不建子表, 文件停在 documents)
+[維持原選擇] (vs verdict='other')
+                         → linkXToDocument(用使用者原選擇) + classifier_hint.disagreed=true
+                            (使用者堅持這是 invoice/allowance, 強過 classifier)
+[取消此筆]               → soft delete documents (status='deleted')
+                            + storage 物件清除
+        │
         ▼
-原 extraction worker 流程不變: 自 pgmq 取出, 跑 Gemini 擷取, 寫
-extracted_data, status → processed
+原 extraction worker 流程不變 (OCR 在 createDocument 時已 enqueue): 自 pgmq 取出,
+跑 Gemini 擷取, 寫 extracted_data, status → processed。worker 只對
+doc_type ∈ {invoice, allowance} 的 row 做擷取; doc_type='other' 的 row OCR
+worker 直接 skip + 標記 ocr_status='skipped'。
 ```
+
+> **關鍵不變式**: 每份檔案永遠有 `documents` row (即使取消上傳, soft delete 留在表),
+> 子表 row 為 0 或 1 個 (UNIQUE constraint)。本流程的核心保證: documents row 在 storage
+> upload 成功的瞬間就建好,後續任何決策都是「在這份已知 row 上掛 / 不掛子表 / 改 doc_type」。
 
 ### Batch 延遲預算
 
@@ -107,7 +171,7 @@ extracted_data, status → processed
 
 ### 4.1 Schema 變更
 
-`documents.classifier_hint JSONB NULL` (新欄位)。**只加在 documents,
+**單一新欄位**: `documents.classifier_hint JSONB NULL`。**只加在 documents,
 不加在子表** — 分類器的判決概念上屬於「這份文件本身」, 自然對應 CTI 父表。
 
 ```sql
@@ -115,6 +179,10 @@ extracted_data, status → processed
 ALTER TABLE documents ADD COLUMN classifier_hint JSONB;
 COMMENT ON COLUMN documents.classifier_hint IS '上傳時分類器判決; 欄位設計詳見 docs/UPLOAD_CLASSIFIER_PLAN.md §4.2';
 ```
+
+> **無需 enum 擴充**: Voucher 計畫 §3.1 已將 `doc_type` 簡化為三值 `invoice / allowance / other`,
+> Phase 5 schema 落地時 'other' 即已存在。本計畫只需新增 `classifier_hint` 欄位,
+> 不需要動 doc_type CHECK 約束 / enum type。
 
 依 memory `feedback_no_apply_migration`: 寫好 .sql 後不自動 `supabase migration up`、
 也不自動 regenerate types, 交由使用者執行。
@@ -228,37 +296,50 @@ PDF 雖罕見, 仍需保護。處理策略:
 輸出 JSON shape 與 `DocumentClassification` 一致; prompt 必須明確要求 JSON
 only、無前綴。
 
-### 5.3 Server action 包裝
+### 5.3 Server action 包裝 (documents-first 兩步驟)
 
 同檔 (`'use server'` 區段):
 
 ```ts
+// 已由 Voucher Phase 5.5 提供, 本計畫只是呼叫
+// export async function createDocumentAction(args): Promise<{ documentId: string }>
+
 export async function classifyDocumentAction(args: {
-  storagePath: string;
-  mimeType: string;
-  clientId: string;
+  documentId: string;
 }): Promise<DocumentClassification>
 ```
 
-步驟:
+`classifyDocumentAction` 步驟:
 1. Auth check (`createClient()` → `auth.getUser()`)
-2. 授權檢查: 沿用 `lib/services/invoice.ts:createInvoice` lines 76-104 的 pattern
-3. 自 `invoices` storage bucket 讀檔 (同 `lib/services/allowance.ts:165-167`)
-4. 取 client name + tax_id (`lib/services/client.ts`)
-5. `classifyDocument()`
-6. 回傳 verdict
+2. 授權檢查: 沿用 `lib/services/invoice.ts:createInvoice` lines 76-104 的 pattern;
+   以 documentId 反查 firm/client 後校驗
+3. 自 documents row 讀 `file_url`、`mimeType`、`client_id`
+4. 自 `invoices` storage bucket 讀檔 (同 `lib/services/allowance.ts:165-167`)
+5. 取 client name + tax_id (`lib/services/client.ts`)
+6. `classifyDocument()` 取得 verdict
+7. **同一動作內** UPDATE documents SET classifier_hint = { ...verdict, model,
+   classified_at, disagreed: <比對使用者初值算出> }
+8. 回傳 verdict 供客戶端決策
 
-本 action **不**寫 DB; 分類結果由客戶端帶回, 後續 `createDocument` 落庫。
+> 與原計畫的差異: 不再是「分類結果由客戶端帶回, 後續 createDocument 落庫」。
+> documents row **已在上傳當下由 `createDocumentAction` 建好** (Phase 5.5 流程);
+> classifier action 是針對已存在的 row 做 UPDATE。這讓「documents 不會卡在
+> 中間態 (檔案上傳了但 row 還沒建)」的不變式更乾淨。
 
-### 5.4 落庫
+### 5.4 路由 (分類後依決策派發)
 
-`lib/services/document.ts::createDocument` (Phase 6 後存在): 接受
-`classifier_hint` 欄位, INSERT 時帶入。**不在 server 端重跑分類器** — 信任
-客戶端從 `classifyDocumentAction` 拿到的值 (它本身已是 server-authoritative)。
+`lib/services/document.ts` 提供:
+- `linkInvoiceToDocument(documentId, vatArgs)` — Phase 5.5 已存在,
+  INSERT invoices row 指向已存在的 documents
+- `linkAllowanceToDocument(documentId, vatArgs)` — Phase 5.5 已存在
+- `updateDocumentDocType(documentId, newDocType, options)` — 新增,
+  支援「verdict='other' → 把 doc_type 從使用者原選擇改為 'other'」這條路徑
+- `softDeleteDocument(documentId)` — 取消上傳時, status='deleted' +
+  cleanup storage 物件 (沿用既有 storage 刪除 helper)
 
-`createInvoice` / `createAllowance` 已存在的 `document_id` 連動建立路徑
-(於 Voucher Phase 7 落地) 不需改動 — 分類器的 hint 寫在父 documents row,
-子表透過 `document_id` 自然引用。
+派發邏輯由客戶端 (上傳元件) 在分類完成後依使用者決策呼叫上述任一函式。
+**不在 server 端重跑分類器** — 信任 documents.classifier_hint 已是
+server-authoritative。
 
 ## 6. UI 層
 
@@ -271,27 +352,50 @@ export async function classifyDocumentAction(args: {
 
 ```ts
 interface DisagreeingFile {
-  id: string;                                   // 本地 id (storage path 或 upload-queue id)
+  id: string;                                   // 本地 id (= documentId, 已建好)
+  documentId: string;
   filename: string;
-  thumbnailUrl: string | null;                  // signed URL, 來自剛上傳的 storage 物件
+  thumbnailUrl: string | null;                  // signed URL, 來自已建好的 document
   userChoice: { docType: 'invoice' | 'allowance'; inOrOut: 'in' | 'out' };
   verdict: DocumentClassification;
 }
+
+type Decision =
+  | 'switch_to_invoice_in'  | 'switch_to_invoice_out'
+  | 'switch_to_allowance_in' | 'switch_to_allowance_out'
+  | 'switch_to_other'        // 新增: 留在 documents 不建子表 (verdict='other' 時)
+  | 'keep'                   // 仍按 userChoice 建子表 (classifier_hint.disagreed=true)
+  | 'cancel';                // soft delete document + storage cleanup
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   files: DisagreeingFile[];
   tone: 'firm' | 'client';
-  onSubmit: (decisions: Record<string /*file.id*/, 'switch' | 'keep' | 'cancel'>) => void;
+  onSubmit: (decisions: Record<string /*file.id*/, Decision>) => void;
 }
 ```
 
 排版: 縱向卡片清單, 每張卡片:
 - 左: 縮圖 (沿用 `components/upload-queue-list.tsx:76-93` pattern)
 - 中: 檔名 + 平語化說明
-- 右: 三選一單選或三個按鈕: 改成 X / 維持原選擇 / 取消此筆
+- 右: 依 verdict 變體呈現選項 (見下)
 - 預設不選任何項; 底部「繼續上傳」按鈕在所有 row 都選好前 disabled
+
+**卡片變體**:
+
+A. `verdict.docType ∈ {invoice, allowance}` 且與 userChoice 不一致:
+   選項: [改成 verdict 的 docType+inOrOut] / [維持原選擇] / [取消此筆]
+
+B. `verdict.docType === 'other'` (新): 該文件看起來不是發票或折讓單。
+   選項: [改為其他憑證 (留在文件庫,不建發票/折讓)] /
+         [維持原選擇 (仍建 invoice/allowance)] /
+         [取消此筆]
+   卡片內文 (client tone): 「這份文件看起來不是統一發票或折讓單。
+                            您可以把它收進文件庫不歸入發票/折讓,
+                            或仍按原本選擇上傳。」
+   卡片內文 (firm tone): 「分類為 other (非 invoice/allowance);
+                          可改為 doc_type=other 留在 documents、不建子表」
 
 單檔即 N=1 排版, 不另寫單檔 dialog。
 
@@ -307,10 +411,6 @@ interface Props {
 
 字級依專案規約: `text-base` 為主, `text-sm` 為輔, 禁用 `text-xs`。
 
-`verdict.docType === 'other'` (非發票或折讓): 該卡片的選項收斂為「維持原選擇」/
-「取消此筆」, 不顯示 switch (沒有可切換的目的地)。卡片內文改為「這份文件看起
-來不是發票或折讓單」。
-
 分類失敗的檔案**不**進此 dialog (它們已靜默通過); 可選: 底部低調文字
 「另有 K 份文件分類失敗, 已照您的選擇上傳」。
 
@@ -320,51 +420,75 @@ interface Props {
 
 ```ts
 async function processBatch(files: File[], userChoice) {
-  // 1. Storage 上傳平行 (沿用 useSupabaseUpload)
-  const uploaded = await Promise.all(files.map(uploadToStorage));
+  // 1. Storage 上傳 + createDocument 平行
+  //    (Phase 5.5 起 createDocumentAction 內部處理 storage upload + INSERT documents)
+  const docs = await Promise.all(files.map(f => createDocumentAction({
+    file: f, clientId,
+    doc_type: userChoice.docType,        // 初值
+    in_or_out: userChoice.inOrOut,       // 暫存以備建子表
+  })));
+  // 結果: docs[].documentId, files 已成 documents row, classifier_hint=NULL
 
-  // 2. 分類器平行 (牆鐘時間 ≈ 最慢的一個呼叫)
+  // 2. 分類器平行 (對已存在的 documentId 跑)
   const classifications = await Promise.all(
-    uploaded.map(async (u) => {
+    docs.map(async (d) => {
       try {
-        const verdict = await classifyDocumentAction({
-          storagePath: u.storagePath, mimeType: u.mimeType, clientId,
-        });
-        return { ...u, verdict, error: null };
+        const verdict = await classifyDocumentAction({ documentId: d.documentId });
+        // server action 已將 verdict 寫進 documents.classifier_hint
+        return { ...d, verdict, error: null };
       } catch (err) {
-        console.error('classifier failed for', u.filename, err);
-        return { ...u, verdict: null, error: String(err) };
+        console.error('classifier failed for', d.filename, err);
+        return { ...d, verdict: null, error: String(err) };
       }
     })
   );
 
-  // 3. 分群
-  const disagreed = classifications.filter(c =>
-    c.verdict && (c.verdict.docType !== userChoice.docType || c.verdict.inOrOut !== userChoice.inOrOut));
+  // 3. 分群 (only invoice/allowance verdicts compare to userChoice; 'other' always disagrees)
+  const disagreed = classifications.filter(c => c.verdict && (
+    c.verdict.docType === 'other' ||
+    c.verdict.docType !== userChoice.docType ||
+    c.verdict.inOrOut !== userChoice.inOrOut
+  ));
   const agreed = classifications.filter(c => c.verdict && !disagreed.includes(c));
   const failed = classifications.filter(c => !c.verdict);
 
-  // 4. agreed + failed 靜默通過
+  // 4. agreed + failed: 立刻 link 子表 (依使用者初值, 此時 verdict 與 userChoice 一致或不可用)
   await Promise.all([
-    ...agreed.map(c => createRowForUserChoice(c, { ...c.verdict, disagreed: false })),
-    ...failed.map(c => createRowForUserChoice(c, { error: c.error, disagreed: false })),
+    ...agreed.map(c => linkSubtableForChoice(c.documentId, userChoice)),
+    ...failed.map(c => linkSubtableForChoice(c.documentId, userChoice)),
+    // classifier_hint.disagreed=false 已由 server action 寫入 (或 error)
   ]);
 
   // 5. disagreed 進批次審核 dialog
   if (disagreed.length === 0) return;
   const decisions = await openBatchReview({ files: disagreed, tone });
   await Promise.all(disagreed.map(c => {
-    const dec = decisions[c.id];
-    if (dec === 'cancel') return deleteStorageObject(c.storagePath);
-    if (dec === 'switch') return createRowFor(c, c.verdict, /* disagreed */ false);
-    /* keep */         return createRowForUserChoice(c, { ...c.verdict, disagreed: true });
+    const dec = decisions[c.documentId];
+    switch (dec) {
+      case 'cancel':
+        return softDeleteDocument(c.documentId);  // status='deleted' + storage cleanup
+      case 'switch_to_other':
+        return updateDocumentDocType(c.documentId, 'other');
+        // 文件停在 documents, 不建子表; OCR worker 將 skip
+      case 'switch_to_invoice_in':
+      case 'switch_to_invoice_out':
+      case 'switch_to_allowance_in':
+      case 'switch_to_allowance_out':
+        return linkSubtableForChoice(c.documentId, parseDecision(dec));
+      case 'keep':
+        return Promise.all([
+          linkSubtableForChoice(c.documentId, userChoice),
+          markClassifierDisagreed(c.documentId),  // 把 classifier_hint.disagreed = true
+        ]);
+    }
   }));
 }
 ```
 
-`createRowForUserChoice` / `createRowFor` 為本地 helper, 依 `docType` +
-`inOrOut` 分派到 `createInvoice` 或 `createAllowance` (兩者皆連動 documents
-落庫, 含 classifier_hint)。
+`linkSubtableForChoice(documentId, choice)` 為本地 helper, 依 `choice.docType`
+派分到 `linkInvoiceToDocument` 或 `linkAllowanceToDocument` (Phase 5.5 已存在,
+INSERT 子表 row 指向已存在的 documents)。`markClassifierDisagreed(documentId)` 為
+單表 UPDATE: SET classifier_hint = jsonb_set(classifier_hint, '{disagreed}', 'true')。
 
 **修改檔案**:
 - `components/document-upload-section.tsx` (lines ~138-157): 接 `processBatch`,
@@ -384,6 +508,32 @@ async function processBatch(files: File[], userChoice) {
 > 「上傳時系統判斷此文件為 X, 但您選擇 Y, 請於確認前再次核對分類。」
 
 僅資訊性, 不阻擋確認。字級 `text-sm`。
+
+### 6.4 最簡 /documents 列表頁
+
+新檔: `app/firm/[firmId]/client/[clientId]/documents/page.tsx`
+
+僅列出 `doc_type='other'` 的文件 (因為其他 doc_type 已有期別頁 / 傳票頁可入)。
+沒有此頁面, 'other' 文件等於孤兒, 對使用者不可見。
+
+**列表欄位**: 縮圖、檔名、`doc_date`、`classifier_hint` 摘要 (verdict + confidence)、操作。
+
+**操作按鈕** (每列):
+- 「重分類為發票」→ 開 dialog 讓使用者指定 in/out → UPDATE `documents.doc_type='invoice'` +
+  `linkInvoiceToDocument(...)` (此時 OCR worker 會重新被觸發, 因為 doc_type 變成 invoice)
+- 「重分類為折讓」→ 同上但 link allowance
+- 「刪除」→ soft delete (`status='deleted'`) + 清 storage object
+
+**Sidebar 入口**: `components/firm-sidebar.tsx` 與 `components/portal-sidebar.tsx`
+新增「其他文件」入口, 徽章顯示該 client 之 `doc_type='other'` 文件數量。
+
+**排序**: `created_at DESC`。**分頁**: 沿用 `usePaginatedPeriodInvoices` SWR pattern。
+
+**字級**: `text-base` 為主, 列表 metadata 用 `text-sm`。
+
+> **為何不做完整 /documents 頁**: v1 唯二的「可入」doc_type 是 invoice/allowance,
+> 期別頁已分別呈現。完整跨子表查找、進階篩選留待 v2+ 引入非 VAT 子表時再做。
+> 本頁面的存在價值是讓 `'other'` 文件不孤兒, 不是文件管理中心。
 
 ## 7. Eval Harness
 
@@ -419,6 +569,10 @@ async function processBatch(files: File[], userChoice) {
 | Portal upload parent in `app/firm/[firmId]/client/[clientId]/portal/...` | 接 `processBatch` |
 | `components/invoice-review-dialog.tsx` | 顯示 disagreed 旗標 |
 | `components/allowance-review-dialog.tsx` | 顯示 disagreed 旗標 |
+| `app/firm/[firmId]/client/[clientId]/documents/page.tsx` | NEW — 最簡 /documents 列表 (僅列 `doc_type='other'` + 重分類/刪除) |
+| `components/firm-sidebar.tsx` | 加「其他文件」入口 (徽章顯示 'other' 文件數) |
+| `components/portal-sidebar.tsx` | 加「其他文件」入口 (client tone) |
+| `lib/services/document.ts` | 加 `updateDocumentDocType` (重分類用) |
 | `tests/fixtures/classifier/README.md` + `manifest.json` + `.gitignore` | NEW — eval scaffolding |
 | `tests/integration/document-classifier.eval.ts` | NEW — eval harness (manifest 空時 skip) |
 
@@ -428,7 +582,7 @@ async function processBatch(files: File[], userChoice) {
 - 縮圖渲染 pattern (`components/upload-queue-list.tsx:76-93`、`dropzone.tsx:110-120`)
 - Gemini fetch、MIME allowlist、base64 boilerplate (`lib/services/gemini.ts:42-48, 99-129, 245-249`)
 - Auth + 授權 pattern (`lib/services/invoice.ts:76-104`)
-- Storage 下載 (`lib/services/allowance.ts:165-167`, bucket `invoices`)
+- Storage 下載 (`lib/services/allowance.ts:165-167` 模式;**Phase 5.5 起 bucket 已從 `invoices` 改名為 `documents`**)
 - Storage path convention `{firmId}/{periodYYYMM}/{clientId}/{uuid}.{ext}` 未變
 - Test fixture helpers (`tests/utils/supabase.ts:104` `createTestFixture` / `cleanupTestFixture`)
 
@@ -444,18 +598,27 @@ async function processBatch(files: File[], userChoice) {
    - **單檔, 不一致**: 上傳 銷項 invoice + `in_or_out=in` → dialog 一張卡 →
      點「維持原選擇」 → row 建好, `classifier_hint.disagreed=true`
    - **單檔, 切換**: 同上, 點「改成 X」 → row 走 verdict 的路徑, `disagreed=false`
-   - **單檔, doc type 不符**: 上傳折讓單到 invoice 流程 → 同 UX, switch 鍵改打 `createAllowance`
-   - **單檔, "other"**: 上傳非發票 (例: 收據相片) → 卡片無 switch 選項
-   - **單檔, 取消**: 觸發 dialog, 點「取消此筆」 → 不建 row, storage 物件清掉
+   - **單檔, doc type 不符**: 上傳折讓單到 invoice 流程 → 同 UX, switch 鍵改打 `linkAllowanceToDocument`
+   - **單檔, "other"**: 上傳非發票 (例: 收據相片) → 卡片顯示三選一 [改為其他憑證 / 維持原選擇 / 取消]
+     - 點「改為其他憑證」→ documents.doc_type='other'、無子表 row、OCR 跳過、/documents 頁多一筆
+     - 點「維持原選擇」→ 仍建 invoice/allowance 子表、classifier_hint.disagreed=true
+     - 點「取消」→ documents soft delete + storage 清除
+   - **單檔, 取消**: 觸發 dialog, 點「取消此筆」 → documents row status='deleted', storage 物件清掉
    - **批次, 全一致**: 拖放 5 份吻合的 invoice → 無 dialog, 5 row 靜默出現
-   - **批次, 部分不一致**: 拖放 5 份, 其中 2 份 doc type 不符、1 份 in/out 不符
-     → dialog 3 張卡, agreed 不顯示。每張選不同決策 → submit → 取消那筆無 row,
-     storage 清乾淨。確認牆鐘 ≈ storage 上傳 + ~1-2s, **不是** N × per-file
+   - **批次, 部分不一致**: 拖放 5 份, 其中 2 份 doc type 不符、1 份 in/out 不符、1 份 verdict='other'
+     → dialog 4 張卡 (含 other 變體), agreed 不顯示。每張選不同決策 → submit → 取消那筆走 soft delete,
+     其餘照各自決策落地。確認牆鐘 ≈ storage 上傳 + ~1-2s, **不是** N × per-file
    - **批次, 分類失敗**: 暫時把 `GEMINI_API_KEY` 弄壞跑一遍 → 失敗檔走 silent
      fallback, `classifier_hint.error` 寫入; 真不符的還是進 dialog; dialog
      底部 footer 數出失敗數
    - **Client portal 批次**: 同 firm 批次, 但 `tone="client"` 文案
    - **審核 dialog**: 開一筆 `disagreed=true` 的 row → 表單頂端見 inline alert
+   - **/documents 列表頁**: 進入 `/firm/[firmId]/client/[clientId]/documents` →
+     看到剛才「改為其他憑證」那筆收據 → 點「重分類為發票 (進項)」→ 列表少一筆、
+     對應期別頁多一筆 invoice → OCR 重新觸發、`extracted_data` 填好後可 review confirm
+   - **/documents 刪除**: 上傳一張錯的文件、走「改為其他憑證」 → /documents 頁點刪除
+     → row status='deleted'、storage object 清除、列表少一筆
+   - **Sidebar 徽章**: 「其他文件」入口的徽章數字隨 /documents 操作即時更新
 
 4. psql 抽查 JSONB 形狀:
    ```sql
@@ -475,10 +638,12 @@ async function processBatch(files: File[], userChoice) {
 
 ## 12. 依賴與時序
 
-本案啟動條件 = `VOUCHER_JOURNAL_ENTRY_PHASED_PLAN.md` Phase 5 (documents 表)
-+ Phase 6 (CTI backfill) 完成。屆時:
-- `documents.classifier_hint` 才有地方加
-- `lib/services/document.ts::createDocument` 才存在
-- `invoices` / `allowances` 已具 `document_id`, 子表建立路徑會連動建 documents
+本案啟動條件 = `VOUCHER_JOURNAL_ENTRY_PHASED_PLAN.md` **Phase 5 + Phase 5.5 + Phase 6** 全部完成。
+- **Phase 5**: `documents` 表落地, `classifier_hint` 才有地方加;`doc_type` 三值 enum 含 `'other'`
+- **Phase 5.5** (關鍵前提): upload pipeline 倒置為 documents-first;
+  `createDocumentAction` 為主入口、`linkInvoiceToDocument` / `linkAllowanceToDocument` 為子表掛接動作;
+  OCR 觸發點繫到 document insert。沒有這個前提, classifier 沒有「先建好的 documents row」可作為 UPDATE 目標,
+  `verdict='other'` 也無處停留 — 整個流程設計都會崩
+- **Phase 6**: CTI backfill, 既有資料都已有對應 documents row
 
-實作前確認 Voucher Phase 5/6 PR 已合, 並 `git pull` 取最新 schema。
+實作前確認 Voucher Phase 5 / 5.5 / 6 PR 已合, 並 `git pull` 取最新 schema。

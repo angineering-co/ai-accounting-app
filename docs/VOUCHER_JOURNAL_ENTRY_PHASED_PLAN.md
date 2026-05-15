@@ -23,7 +23,7 @@
 
 **Documents-first upload pipeline（Phase 5.5 起）**：原 phased plan 預設「`createInvoice` / `createAllowance` 連動建 documents」（subtable-first），是為了減少對既有 upload 入口的改動。但此方向與 Upload Classifier 的天然語意（判決寫 documents、`other` 結果停留 documents、子表是衍生）擰著。Phase 5.5 把 upload pipeline 倒置為 **documents-first**：所有上傳第一時間建 documents row，再依使用者選擇（或日後 classifier 判決）路由到 invoice/allowance 子表。Phase 5.5 內 UI **不變**（使用者仍預先選 in/out），只是內部 service 拆解 + OCR 觸發點改繫到 documents insert；`doc_type='other'` 的路徑要等 classifier 進場才會啟用（本計畫 v1 範圍內不會出現 `other`）。
 
-**v1 範圍外**：固定資產 / 攤提（§3.7、§3.8）、發票同期作廢 void（§5.6）、補申報、`extracted_data.account` 雙表示法收斂、account_period_balances rollup、/documents 獨立頁面（最簡列表由 Classifier 計畫帶入）。
+**v1 範圍外**：固定資產 / 攤提（§3.7、§3.8）、發票同期作廢之**自動化連動沖銷**（§5.6;v1 可手動編輯 `invoices.extracted_data.taxType='作廢'`,TET_U 自動依此產出格式碼 F,但**不**自動建反向分錄）、補申報、`extracted_data.account` 雙表示法收斂、account_period_balances rollup、/documents 獨立頁面（最簡列表由 Classifier 計畫帶入）、duplicate detection（v1 移除 `duplicate_of` 與 `status='duplicate'`,誤上傳走 soft delete）。
 
 ---
 
@@ -372,8 +372,9 @@
 ## v1 範圍外（後續另開計畫）
 
 - 固定資產（§3.7）+ 攤提（§3.8）+ amortization-worker（pgmq + pg_cron）
-- 發票同期作廢 void（§5.6 上半）+ 跨期折讓自動產生（§5.6 下半）
+- 發票同期作廢之**自動化連動沖銷**（§5.6 上半;v1 可手動標 `extracted_data.taxType='作廢'`,但 posted 分錄需員工手動建反向分錄）+ 跨期折讓自動產生（§5.6 下半）
 - VAT 補申報流程
+- duplicate detection（`duplicate_of` self-FK + `status='duplicate'`,v1 移除,誤上傳走 soft delete）
 - `account_period_balances` 月度 rollup（觸發條件見 §6.3）
 - `extracted_data.account` 雙表示法收斂（目前 invoice 端存 `"5102 旅費"`、entry line 端存 `"5102"`）
 - audit_trails 全面寫入（v1 僅 posted entry edit / reverse 必填）

@@ -69,7 +69,7 @@ export function VoucherReverseDialog({
     }
     const newId = store.reverseEntry(entry.id, reason.trim(), store.userId, entryDate);
     if (!newId) {
-      toast.error("無法沖銷（可能已被沖銷或不是 posted 狀態）");
+      toast.error("無法沖銷（可能已被沖銷、為沖銷分錄本身、或不是 posted 狀態）");
       return;
     }
     toast.success("已建立反向分錄");

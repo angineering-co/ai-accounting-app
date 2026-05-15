@@ -217,6 +217,10 @@ function reverseEntry(
 ): string | null {
   const orig = _state.entries.find((e) => e.id === entryId);
   if (!orig || orig.status !== "posted") return null;
+  // Reversal vouchers are themselves "posted"; without this guard the user could
+  // post a 沖銷 of a 沖銷, producing confusing chains. If the reversal was a mistake,
+  // post a fresh corrective entry instead.
+  if (orig.reverses_entry_id != null) return null;
   const origLines = _state.lines.filter((l) => l.journal_entry_id === entryId);
 
   const dateISO = entryDate ?? formatDateToISO(new Date());

@@ -133,6 +133,7 @@ export default function VoucherDetailPage({
   const isDraft = entry.status === "draft";
   const isPosted = entry.status === "posted";
   const isReversed = entry.status === "reversed";
+  const isReversalVoucher = entry.reverses_entry_id != null;
 
   const handleDeleteDraft = () => {
     store.deleteDraftEntry(entry.id);
@@ -340,10 +341,12 @@ export default function VoucherDetailPage({
                   <Edit className="size-4 mr-1" />
                   編輯（in-place）
                 </Button>
-                <Button variant="destructive" onClick={() => setReverseOpen(true)}>
-                  <RotateCcw className="size-4 mr-1" />
-                  沖銷
-                </Button>
+                {!isReversalVoucher && (
+                  <Button variant="destructive" onClick={() => setReverseOpen(true)}>
+                    <RotateCcw className="size-4 mr-1" />
+                    沖銷
+                  </Button>
+                )}
               </>
             )}
             {!isDraft && (

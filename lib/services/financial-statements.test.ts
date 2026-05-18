@@ -43,15 +43,17 @@ describe("classifyAccount", () => {
 });
 
 describe("computeIncomeStatement on demo fixture", () => {
-  // Posted entries 在 2026 全年 demo data 內:
-  // entry1 (01-15, posted): 6133 +3000, 6173 nope, 1147 +300, 1111 -3300
+  // Booked (posted + reversed) entries 在 2026 全年 demo data 內:
+  // entry1 (01-15, posted): 6133 +3000, 1147 +300, 1111 -3300
   // entry2 (01-20, posted): 5102 +12000, 1147 +600, 1112 -12600
   // entry3 (02-05, posted, 折讓): 1111 +1050, 6133 -1000, 1147 -50
-  // entry5 (02-15, posted, 反向): 4101 debit 20000(等同 -20000 revenue), 2271 debit 1000, 1112 credit 21000
+  // entry4 (02-10, reversed): 1112 +21000, 4101 +20000, 2271 +1000
+  // entry5 (02-15, posted, 反向 entry4): 4101 -20000, 2271 -1000, 1112 -21000
   // entry6 (02-28, posted, 折舊): 6173 +5000, 1611 -5000
-  // 排除:entry4 (reversed), draft1/2/3
+  // 排除:draft1/2/3 (status='draft' 從未過帳)
+  // entry4 + entry5 反向 pair 算術抵消 → 4101 / 2271 / 1112 from this pair 淨 0
 
-  it("includes only posted entries; drafts and reversed are excluded", () => {
+  it("includes posted + reversed (reversal pair cancels); drafts excluded", () => {
     const demo = freshDemo();
     const is = computeIncomeStatement({
       entries: demo.entries,
@@ -61,12 +63,10 @@ describe("computeIncomeStatement on demo fixture", () => {
       toDate: "2026-12-31",
     });
 
-    // 4101 出現在 entry4 (reversed,排除) + entry5 (posted reversal,包含) + draft2 (排除)
-    // 只 entry5 計入:debit 20000,credit 0 → operating_revenue 自然方向 = -20000
-    expect(is.operatingRevenue.rows).toEqual([
-      { accountCode: "4101", accountName: "4101 營業收入", amount: -20000 },
-    ]);
-    expect(is.operatingRevenue.subtotal).toBe(-20000);
+    // 4101 出現在 entry4 (reversed, +20000) + entry5 (posted reversal, -20000) + draft2 (排除)
+    // 反向 pair 淨 0,row 不應出現
+    expect(is.operatingRevenue.rows).toEqual([]);
+    expect(is.operatingRevenue.subtotal).toBe(0);
   });
 
   it("computes COGS / opex / gross profit / operating income correctly", () => {
@@ -85,8 +85,8 @@ describe("computeIncomeStatement on demo fixture", () => {
     // 6173:entry6 debit 5000 → 5000
     expect(is.opex.subtotal).toBe(7000);
 
-    expect(is.grossProfit).toBe(-20000 - 12000); // -32000
-    expect(is.operatingIncome).toBe(-32000 - 7000); // -39000
+    expect(is.grossProfit).toBe(0 - 12000); // -12000
+    expect(is.operatingIncome).toBe(-12000 - 7000); // -19000
   });
 
   it("net income reflects revenue − cost − expense (no 7/8/9 entries in fixture)", () => {
@@ -102,8 +102,8 @@ describe("computeIncomeStatement on demo fixture", () => {
     expect(is.nonOperatingIncome.rows).toEqual([]);
     expect(is.nonOperatingExpense.rows).toEqual([]);
     expect(is.incomeTax.rows).toEqual([]);
-    expect(is.preTaxIncome).toBe(-39000);
-    expect(is.netIncome).toBe(-39000);
+    expect(is.preTaxIncome).toBe(-19000);
+    expect(is.netIncome).toBe(-19000);
   });
 
   it("draft entries with account 9999 do NOT leak into income tax section", () => {
@@ -132,10 +132,11 @@ describe("computeIncomeStatement on demo fixture", () => {
     });
 
     // entry3 (02-05,折讓): 6133 -1000
-    // entry5 (02-15,反向): 4101 -20000
+    // entry4 (02-10, reversed): 4101 +20000
+    // entry5 (02-15, posted 反向 entry4): 4101 -20000 → 反向 pair 淨 0
     // entry6 (02-28,折舊): 6173 +5000
     // entry1/entry2 (1 月) 被排除
-    expect(is.operatingRevenue.subtotal).toBe(-20000);
+    expect(is.operatingRevenue.subtotal).toBe(0);
     expect(is.cogs.subtotal).toBe(0);
     // 6133 -1000 + 6173 +5000 = 4000
     expect(is.opex.subtotal).toBe(4000);
@@ -183,9 +184,9 @@ describe("computeBalanceSheet on demo fixture", () => {
       asOfDate: "2026-12-31",
     });
 
-    // Posted 累計:
+    // Booked 累計 (entry4 reversed + entry5 反向 pair 相抵):
     // 1111: debit 1050 - credit 3300 = -2250
-    // 1112: 0 - 12600 - 21000 = -33600
+    // 1112: entry2 -12600 + entry4 +21000 + entry5 -21000 = -12600
     // 1147: (300+600) - 50 = 850
     // 1611: 0 - 5000 = -5000 (contra-asset,保留負數,不換邊)
     const assetByCode = Object.fromEntries(
@@ -193,16 +194,13 @@ describe("computeBalanceSheet on demo fixture", () => {
     );
     expect(assetByCode).toEqual({
       "1111": -2250,
-      "1112": -33600,
+      "1112": -12600,
       "1147": 850,
       "1611": -5000,
     });
 
-    // 2271: credit 0 - debit 1000 = -1000 (entry5 debit,反向)
-    // 註:2271 不在 ACCOUNTS 字典中,accountLabel fallback 只回 code
-    expect(bs.liabilities.rows).toEqual([
-      { accountCode: "2271", accountName: "2271", amount: -1000 },
-    ]);
+    // 2271: entry4 credit 1000 + entry5 debit 1000 → 反向 pair 淨 0,row 不應出現
+    expect(bs.liabilities.rows).toEqual([]);
   });
 
   it("synthesizes 3440 row equal to cumulative net income; equity face is empty in demo", () => {
@@ -214,13 +212,14 @@ describe("computeBalanceSheet on demo fixture", () => {
       asOfDate: "2026-12-31",
     });
 
-    // 累計 net income through 2026-12-31 == -39000(demo 內所有 P&L 活動)
-    expect(bs.netIncomeToDate).toBe(-39000);
+    // 累計 net income through 2026-12-31 == -19000(demo 內所有 P&L 活動;
+    // entry4/entry5 反向 pair 對 4101 / 2271 / 1112 淨 0)
+    expect(bs.netIncomeToDate).toBe(-19000);
     expect(bs.equity.rows).toHaveLength(1);
     expect(bs.equity.rows[0]).toEqual({
       accountCode: "3440",
       accountName: "3440 本期損益(稅後)",
-      amount: -39000,
+      amount: -19000,
     });
   });
 
@@ -233,10 +232,10 @@ describe("computeBalanceSheet on demo fixture", () => {
       asOfDate: "2026-12-31",
     });
 
-    // 資產合計 = -2250 - 33600 + 850 - 5000 = -40000
-    expect(bs.totalAssets).toBe(-40000);
-    // 負債 -1000 + 權益 -39000 = -40000
-    expect(bs.totalLiabilitiesAndEquity).toBe(-40000);
+    // 資產合計 = -2250 - 12600 + 850 - 5000 = -19000
+    expect(bs.totalAssets).toBe(-19000);
+    // 負債 0 + 權益 -19000 = -19000
+    expect(bs.totalLiabilitiesAndEquity).toBe(-19000);
     expect(bs.imbalance).toBe(0);
     expect(bs.isBalanced).toBe(true);
   });
@@ -270,7 +269,7 @@ describe("computeBalanceSheet on demo fixture", () => {
       asOfDate: "2026-05-15",
     });
 
-    // 所有 entry_date <= 2026-05-15 都會被收進來,所以 total 仍 -40000;
+    // 所有 entry_date <= 2026-05-15 都會被收進來,所以 total 仍 -19000;
     // 為了測「無資料 + 平衡」,改用未來客戶 id
     const bsEmpty = computeBalanceSheet({
       entries: demo.entries,

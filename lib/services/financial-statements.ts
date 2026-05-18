@@ -127,25 +127,28 @@ function buildSection(totals: AccountTotals, cls: AccountClass): ReportSection {
   return { rows, subtotal };
 }
 
-// Reversed entries are excluded; the matching reversal entry itself is `posted` with
-// flipped sides, so cancellation falls out automatically without double-counting.
-function aggregatePostedLines(
+// Both `posted` and `reversed` entries contribute to totals. `reversed` is a UI marker
+// meaning "this entry has a matching reversal" — not "exclude from sums." The reversal
+// entry is itself `posted` with flipped sides, so summing the pair cancels arithmetically
+// to zero. This matches standard accounting practice where both entries stay on the books
+// for audit. Only `draft` (never posted) is excluded.
+function aggregateBookedLines(
   entries: readonly JournalEntry[],
   lines: readonly JournalEntryLine[],
   clientId: string,
   predicate: (entryDate: string) => boolean,
 ): AccountTotals {
-  const postedEntryIds = new Set<string>();
+  const bookedEntryIds = new Set<string>();
   for (const e of entries) {
     if (e.client_id !== clientId) continue;
-    if (e.status !== "posted") continue;
+    if (e.status === "draft") continue;
     if (!predicate(e.entry_date)) continue;
-    postedEntryIds.add(e.id);
+    bookedEntryIds.add(e.id);
   }
 
   const totals: AccountTotals = new Map();
   for (const l of lines) {
-    if (!postedEntryIds.has(l.journal_entry_id)) continue;
+    if (!bookedEntryIds.has(l.journal_entry_id)) continue;
     const cur = totals.get(l.account_code);
     if (cur) {
       cur.debit += l.debit;
@@ -193,7 +196,7 @@ function buildIncomeStatementFromTotals(
 
 export function computeIncomeStatement(input: ComputeIsInput): IncomeStatement {
   const { entries, lines, clientId, fromDate, toDate } = input;
-  const totals = aggregatePostedLines(
+  const totals = aggregateBookedLines(
     entries,
     lines,
     clientId,
@@ -202,22 +205,24 @@ export function computeIncomeStatement(input: ComputeIsInput): IncomeStatement {
   return buildIncomeStatementFromTotals(totals, fromDate, toDate);
 }
 
-// v1 has no Phase 11 closing entry, so 4/5/6/7/8/9 balances stay on the P&L accounts
-// instead of rolling into 3432 累積盈虧. BS must absorb the entire cumulative P&L into
-// equity to balance; the synthetic 3440 row is what carries it. Once closing entries
-// land, this synthetic value will naturally shrink to just the current fiscal year.
-//
-// PHASE 11 MIGRATION: when fiscal-year closing entries become real (they move 4/5/6/7/8/9
-// balances into 3432 累積盈虧 and 3440 本期損益), narrow the IS range below from
-// "0001-01-01" to `${asOfDate.slice(0,4)}-01-01` so the synthetic row only carries the
-// current fiscal year's P&L. Prior years will already be in 3432 from closing entries,
-// so summing them again would double-count. Until Phase 11 ships, cumulative is correct.
+// v1 has no Phase 11 closing entry, so 4/5/6/7/8/9 balances stay on the P&L accounts.
+// BS must absorb the entire cumulative P&L into equity to balance; this synthetic 3440
+// row is what carries it. The IS range used to compute it (see below) is intentionally
+// all-time, not current-fiscal-year, because no prior-year P&L has rolled into retained
+// earnings yet — if we only summed the current year, prior-year P&L would have nowhere
+// to live and the BS would not balance.
 export const SYNTHETIC_NET_INCOME_CODE = "3440";
+
+// PHASE 11 MIGRATION: when closing entries become real, they will move each fiscal year's
+// P&L into 3432 累積盈虧 (prior years' retained earnings) and 3440 本期損益 (current
+// year). At that point, narrow the IS range below from "0001-01-01" to
+// `${asOfDate.slice(0,4)}-01-01` so this synthetic 3440 only carries the current fiscal
+// year — otherwise prior years would be double-counted (once in real 3432, once here).
 
 export function computeBalanceSheet(input: ComputeBsInput): BalanceSheet {
   const { entries, lines, clientId, asOfDate } = input;
 
-  const totals = aggregatePostedLines(
+  const totals = aggregateBookedLines(
     entries,
     lines,
     clientId,

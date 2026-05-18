@@ -232,7 +232,9 @@ function DatePickerInput({
       <PopoverContent className="w-auto p-0" align="start">
         <Calendar
           mode="single"
-          selected={value ? new Date(value) : undefined}
+          // Append T00:00:00 so the date string parses as local midnight, not UTC midnight —
+          // otherwise the Calendar highlights the previous day in timezones behind UTC.
+          selected={value ? new Date(value + "T00:00:00") : undefined}
           onSelect={(d) => {
             if (d) onChange(formatDateToISO(d));
           }}

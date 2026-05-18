@@ -62,6 +62,7 @@
 | 10 | 資料存取架構 | **Supabase.js SDK 為主，少量 PL/pgSQL RPC 為輔**：純讀、單表 CRUD、status 翻轉走 SDK；跨表原子操作（`confirm_invoice` / `regenerate_draft_entry` / `post_journal_entries`）走 RPC | SDK + RPC 是當前唯一一致的 client；ORM 混合架構（Drizzle）為未來選項，見 §12 |
 | 11 | 模組劃分與編輯權限 | **VAT 模組與 GL 模組正交**：VAT 模組（invoices / allowances / tax_filing_periods）服務申報，鎖點 `tax_filing_period.status='filed'`；GL 模組（documents / journal_entries / journal_entry_lines / fiscal_year_closes / audit_trails）服務帳本，鎖點 `fiscal_year_closes`。Post 為單向轉送點。**Posted journal_entry 在 GL 年度未關帳前允許 in-place edit**（保留 voucher_no，必填 reason 寫入 audit_trails）；跨年度才走反向分錄 / 前期損益調整 | 對應主流 ERP 模組分離；in-place edit 對應實務「key-in 錯誤直接修正」訴求；改動詳見 §1 第 4 點、§5.6.1、§5.8 |
 | 12 | Audit 軌跡 | v1 引入 `audit_trails` 表（§3.9），用於 in-place edit 之 diff log。v1 必填寫入點：journal_entry posted 後的編輯 + 沖銷（reason 必填）；其餘事件（create/delete/post 等）為可選擴充。本表為**通用模組**，未來可服務跨表 audit | 沒有 audit log，posted in-place edit 等於「悄悄塗改」；audit_trails 是 #11 政策的必要前提 |
+| 13 | 折讓分錄推導方式 | 折讓**不**用固定樣板，而是**鏡像原發票之 posted entry 結構**：科目（費用 / 收入 / 結算）從原 entry 的 lines 取出、借貸對調、金額替換為折讓本身的 amount / taxAmount。若原發票對應之 entry 不存在（罕見：原發票未上傳或在他客戶名下），UI 退回請員工手動指定費用 / 收入科目。詳見 §5.2 | 樣板法無法正確處理「原發票為不可扣抵（費用吸收稅額,2 行）」的情境——折讓必須鏡像為 2 行才平衡。且若員工在 draft 階段改過原 entry 之科目，折讓亦應追隨該編輯,而非從 invoice 端 OCR 值重新推導 |
 
 ---
 
@@ -573,18 +574,47 @@ flowchart TD
 >
 > **依賴**：`lib/data/accounts.ts` 須能查出 `1111 現金` 與 `1112 銀行存款` 兩個常數代碼（已存在）。
 
-### 5.2 分錄樣板
+### 5.2 分錄推導
+
+#### 5.2.1 發票分錄樣板（固定）
+
+發票走固定樣板，依「進銷項 × 可扣抵」三種情境決定借貸結構。
 
 | 來源類型 | 借方 (Dr.) | 貸方 (Cr.) |
 |---|---|---|
 | **進項發票（可扣抵）** | 費用科目（銷售額），`1147 進項稅額`（稅額） | `1112 銀行存款`（總額） |
 | **進項發票（不可扣抵）** | 費用科目（總額，含稅） | `1112 銀行存款`（總額） |
 | **銷項發票** | `1112 銀行存款`（總額） | `4101 營業收入`（銷售額），`2271 銷項稅額`（稅額） |
-| **進項折讓** | `1112 銀行存款`（總額） | 費用科目（折讓額），`1147 進項稅額`（折讓稅額） |
-| **銷項折讓** | `4101 營業收入`（折讓額），`2271 銷項稅額`（折讓稅額） | `1112 銀行存款`（總額） |
 
-**特例：`extracted_data.account` 缺漏**
-若進項發票尚無對應科目（Gemini 未填或員工修正），憑證仍會產生但該行於 UI 標記為待補；缺科目則不允許 post。
+**`extracted_data.account` 之精確性保證**
+發票 `confirmed` 之前置條件即為員工選妥 `extracted_data.account`（[invoice-review-dialog.tsx](../../components/invoice-review-dialog.tsx) 之 Zod 必填）。故進入 confirm RPC 時 account 必然非空,`computeEntryFromInvoice` 對缺 account 之進項發票直接 throw（fail loud,不容許靜默退化）。
+
+#### 5.2.2 折讓分錄：鏡像原發票之 posted entry（Decision #13）
+
+折讓**不**用固定樣板,而是**鏡像原發票之 posted entry 結構**：
+
+1. **查原 entry**：透過 `allowance.original_invoice_id` → `invoices.id` → `journal_entries WHERE document_id = invoices.document_id`,取該 entry 之 `lines`
+2. **抽取角色**（依借貸）：
+   - 進項折讓（原 invoice 為進項）：原 entry 為 `Dr 費用 [Dr 進項稅額] / Cr 結算`,抽出 `expenseAccount` / `settlementAccount` / `hasSeparateTaxLine`
+   - 銷項折讓（原 invoice 為銷項）：原 entry 為 `Dr 結算 / Cr 4101 / Cr 2134`,抽出 `revenueAccount` / `settlementAccount`
+3. **借貸對調並替換金額**為折讓本身之 `amount` / `taxAmount`
+
+**樣板結構**（會被推導出來,僅供對照）：
+
+| 來源類型 | 借方 (Dr.) | 貸方 (Cr.) | 行數 |
+|---|---|---|---|
+| **進項折讓**（原為可扣抵） | 原 entry 之結算科目（折讓總額）| 原 entry 之費用科目（折讓額）+ `1147 進項稅額`（折讓稅額）| 3 |
+| **進項折讓**（原為不可扣抵） | 原 entry 之結算科目（折讓總額）| 原 entry 之費用科目（折讓總額,含稅併入）| 2 |
+| **銷項折讓** | 原 entry 之 `4101 營業收入`（折讓額）+ `2271 銷項稅額`（折讓稅額）| 原 entry 之結算科目（折讓總額）| 3 |
+
+**為何要鏡像而非套樣板**（Decision #13 之 rationale）：
+
+1. **非可扣抵之 2 行結構樣板表達不出**：原發票若為不可扣抵,費用已吸收稅額成單行（`Dr 6120 交際費 210 / Cr 1111 現金 210`）。折讓的 offset 必須也是 2 行（`Dr 結算 / Cr 費用 含稅`）；樣板硬要拆 3 行會破壞「能對得起來」這個會計直覺,且需要憑空生出 `1147 進項稅額` 一行（原本沒有）—— 不應該無中生有。
+2. **追隨原 entry 之 staff 編輯**：員工於 draft 階段可能將 OCR 推來的科目改掉（如 `6113 旅費` → `5404 旅費-(製)`）。折讓應反映該編輯後之科目,而非從 `invoice.extracted_data.account` 重新解析（後者是 OCR snapshot,不一定是真正過帳的科目）。
+3. **結算科目鏡像原 entry**：若原發票走銀行（10,500 → `1112`）,折讓退款應也走銀行（1,050 雖 ≤ 10,000,但不應改走現金）—— 結算反映「資金實際流動的渠道」,不該因為金額小而改判。
+
+**`original_invoice_id` 找不到對應 entry 的退路**（罕見）：
+若 `allowance.original_invoice_id` 為 NULL 或對應 invoice 之 entry 不存在（原發票未上傳、原發票屬他客戶、或原 entry 已被 hard delete）—— allowance review dialog 需要員工手動指定費用 / 收入科目 + 結算科目,服務層再用這些值合成一個 minimal `originalEntry` 餵給 `computeEntryFromAllowance`。此 UI 流程由 Phase 7（confirm_allowance RPC dispatch）處理,純函式本身不關心。
 
 ### 5.3 範例
 

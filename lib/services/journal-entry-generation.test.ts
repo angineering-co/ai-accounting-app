@@ -7,6 +7,7 @@ import {
   ACCT_OUTPUT_TAX,
   ACCT_REVENUE,
   CASH_THRESHOLD,
+  type ComputedEntry,
   computeEntryFromAllowance,
   computeEntryFromInvoice,
   pickSettlementAccount,
@@ -166,8 +167,8 @@ describe("computeEntryFromInvoice — 銷項", () => {
   });
 });
 
-describe("computeEntryFromInvoice — 缺 extracted_data.account placeholder", () => {
-  it("emits null account_code for the expense line (進項可扣抵)", () => {
+describe("computeEntryFromInvoice — extracted_data.account precondition", () => {
+  it("throws when input invoice's account is missing (precondition: must be confirmed)", () => {
     const invoice = makeInvoice({
       in_or_out: "in",
       extracted_data: {
@@ -176,29 +177,23 @@ describe("computeEntryFromInvoice — 缺 extracted_data.account placeholder", (
         tax: 50,
         totalAmount: 1_050,
         deductible: true,
-        // no account
+        // no account → caller violated precondition
       },
     });
-    const { lines } = computeEntryFromInvoice(invoice);
-    expect(lines[0]?.account_code).toBeNull();
-    expect(lines[1]?.account_code).toBe(ACCT_INPUT_TAX);
-    expect(lines[2]?.account_code).toBe(ACCT_CASH);
-    expect(sumBalance(lines)).toEqual({ debit: 1_050, credit: 1_050 });
+    expect(() => computeEntryFromInvoice(invoice)).toThrow(/missing extracted_data\.account/);
   });
 
-  it("emits null account_code for the expense line (進項不可扣抵)", () => {
+  it("does NOT require account for output invoices (銷項 uses fixed 4101)", () => {
     const invoice = makeInvoice({
-      in_or_out: "in",
+      in_or_out: "out",
       extracted_data: {
         totalSales: 100,
         tax: 5,
         totalAmount: 105,
-        deductible: false,
+        // no account — fine for output
       },
     });
-    const { lines } = computeEntryFromInvoice(invoice);
-    expect(lines[0]?.account_code).toBeNull();
-    expect(lines[1]?.account_code).toBe(ACCT_CASH);
+    expect(() => computeEntryFromInvoice(invoice)).not.toThrow();
   });
 
   it("defaults deductible=true when extracted_data omits it", () => {
@@ -235,7 +230,22 @@ describe("computeEntryFromInvoice — entry_date fallback", () => {
   });
 });
 
-describe("computeEntryFromAllowance — 進項折讓", () => {
+describe("computeEntryFromAllowance — 進項折讓 (mirrors deductible original)", () => {
+  // Original was: Dr 6113 旅費 10,000 / Dr 1144 進項稅額 500 / Cr 1112 銀行存款 10,500
+  const originalEntry = computeEntryFromInvoice(
+    makeInvoice({
+      in_or_out: "in",
+      extracted_data: {
+        date: "2026/01/15",
+        totalSales: 10_000,
+        tax: 500,
+        totalAmount: 10_500,
+        deductible: true,
+        account: "6113 旅費",
+      },
+    }),
+  );
+
   const allowance = makeAllowance({
     in_or_out: "in",
     extracted_data: {
@@ -247,14 +257,14 @@ describe("computeEntryFromAllowance — 進項折讓", () => {
     },
   });
 
-  const computed = computeEntryFromAllowance(allowance);
+  const computed = computeEntryFromAllowance(allowance, originalEntry);
 
-  it("emits Dr 結算 / Cr (費用待補 + 進項稅額) per §5.2", () => {
+  it("mirrors original: Dr 銀行存款 / Cr 旅費 / Cr 進項稅額 using allowance amounts", () => {
     expect(computed.voucher_type).toBe("收入");
     expect(computed.entry_date).toBe("2026-06-10");
     expect(computed.lines).toEqual([
-      { account_code: ACCT_CASH, debit: 1_050, credit: 0, description: null },
-      { account_code: null, debit: 0, credit: 1_000, description: null },
+      { account_code: ACCT_BANK, debit: 1_050, credit: 0, description: null },
+      { account_code: "6113", debit: 0, credit: 1_000, description: null },
       { account_code: ACCT_INPUT_TAX, debit: 0, credit: 50, description: null },
     ]);
   });
@@ -262,41 +272,158 @@ describe("computeEntryFromAllowance — 進項折讓", () => {
   it("balances", () => {
     expect(sumBalance(computed.lines)).toEqual({ debit: 1_050, credit: 1_050 });
   });
+
+  it("settlement mirrors original (bank), not §5.1 threshold on allowance amount", () => {
+    // §5.1 threshold on 1,050 alone would pick 現金; mirror picks 銀行存款 because the original did.
+    expect(computed.lines[0]?.account_code).toBe(ACCT_BANK);
+  });
 });
 
-describe("computeEntryFromAllowance — 銷項折讓", () => {
+describe("computeEntryFromAllowance — 進項折讓 (mirrors non-deductible original)", () => {
+  // Original was: Dr 6120 交際費 210 / Cr 1111 現金 210 (no separate tax line)
+  const originalEntry = computeEntryFromInvoice(
+    makeInvoice({
+      in_or_out: "in",
+      extracted_data: {
+        totalSales: 200,
+        tax: 10,
+        totalAmount: 210,
+        deductible: false,
+        account: "6120 交際費",
+      },
+    }),
+  );
+
+  const allowance = makeAllowance({
+    in_or_out: "in",
+    extracted_data: { date: "2026/07/01", amount: 20, taxAmount: 1 },
+  });
+
+  const computed = computeEntryFromAllowance(allowance, originalEntry);
+
+  it("mirrors non-deductible: 2 lines, tax merged into expense reversal", () => {
+    expect(computed.voucher_type).toBe("收入");
+    expect(computed.lines).toEqual([
+      { account_code: ACCT_CASH, debit: 21, credit: 0, description: null },
+      { account_code: "6120", debit: 0, credit: 21, description: null },
+    ]);
+    expect(sumBalance(computed.lines)).toEqual({ debit: 21, credit: 21 });
+  });
+});
+
+describe("computeEntryFromAllowance — 進項折讓 tracks edited account", () => {
+  it("uses the account from originalEntry, not from any invoice field", () => {
+    // Staff manually edited original draft from 6113 → 5404 (旅費-(製))
+    const originalEntry: ComputedEntry = {
+      voucher_type: "支出",
+      entry_date: "2026-01-15",
+      description: null,
+      lines: [
+        { account_code: "5404", debit: 10_000, credit: 0, description: null },
+        { account_code: ACCT_INPUT_TAX, debit: 500, credit: 0, description: null },
+        { account_code: ACCT_BANK, debit: 0, credit: 10_500, description: null },
+      ],
+    };
+
+    const allowance = makeAllowance({
+      in_or_out: "in",
+      extracted_data: { amount: 1_000, taxAmount: 50 },
+    });
+
+    const { lines } = computeEntryFromAllowance(allowance, originalEntry);
+    expect(lines[1]?.account_code).toBe("5404"); // tracks edit, not the original 6113
+  });
+});
+
+describe("computeEntryFromAllowance — 銷項折讓 (mirrors original output entry)", () => {
+  // Original was: Dr 1112 銀行存款 21,000 / Cr 4101 營業收入 20,000 / Cr 2134 銷項稅額 1,000
+  const originalEntry = computeEntryFromInvoice(
+    makeInvoice({
+      in_or_out: "out",
+      extracted_data: {
+        totalSales: 20_000,
+        tax: 1_000,
+        totalAmount: 21_000,
+      },
+    }),
+  );
+
   const allowance = makeAllowance({
     in_or_out: "out",
     extracted_data: {
       date: "2026/07/15",
-      amount: 20_000,
-      taxAmount: 1_000,
+      amount: 2_000,
+      taxAmount: 100,
       buyerName: "某客戶",
     },
   });
 
-  const computed = computeEntryFromAllowance(allowance);
+  const computed = computeEntryFromAllowance(allowance, originalEntry);
 
-  it("emits Dr (營業收入 + 銷項稅額) / Cr 結算 per §5.2, bank settlement", () => {
+  it("mirrors output: Dr 4101 / Dr 2134 / Cr 銀行存款 using allowance amounts", () => {
     expect(computed.voucher_type).toBe("支出");
     expect(computed.lines).toEqual([
-      { account_code: ACCT_REVENUE, debit: 20_000, credit: 0, description: null },
-      { account_code: ACCT_OUTPUT_TAX, debit: 1_000, credit: 0, description: null },
-      { account_code: ACCT_BANK, debit: 0, credit: 21_000, description: null },
+      { account_code: ACCT_REVENUE, debit: 2_000, credit: 0, description: null },
+      { account_code: ACCT_OUTPUT_TAX, debit: 100, credit: 0, description: null },
+      { account_code: ACCT_BANK, debit: 0, credit: 2_100, description: null },
     ]);
-    expect(sumBalance(computed.lines)).toEqual({ debit: 21_000, credit: 21_000 });
+    expect(sumBalance(computed.lines)).toEqual({ debit: 2_100, credit: 2_100 });
+  });
+});
+
+describe("computeEntryFromAllowance — malformed original entry", () => {
+  it("throws when input original has wrong number of Cr lines", () => {
+    const malformed: ComputedEntry = {
+      voucher_type: "支出",
+      entry_date: "2026-01-15",
+      description: null,
+      lines: [
+        { account_code: "6113", debit: 1_000, credit: 0, description: null },
+      ], // missing Cr settlement
+    };
+    expect(() =>
+      computeEntryFromAllowance(
+        makeAllowance({ in_or_out: "in", extracted_data: { amount: 100, taxAmount: 5 } }),
+        malformed,
+      ),
+    ).toThrow(/exactly 1 Cr/);
+  });
+
+  it("throws when output original has wrong number of Dr lines", () => {
+    const malformed: ComputedEntry = {
+      voucher_type: "收入",
+      entry_date: "2026-01-15",
+      description: null,
+      lines: [
+        { account_code: ACCT_REVENUE, debit: 0, credit: 1_000, description: null },
+      ],
+    };
+    expect(() =>
+      computeEntryFromAllowance(
+        makeAllowance({ in_or_out: "out", extracted_data: { amount: 100, taxAmount: 5 } }),
+        malformed,
+      ),
+    ).toThrow(/exactly 1 Dr/);
   });
 });
 
 describe("computeEntryFromAllowance — entry_date fallback", () => {
   it("falls back to created_at when extracted date is missing", () => {
+    const originalEntry = computeEntryFromInvoice(
+      makeInvoice({
+        in_or_out: "in",
+        extracted_data: {
+          totalSales: 100,
+          tax: 5,
+          totalAmount: 105,
+          account: "6113 旅費",
+        },
+      }),
+    );
     const allowance = makeAllowance({
       created_at: new Date("2026-08-01T00:00:00Z"),
-      extracted_data: {
-        amount: 100,
-        taxAmount: 5,
-      },
+      extracted_data: { amount: 100, taxAmount: 5 },
     });
-    expect(computeEntryFromAllowance(allowance).entry_date).toBe("2026-08-01");
+    expect(computeEntryFromAllowance(allowance, originalEntry).entry_date).toBe("2026-08-01");
   });
 });

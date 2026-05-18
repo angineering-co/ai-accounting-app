@@ -117,20 +117,20 @@
 
 **已交付**：
 - `lib/services/journal-entry-generation.ts`：
-  - `computeEntryFromInvoice(invoice)` → `ComputedEntry { voucher_type, entry_date, description, lines[] }`
-  - `computeEntryFromAllowance(allowance)` → 同上
-  - 涵蓋 §5.2 全部 5 樣板：進項可扣抵（3 行）/ 不可扣抵（2 行,費用吸收稅額）/ 銷項（3 行）/ 進項折讓（3 行）/ 銷項折讓（3 行）
-  - §5.1 結算科目門檻：`pickSettlementAccount()` ≤ 10,000 → `1111`，> 10,000 → `1112`
+  - `computeEntryFromInvoice(invoice)` → `ComputedEntry { voucher_type, entry_date, description, lines[] }`,涵蓋 §5.2.1 全部 3 發票樣板：進項可扣抵（3 行）/ 不可扣抵（2 行,費用吸收稅額）/ 銷項（3 行）
+  - `computeEntryFromAllowance(allowance, originalEntry)` — **Decision #13**：折讓不用樣板,而是鏡像原發票之 posted entry 結構（科目從原 entry lines 取出 → 借貸對調 → 替換金額為折讓 amount / taxAmount）。涵蓋進項折讓（鏡像可扣抵 3 行 / 鏡像不可扣抵 2 行 / 追隨原 entry 之科目編輯）/ 銷項折讓（鏡像 3 行）
+  - 缺對應 entry 之退路：純函式本身不處理（caller 須合成 minimal originalEntry,詳 §5.2.2）
+  - §5.1 結算科目門檻：`pickSettlementAccount()` ≤ 10,000 → `1111`，> 10,000 → `1112`（**僅發票走此門檻;折讓鏡像原 entry 之結算,不重跑門檻**）
   - 固定科目常數：`ACCT_INPUT_TAX='1144'` / `ACCT_OUTPUT_TAX='2134'` / `ACCT_REVENUE='4101'` / `ACCT_CASH='1111'` / `ACCT_BANK='1112'`（§5.1 doc 中 `1147/2271` 為舊代碼;實際 `lib/data/accounts.ts` 為 `1144/2134`,以實際為準）
-  - `ComputedEntryLine.account_code` 為 `string | null`：缺 `extracted_data.account`（進項發票）或進項折讓的費用科目（須查原發票）時為 null,Phase 7 RPC 須拒絕含 null 之 entry 過帳
+  - `ComputedEntryLine.account_code: string`（不可為 null）：發票走 `confirmed` 前 staff 必選 account 之前置條件保證,缺則 throw fail loud;折讓由原 entry 帶入,結構上不可能 null
   - `entry_date` 格式：`extracted_data.date`（YYYY/MM/DD）→ YYYY-MM-DD；缺漏退回 `created_at::date`（UTC,與 Phase 6 backfill convention 一致）
-- `lib/services/journal-entry-generation.test.ts`：16 個測試,cases 涵蓋 §5.3 範例 A（10,500 進項可扣抵）/ B（210 進項不可扣抵）/ 銷項 / 進項折讓 / 銷項折讓 / 缺 account placeholder（可扣抵 + 不可扣抵）/ deductible 預設值 / entry_date fallback / threshold boundary / 借貸平衡 invariant
+- `lib/services/journal-entry-generation.test.ts`：21 個測試,cases 涵蓋 §5.3 範例 A（10,500 進項可扣抵）/ B（210 進項不可扣抵）/ 銷項 / 進項折讓鏡像可扣抵 / 進項折讓鏡像不可扣抵（2 行）/ 銷項折讓 / 折讓追隨原 entry 科目編輯 / 結算鏡像而非重跑門檻 / 缺 account throw / output 不需 account / deductible 預設值 / entry_date fallback / threshold boundary / malformed original entry throw / 借貸平衡 invariant
 - `lib/data/accounts.ts`：
   - `extractAccountCode(fullString)`：`"5102 旅費"` → `"5102"`,支援 4–6 位數代碼（`"119901 應退稅額"` → `"119901"`）
   - 模組載入時 runtime check：所有 `ACCOUNT_LIST` 字串符合 `/^\d{4,6} \S/`（plan doc 寫 `/^\d{4} \S/` 但 ACCOUNT_LIST 已有 6 位數子分類代碼,實作放寬到 4-6 與 `ACCOUNT_CODE_REGEX` 一致）
 - `lib/data/accounts.test.ts`：6 個測試,覆蓋 4 位數 / 6 位數 / 多空白（split 第一個）/ 無空白 throw / 前綴非數字 throw / 全 `ACCOUNT_LIST` round-trip
 
-**驗證紀錄**：`npm run type-check` 通過；`npx eslint` 對新增 4 個檔案無錯誤；`npm run test:run` 130/130 全綠（含新增 22）。
+**驗證紀錄**：`npm run type-check` 通過；`npx eslint` 對新增 4 個檔案無錯誤；`npm run test:run` 135/135 全綠（含新增 27）。
 
 **退出條件**：所有樣板的 debit / credit 與 account_code 都通過單元測試。
 
@@ -273,19 +273,28 @@
 
 **改動**：
 - Migration `<ts>_create_confirm_invoice_rpc.sql`：PL/pgSQL — 取 invoice → upsert journal_entry（status=draft、voucher_no=NULL、`document_id = invoice.document_id`）→ replace lines。Idempotent。若 `invoice.document_id` 為 NULL（理論上不會發生,Phase 6 之後有 `NOT NULL` 約束保護）→ RAISE EXCEPTION fail loud。
-- Migration `<ts>_create_confirm_allowance_rpc.sql`：**同樣邏輯處理 allowance**（樣板不同：進項折讓 / 銷項折讓兩種）
-- Migration `<ts>_create_regenerate_draft_entry_rpc.sql`：吃 `entity_type` + `entity_id`（invoice 或 allowance），要求對應 entry.status='draft' 否則 RAISE EXCEPTION。Lines wholesale DELETE + INSERT，header in-place UPDATE 保 entry.id（§5 重生策略）
+- Migration `<ts>_create_confirm_allowance_rpc.sql`：**處理折讓 + Decision #13 鏡像邏輯**。流程：
+  1. 取 allowance + 透過 `allowance.original_invoice_id` → invoices → `journal_entries WHERE document_id = invoices.document_id` → `journal_entry_lines` 取原 entry 之 lines
+  2. 在 RPC 內以 PL/pgSQL 重現 `computeEntryFromAllowance` 之鏡像邏輯（抽角色 → 借貸對調 → 替換金額），或先在 JS 端組好 `ComputedEntry` 傳入 RPC 之 JSONB 參數（後者較簡單,允許 reuse Phase 4 純函式）
+  3. Upsert journal_entry（status=draft）→ replace lines。Idempotent
+  4. 若 `original_invoice_id` 為 NULL 或對應 entry 不存在 → **不**在 RPC 內 throw,而是由上游 service layer 偵測並引導 UI 請員工指定科目（合成 minimal `originalEntry` 後 retry）
+- Migration `<ts>_create_regenerate_draft_entry_rpc.sql`：吃 `entity_type` + `entity_id`（invoice 或 allowance），要求對應 entry.status='draft' 否則 RAISE EXCEPTION。Lines wholesale DELETE + INSERT，header in-place UPDATE 保 entry.id（§5 重生策略）。**Allowance 之 regenerate 同樣需要重新 lookup 原 entry 並重跑鏡像邏輯**（因原 entry 可能在這段時間被 edit / reverse）
 - `lib/services/invoice.ts::updateInvoice`：status 翻到 confirmed → `supabase.rpc('confirm_invoice')`；編輯 confirmed invoice 且 entry='draft' → `regenerate_draft_entry`
-- `lib/services/allowance.ts`：**鏡像 invoice 的所有改動** — `updateAllowance` 同樣派發到 `confirm_allowance` / `regenerate_draft_entry`
+- `lib/services/allowance.ts`：**鏡像 invoice 的所有改動 + 多一步「原 entry 解析」**。dispatch 至 `confirm_allowance` 前,service layer 先：
+  1. 嘗試解析 `original_invoice_id` → original entry
+  2. 找到 → 直接呼叫 RPC（RPC 內部自行 lookup 並組鏡像）
+  3. 找不到 → 觸發 UI「請指定費用 / 收入科目」對話框,員工指定後合成 minimal originalEntry 傳給 service 再夾帶進 RPC
+- `components/allowance-review-dialog.tsx`：當 `original_invoice_id` 解析失敗時,顯示「請手動指定科目」區塊（費用/收入科目 dropdown + 結算科目 dropdown）;此區塊僅在 `original_invoice_id` 對應 entry 不存在時出現,正常 path 不增 friction
 
 **驗證**：
 - Integration tests `tests/integration/services/journal-entry-generation.test.ts`：
-  - 確認新 invoice → draft entry + lines 正確（4 種樣板：進項可扣抵 / 不可扣抵 / 銷項 / 缺 account）
-  - **確認新 allowance → draft entry + lines 正確（2 種樣板：進項折讓 / 銷項折讓）**
+  - 確認新 invoice → draft entry + lines 正確（3 種樣板：進項可扣抵 / 不可扣抵 / 銷項）
+  - **確認新 allowance → draft entry 鏡像原 entry 正確**（4 cases：原可扣抵 → 折讓 3 行 / 原不可扣抵 → 折讓 2 行 / 銷項折讓 3 行 / 原 entry 之科目曾被 staff 編輯 → 折讓追隨該編輯）
+  - **`original_invoice_id` 找不到對應 entry → service 引導 UI 補科目;補完後 confirm 走 minimal originalEntry 路徑成功**
   - 編輯已 confirmed invoice（draft 已存在）→ entry.id 保留、lines 整批替換
-  - 編輯已 confirmed allowance（draft 已存在）→ 同上
+  - 編輯已 confirmed allowance（draft 已存在）→ 同上,且**會 re-lookup 原 entry**（測試：原 entry 在折讓 confirm 後被 staff 改科目 → regenerate 折讓 → 折讓追隨新科目）
   - 編輯已 confirmed invoice / allowance 但 entry 已 posted → regenerate 拒絕
-- 手動：confirm 一張 invoice + 一張 allowance → 進傳票列表 → 兩筆 draft 正確顯示
+- 手動：confirm 一張 invoice → 對應產生 draft entry → 上傳一張對應之折讓 → confirm → 折讓 entry 之科目與原 invoice entry 完全一致（含結算渠道）
 
 **退出條件**：所有 confirmed invoice / allowance 都自動產生對應 draft entry。
 

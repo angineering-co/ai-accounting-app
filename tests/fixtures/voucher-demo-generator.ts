@@ -196,13 +196,13 @@ export function generateVoucherDemoData(
     updated_at: at("2026-01-16T10:00:00Z"),
   });
   lines.push(
-    makeLine({ journal_entry_id: entry1Id, line_number: 1, account_code: "6133", debit: 3000, description: "文具用品費" }),
-    makeLine({ journal_entry_id: entry1Id, line_number: 2, account_code: "1147", debit: 300, description: "進項稅額" }),
+    makeLine({ journal_entry_id: entry1Id, line_number: 1, account_code: "6112", debit: 3000, description: "文具用品費" }),
+    makeLine({ journal_entry_id: entry1Id, line_number: 2, account_code: "1144", debit: 300, description: "進項稅額" }),
     makeLine({ journal_entry_id: entry1Id, line_number: 3, account_code: "1111", credit: 3300, description: "現金" }),
   );
 
   // ---------- Entry 2: posted-edited, 進項可扣抵, doc2 ----------
-  // 模擬：原始 OCR 抓錯科目（5102 旅費 → 6133 文具用品費），員工 in-place edit 修正
+  // 模擬：原始 OCR 抓錯科目（6113 旅費 → 6112 文具用品），員工 in-place edit 修正
   const entry2Id = nextId();
   entries.push({
     id: entry2Id,
@@ -222,8 +222,8 @@ export function generateVoucherDemoData(
     updated_at: at("2026-01-22T15:30:00Z"), // 編輯時間
   });
   lines.push(
-    makeLine({ journal_entry_id: entry2Id, line_number: 1, account_code: "5102", debit: 12000, description: "旅費" }),
-    makeLine({ journal_entry_id: entry2Id, line_number: 2, account_code: "1147", debit: 600, description: "進項稅額" }),
+    makeLine({ journal_entry_id: entry2Id, line_number: 1, account_code: "6113", debit: 12000, description: "旅費" }),
+    makeLine({ journal_entry_id: entry2Id, line_number: 2, account_code: "1144", debit: 600, description: "進項稅額" }),
     makeLine({ journal_entry_id: entry2Id, line_number: 3, account_code: "1112", credit: 12600, description: "銀行存款" }),
   );
   // audit_trails 紀錄編輯前的 snapshot
@@ -238,8 +238,8 @@ export function generateVoucherDemoData(
         description: "出差旅費 12,600（OCR 誤抓為文具用品費，後修正）",
       },
       lines: [
-        { line_number: 1, account_code: "6133", debit: 12000, credit: 0, description: "文具用品費（OCR 誤判）" },
-        { line_number: 2, account_code: "1147", debit: 600, credit: 0, description: "進項稅額" },
+        { line_number: 1, account_code: "6112", debit: 12000, credit: 0, description: "文具用品費（OCR 誤判）" },
+        { line_number: 2, account_code: "1144", debit: 600, credit: 0, description: "進項稅額" },
         { line_number: 3, account_code: "1112", debit: 0, credit: 12600, description: "銀行存款" },
       ],
     },
@@ -269,8 +269,8 @@ export function generateVoucherDemoData(
   });
   lines.push(
     makeLine({ journal_entry_id: entry3Id, line_number: 1, account_code: "1111", debit: 1050, description: "現金" }),
-    makeLine({ journal_entry_id: entry3Id, line_number: 2, account_code: "6133", credit: 1000, description: "文具用品費（折讓）" }),
-    makeLine({ journal_entry_id: entry3Id, line_number: 3, account_code: "1147", credit: 50, description: "進項稅額（折讓）" }),
+    makeLine({ journal_entry_id: entry3Id, line_number: 2, account_code: "6112", credit: 1000, description: "文具用品費（折讓）" }),
+    makeLine({ journal_entry_id: entry3Id, line_number: 3, account_code: "1144", credit: 50, description: "進項稅額（折讓）" }),
   );
 
   // ---------- Entry 4: 原本 posted, 後被沖銷, doc4 ----------
@@ -295,7 +295,7 @@ export function generateVoucherDemoData(
   lines.push(
     makeLine({ journal_entry_id: entry4Id, line_number: 1, account_code: "1112", debit: 21000, description: "銀行存款" }),
     makeLine({ journal_entry_id: entry4Id, line_number: 2, account_code: "4101", credit: 20000, description: "營業收入" }),
-    makeLine({ journal_entry_id: entry4Id, line_number: 3, account_code: "2271", credit: 1000, description: "銷項稅額" }),
+    makeLine({ journal_entry_id: entry4Id, line_number: 3, account_code: "2134", credit: 1000, description: "銷項稅額" }),
   );
 
   // ---------- Entry 5: 反向分錄（沖銷 entry4），posted, no document ----------
@@ -319,7 +319,7 @@ export function generateVoucherDemoData(
   });
   lines.push(
     makeLine({ journal_entry_id: entry5Id, line_number: 1, account_code: "4101", debit: 20000, description: "營業收入（沖銷）" }),
-    makeLine({ journal_entry_id: entry5Id, line_number: 2, account_code: "2271", debit: 1000, description: "銷項稅額（沖銷）" }),
+    makeLine({ journal_entry_id: entry5Id, line_number: 2, account_code: "2134", debit: 1000, description: "銷項稅額（沖銷）" }),
     makeLine({ journal_entry_id: entry5Id, line_number: 3, account_code: "1112", credit: 21000, description: "銀行存款（沖銷）" }),
   );
   // audit_trails 紀錄 entry4 被沖銷
@@ -355,8 +355,8 @@ export function generateVoucherDemoData(
     updated_at: at("2026-02-28T23:59:00Z"),
   });
   lines.push(
-    makeLine({ journal_entry_id: entry6Id, line_number: 1, account_code: "6173", debit: 5000, description: "折舊費用" }),
-    makeLine({ journal_entry_id: entry6Id, line_number: 2, account_code: "1611", credit: 5000, description: "累計折舊" }),
+    makeLine({ journal_entry_id: entry6Id, line_number: 1, account_code: "6124", debit: 5000, description: "折舊費用" }),
+    makeLine({ journal_entry_id: entry6Id, line_number: 2, account_code: "1462", credit: 5000, description: "累計折舊-辦公設備" }),
   );
 
   // ---------- Draft 1: balanced, ready to post（doc5）----------
@@ -379,8 +379,8 @@ export function generateVoucherDemoData(
     updated_at: at("2026-03-01T08:30:00Z"),
   });
   lines.push(
-    makeLine({ journal_entry_id: draft1Id, line_number: 1, account_code: "6133", debit: 5000, description: "文具用品費" }),
-    makeLine({ journal_entry_id: draft1Id, line_number: 2, account_code: "1147", debit: 250, description: "進項稅額" }),
+    makeLine({ journal_entry_id: draft1Id, line_number: 1, account_code: "6112", debit: 5000, description: "文具用品費" }),
+    makeLine({ journal_entry_id: draft1Id, line_number: 2, account_code: "1144", debit: 250, description: "進項稅額" }),
     makeLine({ journal_entry_id: draft1Id, line_number: 3, account_code: "1112", credit: 5250, description: "銀行存款" }),
   );
 
@@ -406,7 +406,7 @@ export function generateVoucherDemoData(
   lines.push(
     makeLine({ journal_entry_id: draft2Id, line_number: 1, account_code: "1111", debit: 8400, description: "現金" }),
     makeLine({ journal_entry_id: draft2Id, line_number: 2, account_code: "4101", credit: 8000, description: "營業收入" }),
-    makeLine({ journal_entry_id: draft2Id, line_number: 3, account_code: "2271", credit: 400, description: "銷項稅額" }),
+    makeLine({ journal_entry_id: draft2Id, line_number: 3, account_code: "2134", credit: 400, description: "銷項稅額" }),
   );
 
   // ---------- Draft 3: 缺科目（無法 post）（doc6）----------
@@ -431,7 +431,7 @@ export function generateVoucherDemoData(
   });
   lines.push(
     makeLine({ journal_entry_id: draft3Id, line_number: 1, account_code: "9999", debit: 1000, description: "（待補科目）" }),
-    makeLine({ journal_entry_id: draft3Id, line_number: 2, account_code: "1147", debit: 50, description: "進項稅額" }),
+    makeLine({ journal_entry_id: draft3Id, line_number: 2, account_code: "1144", debit: 50, description: "進項稅額" }),
     makeLine({ journal_entry_id: draft3Id, line_number: 3, account_code: "1111", credit: 1050, description: "現金" }),
   );
 

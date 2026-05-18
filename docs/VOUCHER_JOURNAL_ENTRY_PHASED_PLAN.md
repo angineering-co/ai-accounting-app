@@ -3,7 +3,8 @@
 > **狀態追蹤**
 > - ✅ Phase 1 完成（domain types + fake generator + dev store；72/72 測試綠）
 > - ✅ Phase 2 完成（傳票 UI 全套：列表 / 詳情 / 編輯 dialog / 審計歷史 / 批次過帳 / 沖銷 dialog / sidebar 入口 / 期別頁雙處連結）
-> - ⏳ Phase 3 待啟動（損益表 / 資產負債表 UI）
+> - ✅ Phase 3 完成（損益表 / 資產負債表 UI）
+> - ✅ Phase 4 完成（純函式：分錄推導 + 帳號代碼解析；130/130 測試綠，新增 22）
 > - 📋 Phase 5.5（新增）：upload pipeline refactor 為 documents-first（為 Upload Classifier 計畫鋪路）
 >
 > **配套文件**：[`VOUCHER_JOURNAL_ENTRY_PLAN.md`](./VOUCHER_JOURNAL_ENTRY_PLAN.md) — 已收斂的設計提案（Decisions #1–#12）。本文件中所有 §x.y 章節編號皆指向設計提案。
@@ -108,23 +109,28 @@
 
 ---
 
-## Phase 4 — 純函式：分錄推導 + 帳號代碼解析
+## ✅ Phase 4 — 純函式：分錄推導 + 帳號代碼解析
+
+**狀態**：完成。
 
 **目標**：把「從 invoice / allowance 推導出分錄」的純邏輯寫滿並用單元測試覆蓋。**仍不碰 DB**。為 phase 7 預備可信賴的計算核心。
 
-**改動**：
+**已交付**：
 - `lib/services/journal-entry-generation.ts`：
-  - `computeEntryFromInvoice(invoice)` → `{ voucher_type, entry_date, description, lines[] }`
+  - `computeEntryFromInvoice(invoice)` → `ComputedEntry { voucher_type, entry_date, description, lines[] }`
   - `computeEntryFromAllowance(allowance)` → 同上
-  - 涵蓋 §5.2 全部樣板：進項可扣抵 / 不可扣抵、銷項、進項折讓、銷項折讓
-  - §5.1 結算科目門檻：≤ 10,000 → `1111`，> 10,000 → `1112`
-- `lib/services/journal-entry-generation.test.ts`：完整單元測試，cases 涵蓋 §5.3 範例 A、B、五種樣板、缺 `extracted_data.account` placeholder
-- `lib/data/accounts.ts`：加 `extractAccountCode(fullString)`（`"5102 旅費"` → `"5102"`）+ runtime check：所有 `ACCOUNT_LIST` 字串符合 `/^\d{4} \S/`
-- `lib/data/accounts.test.ts`：覆蓋 extractAccountCode（單寬空白、多空白、無空白應 throw）
+  - 涵蓋 §5.2 全部 5 樣板：進項可扣抵（3 行）/ 不可扣抵（2 行,費用吸收稅額）/ 銷項（3 行）/ 進項折讓（3 行）/ 銷項折讓（3 行）
+  - §5.1 結算科目門檻：`pickSettlementAccount()` ≤ 10,000 → `1111`，> 10,000 → `1112`
+  - 固定科目常數：`ACCT_INPUT_TAX='1144'` / `ACCT_OUTPUT_TAX='2134'` / `ACCT_REVENUE='4101'` / `ACCT_CASH='1111'` / `ACCT_BANK='1112'`（§5.1 doc 中 `1147/2271` 為舊代碼;實際 `lib/data/accounts.ts` 為 `1144/2134`,以實際為準）
+  - `ComputedEntryLine.account_code` 為 `string | null`：缺 `extracted_data.account`（進項發票）或進項折讓的費用科目（須查原發票）時為 null,Phase 7 RPC 須拒絕含 null 之 entry 過帳
+  - `entry_date` 格式：`extracted_data.date`（YYYY/MM/DD）→ YYYY-MM-DD；缺漏退回 `created_at::date`（UTC,與 Phase 6 backfill convention 一致）
+- `lib/services/journal-entry-generation.test.ts`：16 個測試,cases 涵蓋 §5.3 範例 A（10,500 進項可扣抵）/ B（210 進項不可扣抵）/ 銷項 / 進項折讓 / 銷項折讓 / 缺 account placeholder（可扣抵 + 不可扣抵）/ deductible 預設值 / entry_date fallback / threshold boundary / 借貸平衡 invariant
+- `lib/data/accounts.ts`：
+  - `extractAccountCode(fullString)`：`"5102 旅費"` → `"5102"`,支援 4–6 位數代碼（`"119901 應退稅額"` → `"119901"`）
+  - 模組載入時 runtime check：所有 `ACCOUNT_LIST` 字串符合 `/^\d{4,6} \S/`（plan doc 寫 `/^\d{4} \S/` 但 ACCOUNT_LIST 已有 6 位數子分類代碼,實作放寬到 4-6 與 `ACCOUNT_CODE_REGEX` 一致）
+- `lib/data/accounts.test.ts`：6 個測試,覆蓋 4 位數 / 6 位數 / 多空白（split 第一個）/ 無空白 throw / 前綴非數字 throw / 全 `ACCOUNT_LIST` round-trip
 
-**驗證**：
-- `npm test` 全綠
-- 沒碰 DB、沒改 UI
+**驗證紀錄**：`npm run type-check` 通過；`npx eslint` 對新增 4 個檔案無錯誤；`npm run test:run` 130/130 全綠（含新增 22）。
 
 **退出條件**：所有樣板的 debit / credit 與 account_code 都通過單元測試。
 

@@ -7,6 +7,8 @@ import {
   Settings,
   LogOut,
   BookOpen,
+  Scale,
+  TrendingUp,
 } from "lucide-react";
 import {
   Sidebar,
@@ -50,6 +52,16 @@ export function FirmSidebar() {
           title: "傳票",
           url: `/firm/${firmId}/client/${clientId}/voucher`,
           icon: BookOpen,
+        },
+        {
+          title: "損益表",
+          url: `/firm/${firmId}/client/${clientId}/reports/income-statement`,
+          icon: TrendingUp,
+        },
+        {
+          title: "資產負債表",
+          url: `/firm/${firmId}/client/${clientId}/reports/balance-sheet`,
+          icon: Scale,
         },
       ]
     : [];

@@ -547,3 +547,31 @@ export function accountLabel(code: string): string {
   const acc = ACCOUNTS[code as AccountCode];
   return acc ? `${code} ${acc.name}` : code;
 }
+
+// Strict "<digits> <name>" format used by `extracted_data.account` and dropdowns.
+// 4–6 digits matches `ACCOUNT_CODE_REGEX` in lib/domain/journal-entry.ts (some
+// subcategory codes are 6 digits, e.g. "119901 應退稅額").
+const ACCOUNT_LIST_ENTRY_REGEX = /^\d{4,6} \S/;
+
+for (const entry of ACCOUNT_LIST) {
+  if (!ACCOUNT_LIST_ENTRY_REGEX.test(entry)) {
+    throw new Error(
+      `ACCOUNT_LIST entry "${entry}" must match /^\\d{4,6} \\S/ (digit code, single space, name)`,
+    );
+  }
+}
+
+// Extract the leading account code from a "<digits> <name>" string.
+// e.g. "5102 旅費" → "5102", "119901 應退稅額" → "119901".
+// Splits on the first space; throws if no space is present or the prefix is not all digits.
+export function extractAccountCode(fullString: string): string {
+  const spaceIndex = fullString.indexOf(" ");
+  if (spaceIndex === -1) {
+    throw new Error(`Account string missing space separator: "${fullString}"`);
+  }
+  const code = fullString.slice(0, spaceIndex);
+  if (!/^\d{4,6}$/.test(code)) {
+    throw new Error(`Account code prefix must be 4–6 digits: "${fullString}"`);
+  }
+  return code;
+}

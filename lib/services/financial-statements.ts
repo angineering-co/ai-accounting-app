@@ -268,3 +268,93 @@ export function computeBalanceSheet(input: ComputeBsInput): BalanceSheet {
     imbalance,
   };
 }
+
+export interface LedgerRow {
+  lineId: string;
+  entryId: string;
+  voucherNo: string;
+  entryDate: string; // YYYY-MM-DD
+  status: "posted" | "reversed";
+  description: string | null;
+  debit: number; // this line only
+  credit: number; // this line only
+  runningBalance: number; // natural direction for the account's class
+}
+
+export interface AccountLedger {
+  accountCode: string;
+  accountName: string;
+  accountClass: AccountClass;
+  rows: LedgerRow[];
+  closingBalance: number; // last row's runningBalance, 0 if empty
+}
+
+interface GetAccountLedgerInput {
+  entries: readonly JournalEntry[];
+  lines: readonly JournalEntryLine[];
+  clientId: string;
+  accountCode: string;
+  asOfDate: string;
+}
+
+// Mirrors `aggregateBookedLines` filter contract: client match, status !== "draft",
+// entry_date <= asOfDate. Both posted and reversed entries are included — the matching
+// reversal entry is itself `posted` with flipped sides, so the pair cancels in the running
+// balance (see comment at line 130 above).
+export function getAccountLedger(input: GetAccountLedgerInput): AccountLedger {
+  const { entries, lines, clientId, accountCode, asOfDate } = input;
+  const cls = classifyAccount(accountCode);
+
+  const entryMap = new Map<string, JournalEntry>();
+  for (const e of entries) {
+    if (e.client_id !== clientId) continue;
+    if (e.status === "draft") continue;
+    if (e.entry_date > asOfDate) continue;
+    entryMap.set(e.id, e);
+  }
+
+  type Pending = { entry: JournalEntry; line: JournalEntryLine };
+  const pending: Pending[] = [];
+  for (const l of lines) {
+    if (l.account_code !== accountCode) continue;
+    const entry = entryMap.get(l.journal_entry_id);
+    if (!entry) continue;
+    pending.push({ entry, line: l });
+  }
+
+  // voucher_no encodes YYYYMMDD-NNNNN, so a single ascending string compare gives
+  // chronological order with deterministic per-day tiebreaking. Safe here because
+  // drafts (the only entries with null voucher_no) are already filtered out above.
+  // Tiebreak on line_number so multiple lines in one entry hitting the same account
+  // (e.g. a posted-edit split into multiple sub-lines) stay in a stable order.
+  pending.sort((a, b) => {
+    const av = a.entry.voucher_no ?? "";
+    const bv = b.entry.voucher_no ?? "";
+    if (av !== bv) return av < bv ? -1 : 1;
+    return a.line.line_number - b.line.line_number;
+  });
+
+  let running = 0;
+  const rows: LedgerRow[] = pending.map(({ entry, line }) => {
+    running += naturalAmount(cls, line.debit, line.credit);
+    return {
+      lineId: line.id,
+      entryId: entry.id,
+      voucherNo: entry.voucher_no ?? "",
+      entryDate: entry.entry_date,
+      status: entry.status === "reversed" ? "reversed" : "posted",
+      description: line.description ?? entry.description ?? null,
+      debit: line.debit,
+      credit: line.credit,
+      runningBalance: running,
+    };
+  });
+
+  return {
+    accountCode,
+    accountName: accountLabel(accountCode),
+    accountClass: cls,
+    rows,
+    closingBalance: rows.length === 0 ? 0 : rows[rows.length - 1].runningBalance,
+  };
+}

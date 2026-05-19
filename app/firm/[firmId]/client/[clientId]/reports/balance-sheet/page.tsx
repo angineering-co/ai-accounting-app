@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowLeft } from "lucide-react";
 
@@ -32,10 +33,12 @@ function SectionCard({
   title,
   section,
   highlightSyntheticRow,
+  linkBuilder,
 }: {
   title: string;
   section: ReportSection;
   highlightSyntheticRow?: boolean;
+  linkBuilder?: (accountCode: string) => string | null;
 }) {
   return (
     <Card>
@@ -69,13 +72,23 @@ function SectionCard({
                 const synthetic =
                   highlightSyntheticRow &&
                   row.accountCode === SYNTHETIC_NET_INCOME_CODE;
+                const href = linkBuilder?.(row.accountCode) ?? null;
                 return (
                   <TableRow
                     key={row.accountCode}
                     className={synthetic ? "bg-muted/30" : undefined}
                   >
                     <TableCell className="font-mono text-base">
-                      {row.accountCode}
+                      {href ? (
+                        <Link
+                          href={href}
+                          className="text-primary hover:underline"
+                        >
+                          {row.accountCode}
+                        </Link>
+                      ) : (
+                        row.accountCode
+                      )}
                     </TableCell>
                     <TableCell className="text-base">
                       {row.accountName}
@@ -142,6 +155,11 @@ export default function BalanceSheetPage({
     bs.liabilities.rows.length > 0 ||
     bs.equity.rows.length > 0;
 
+  const accountHref = (code: string) =>
+    code === SYNTHETIC_NET_INCOME_CODE
+      ? null
+      : `/firm/${firmId}/client/${clientId}/reports/account/${code}?asOf=${asOfDate}`;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
@@ -197,14 +215,25 @@ export default function BalanceSheetPage({
         </Card>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <SectionCard title="資產" section={bs.assets} />
-        <SectionCard title="負債" section={bs.liabilities} />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:items-start">
         <SectionCard
-          title="權益"
-          section={bs.equity}
-          highlightSyntheticRow
+          title="資產"
+          section={bs.assets}
+          linkBuilder={accountHref}
         />
+        <div className="flex flex-col gap-4">
+          <SectionCard
+            title="負債"
+            section={bs.liabilities}
+            linkBuilder={accountHref}
+          />
+          <SectionCard
+            title="權益"
+            section={bs.equity}
+            highlightSyntheticRow
+            linkBuilder={accountHref}
+          />
+        </div>
       </div>
 
       <Card>

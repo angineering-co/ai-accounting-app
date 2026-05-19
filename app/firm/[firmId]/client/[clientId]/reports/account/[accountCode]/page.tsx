@@ -123,7 +123,7 @@ export default function AccountLedgerPage({
                     : undefined;
                   return (
                     <TableRow
-                      key={row.entryId}
+                      key={row.lineId}
                       className={cn(
                         "cursor-pointer hover:bg-muted/50",
                         reversed && "opacity-60",

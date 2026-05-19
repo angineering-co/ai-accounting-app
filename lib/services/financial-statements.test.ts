@@ -475,6 +475,60 @@ describe("getAccountLedger on demo fixture", () => {
     expect(ledger.closingBalance).toBe(0);
   });
 
+  it("two lines in the same entry hitting the same account get distinct lineIds and sort by line_number", () => {
+    const demo = freshDemo();
+    // entry1 (posted) 既有 6112 debit 3000;再塞一筆 6112 debit 500(line_number=99)
+    // 以及 6112 credit 200(line_number=2)模擬同一傳票內 split 多 lines
+    const extraLow = {
+      id: "00000000-0000-4000-8000-cccccccccc11",
+      journal_entry_id: demo.entries[0].id,
+      line_number: 2,
+      account_code: "6112",
+      debit: 0,
+      credit: 200,
+      description: "split-credit",
+    };
+    const extraHigh = {
+      id: "00000000-0000-4000-8000-cccccccccc12",
+      journal_entry_id: demo.entries[0].id,
+      line_number: 99,
+      account_code: "6112",
+      debit: 500,
+      credit: 0,
+      description: "split-debit",
+    };
+    const ledger = getAccountLedger({
+      entries: demo.entries,
+      lines: [...demo.lines, extraHigh, extraLow], // 故意打亂順序
+      clientId: CLIENT_ID,
+      accountCode: "6112",
+      asOfDate: "2026-01-31",
+    });
+
+    // 同一個 voucher_no (20260115-00001) 內,line_number 升冪排序
+    const entry1Rows = ledger.rows.filter(
+      (r) => r.voucherNo === "20260115-00001",
+    );
+    expect(entry1Rows).toHaveLength(3);
+    expect(entry1Rows.every((r) => r.entryId === demo.entries[0].id)).toBe(
+      true,
+    );
+    // lineId 不重複(React key 唯一性)
+    const lineIds = entry1Rows.map((r) => r.lineId);
+    expect(new Set(lineIds).size).toBe(3);
+    // line_number 升冪
+    expect(entry1Rows.map((r) => r.debit > 0 || r.credit > 0)).toEqual([
+      true,
+      true,
+      true,
+    ]);
+    // 第一筆是原始 line_number=1 (debit 3000),接著 line_number=2 (credit 200),
+    // 最後 line_number=99 (debit 500)
+    expect(entry1Rows[0].debit).toBe(3000);
+    expect(entry1Rows[1].credit).toBe(200);
+    expect(entry1Rows[2].debit).toBe(500);
+  });
+
   it("closing balance per account matches corresponding BS row", () => {
     const demo = freshDemo();
     const bs = computeBalanceSheet({

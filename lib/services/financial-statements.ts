@@ -270,6 +270,7 @@ export function computeBalanceSheet(input: ComputeBsInput): BalanceSheet {
 }
 
 export interface LedgerRow {
+  lineId: string;
   entryId: string;
   voucherNo: string;
   entryDate: string; // YYYY-MM-DD
@@ -324,16 +325,20 @@ export function getAccountLedger(input: GetAccountLedgerInput): AccountLedger {
   // voucher_no encodes YYYYMMDD-NNNNN, so a single ascending string compare gives
   // chronological order with deterministic per-day tiebreaking. Safe here because
   // drafts (the only entries with null voucher_no) are already filtered out above.
+  // Tiebreak on line_number so multiple lines in one entry hitting the same account
+  // (e.g. a posted-edit split into multiple sub-lines) stay in a stable order.
   pending.sort((a, b) => {
     const av = a.entry.voucher_no ?? "";
     const bv = b.entry.voucher_no ?? "";
-    return av < bv ? -1 : av > bv ? 1 : 0;
+    if (av !== bv) return av < bv ? -1 : 1;
+    return a.line.line_number - b.line.line_number;
   });
 
   let running = 0;
   const rows: LedgerRow[] = pending.map(({ entry, line }) => {
     running += naturalAmount(cls, line.debit, line.credit);
     return {
+      lineId: line.id,
       entryId: entry.id,
       voucherNo: entry.voucher_no ?? "",
       entryDate: entry.entry_date,

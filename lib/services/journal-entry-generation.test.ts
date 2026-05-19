@@ -167,6 +167,96 @@ describe("computeEntryFromInvoice — 銷項", () => {
   });
 });
 
+describe("computeEntryFromInvoice — taxType policy matrix (§5.2.1)", () => {
+  // 作廢 / 彙加 always throw regardless of direction.
+  for (const taxType of ["作廢", "彙加"] as const) {
+    for (const direction of ["in", "out"] as const) {
+      it(`throws on ${direction} + taxType='${taxType}'`, () => {
+        const invoice = makeInvoice({
+          in_or_out: direction,
+          extracted_data: {
+            totalSales: 100,
+            tax: 5,
+            totalAmount: 105,
+            account: "6113 旅費",
+            taxType,
+          },
+        });
+        expect(() => computeEntryFromInvoice(invoice)).toThrow(
+          /must not reach entry generation/,
+        );
+      });
+    }
+  }
+
+  // 銷項 + 零稅率/免稅 throw (not supported in v1).
+  for (const taxType of ["零稅率", "免稅"] as const) {
+    it(`throws on 銷項 + taxType='${taxType}'`, () => {
+      const invoice = makeInvoice({
+        in_or_out: "out",
+        extracted_data: {
+          totalSales: 10_000,
+          tax: 0,
+          totalAmount: 10_000,
+          taxType,
+        },
+      });
+      expect(() => computeEntryFromInvoice(invoice)).toThrow(/not supported in v1/);
+    });
+  }
+
+  // 進項 + 零稅率/免稅 routes through the 2-line non-deductible path.
+  for (const taxType of ["零稅率", "免稅"] as const) {
+    it(`進項 + taxType='${taxType}' → 2-line entry (NON_VAT-shaped)`, () => {
+      const invoice = makeInvoice({
+        in_or_out: "in",
+        extracted_data: {
+          totalSales: 5_000,
+          tax: 0,
+          totalAmount: 5_000,
+          account: "6113 旅費",
+          taxType,
+          // Even if Gemini marks deductible=true, taxType wins.
+          deductible: true,
+        },
+      });
+      const { lines } = computeEntryFromInvoice(invoice);
+      expect(lines).toEqual([
+        { account_code: "6113", debit: 5_000, credit: 0, description: null },
+        { account_code: ACCT_CASH, debit: 0, credit: 5_000, description: null },
+      ]);
+    });
+  }
+
+  it("accepts taxType='應稅' explicitly", () => {
+    const invoice = makeInvoice({
+      in_or_out: "in",
+      extracted_data: {
+        totalSales: 100,
+        tax: 5,
+        totalAmount: 105,
+        account: "6113 旅費",
+        taxType: "應稅",
+      },
+    });
+    expect(() => computeEntryFromInvoice(invoice)).not.toThrow();
+  });
+
+  it("accepts undefined taxType (OCR omitted; treated as 應稅)", () => {
+    const invoice = makeInvoice({
+      in_or_out: "in",
+      extracted_data: {
+        totalSales: 100,
+        tax: 5,
+        totalAmount: 105,
+        account: "6113 旅費",
+        // taxType omitted
+      },
+    });
+    expect(() => computeEntryFromInvoice(invoice)).not.toThrow();
+  });
+});
+
 describe("computeEntryFromInvoice — extracted_data.account precondition", () => {
   it("throws when input invoice's account is missing (precondition: must be confirmed)", () => {
     const invoice = makeInvoice({
@@ -308,6 +398,38 @@ describe("computeEntryFromAllowance — 進項折讓 (mirrors non-deductible ori
       { account_code: "6120", debit: 0, credit: 21, description: null },
     ]);
     expect(sumBalance(computed.lines)).toEqual({ debit: 21, credit: 21 });
+  });
+});
+
+describe("computeEntryFromAllowance — 進項折讓 mirrors 零稅率 進項 (2-line)", () => {
+  // Original 零稅率 進項 posts as 2-line (no separate tax) per §5.2.1 policy.
+  const originalEntry = computeEntryFromInvoice(
+    makeInvoice({
+      in_or_out: "in",
+      extracted_data: {
+        totalSales: 5_000,
+        tax: 0,
+        totalAmount: 5_000,
+        taxType: "零稅率",
+        account: "6113 旅費",
+      },
+    }),
+  );
+
+  // Sanity: original is 2-line, no tax line.
+  expect(originalEntry.lines).toHaveLength(2);
+
+  const allowance = makeAllowance({
+    in_or_out: "in",
+    extracted_data: { amount: 500, taxAmount: 0 },
+  });
+
+  it("mirrors 零稅率 進項 as 2-line offset (no 進項稅額 line)", () => {
+    const { lines } = computeEntryFromAllowance(allowance, originalEntry);
+    expect(lines).toEqual([
+      { account_code: ACCT_CASH, debit: 500, credit: 0, description: null },
+      { account_code: "6113", debit: 0, credit: 500, description: null },
+    ]);
   });
 });
 

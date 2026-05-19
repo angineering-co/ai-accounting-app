@@ -123,6 +123,10 @@
   - §5.1 結算科目門檻：`pickSettlementAccount()` ≤ 10,000 → `1111`，> 10,000 → `1112`（**僅發票走此門檻;折讓鏡像原 entry 之結算,不重跑門檻**）
   - 固定科目常數：`ACCT_INPUT_TAX='1144'` / `ACCT_OUTPUT_TAX='2134'` / `ACCT_REVENUE='4101'` / `ACCT_CASH='1111'` / `ACCT_BANK='1112'`（§5.1 doc 中 `1147/2271` 為舊代碼;實際 `lib/data/accounts.ts` 為 `1144/2134`,以實際為準）
   - `ComputedEntryLine.account_code: string`（不可為 null）：發票走 `confirmed` 前 staff 必選 account 之前置條件保證,缺則 throw fail loud;折讓由原 entry 帶入,結構上不可能 null
+  - **v1 `taxType` 政策**（矩陣詳見 §5.2.1）：
+    - 進項 應稅 / 零稅率 / 免稅 → 正常產出分錄（零稅率/免稅 走 2 行不可扣抵路徑,因 tax=0 結構等同 NON_VAT 收據）
+    - 銷項 應稅 → 正常產出 3 行分錄;銷項 零稅率 / 免稅 → throw（reports.ts 尚有 TODO,跨層協調後才解禁）
+    - 作廢 / 彙加（任何方向）→ throw（作廢屬業務未發生;彙加為 TET_U 合成 row）
   - `entry_date` 格式：`extracted_data.date`（YYYY/MM/DD）→ YYYY-MM-DD；缺漏退回 `created_at::date`（UTC,與 Phase 6 backfill convention 一致）
 - `lib/services/journal-entry-generation.test.ts`：21 個測試,cases 涵蓋 §5.3 範例 A（10,500 進項可扣抵）/ B（210 進項不可扣抵）/ 銷項 / 進項折讓鏡像可扣抵 / 進項折讓鏡像不可扣抵（2 行）/ 銷項折讓 / 折讓追隨原 entry 科目編輯 / 結算鏡像而非重跑門檻 / 缺 account throw / output 不需 account / deductible 預設值 / entry_date fallback / threshold boundary / malformed original entry throw / 借貸平衡 invariant
 - `lib/data/accounts.ts`：
@@ -336,11 +340,13 @@
 - `components/invoice-review-dialog.tsx`：當對應 entry='posted' 時加 reason 欄位 + 警示條：「⚠️ 此發票已過帳為傳票 X，修改將連動更新該傳票並留下審計記錄」
 - `components/allowance-review-dialog.tsx`：**同樣加 reason 欄位 + 警示條**（鏡像 invoice review dialog）
 - 把 phase 2 的 voucher edit dialog（posted 模式）+ audit history viewer 從 store 切到真 service
+- **`lib/services/journal-entry-generation.ts` 強化**：editPostedEntry 開放後,staff 可將原 entry 之單一費用 / 收入 line 拆成多 lines（如 60% 銷管 / 40% 製造）。此時 `extractInputInvoiceRoles` / `extractOutputInvoiceRoles` 之 `.find(...)` 會 silently 撿第一個,導致折讓鏡像不平衡。改為 `.filter(...)` + 嚴格 `length === 1` 檢查;若 multi-expense 則 throw,caller 觸發「請手動指定折讓對應之科目」UI（§5.2.2 fallback 路徑同款）。see TODO comments in `extractInputInvoiceRoles` / `extractOutputInvoiceRoles`
 
 **驗證**：
 - Integration test：
   - editPostedEntry → audit_trails before snapshot 等於改前 row state
   - 連續多次 edit → 每筆 audit before = 前一筆 audit 的「after」（透過 getStateAfter 推導）—— **chain 完整性**
+  - **Multi-expense 編輯 → 對應折讓 confirm/regenerate 觸發 "請手動指定" UI**（驗證 §5.2.2 fallback;此 case 唯一能由 Phase 9 之 edit RPC 產生）
   - 已關帳年度拒絕（guard）
   - 透過 invoice 編輯路徑連動觸發 editPostedEntry → audit_trails 正確
   - **同上 for allowance 編輯路徑**

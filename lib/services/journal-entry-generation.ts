@@ -64,6 +64,33 @@ function requireAccountCode(raw: string | undefined | null, context: string): st
 
 export function computeEntryFromInvoice(invoice: Invoice): ComputedEntry {
   const data = invoice.extracted_data ?? {};
+
+  // v1 taxType policy (§5.2.1):
+  //   應稅                — normal path (3-line for 進項可扣抵 / 銷項; 2-line for 進項不可扣抵)
+  //   零稅率 / 免稅 進項   — route through non-deductible (2-line) path; tax=0 so there's
+  //                        nothing to break out. Structurally identical to NON_VAT 收據.
+  //                        reports.ts correctly filters these out of the deductible input section.
+  //   零稅率 / 免稅 銷項   — throw. reports.ts has open TODOs for output classification;
+  //                        producing a journal entry would silently disagree with the eventual
+  //                        VAT filing. Coordinated OCR/review/reports/entries change needed.
+  //   作廢                — throw. Voided business event; caller must filter before reaching here.
+  //   彙加                — throw. TET_U synthetic row type, not a real invoice.
+  if (data.taxType === "作廢" || data.taxType === "彙加") {
+    throw new Error(
+      `computeEntryFromInvoice(${invoice.id}): taxType='${data.taxType}' must not reach entry generation ` +
+        `(${data.taxType === "作廢" ? "voided invoices don't post entries" : "彙加 is a TET_U synthetic row, not a real invoice"}).`,
+    );
+  }
+  if (
+    invoice.in_or_out === "out" &&
+    (data.taxType === "零稅率" || data.taxType === "免稅")
+  ) {
+    throw new Error(
+      `computeEntryFromInvoice(${invoice.id}): taxType='${data.taxType}' on 銷項 not supported in v1. ` +
+        `Output zero-rated / tax-exempt require coordinated support across OCR / review / reports / entries.`,
+    );
+  }
+
   const totalSales = data.totalSales ?? 0;
   const tax = data.tax ?? 0;
   const totalAmount = data.totalAmount ?? totalSales + tax;
@@ -71,7 +98,7 @@ export function computeEntryFromInvoice(invoice: Invoice): ComputedEntry {
   const entry_date = resolveEntryDate(data.date, invoice.created_at);
 
   if (invoice.in_or_out === "out") {
-    // §5.2 銷項發票
+    // §5.2 銷項發票 (taxType === '應稅' guaranteed by check above)
     return {
       voucher_type: "收入",
       entry_date,
@@ -89,7 +116,11 @@ export function computeEntryFromInvoice(invoice: Invoice): ComputedEntry {
     data.account,
     `computeEntryFromInvoice(${invoice.id})`,
   );
-  const deductible = data.deductible !== false; // default true when omitted
+  // 零稅率 / 免稅 進項 force the non-deductible (2-line) shape regardless of
+  // what `deductible` says — tax=0 makes the 3-line form meaningless and the
+  // 2-line shape matches how a NON_VAT 收據 would post.
+  const zeroOrExempt = data.taxType === "零稅率" || data.taxType === "免稅";
+  const deductible = !zeroOrExempt && data.deductible !== false;
 
   if (!deductible) {
     // §5.3 範例 B：費用吸收稅額，只有 2 行
@@ -215,6 +246,12 @@ function extractInputInvoiceRoles(originalEntry: ComputedEntry): InputInvoiceRol
     );
   }
   const taxLine = drLines.find((l) => l.account_code === ACCT_INPUT_TAX);
+  // Phase 9 TODO: when edit_posted_entry RPC lets staff split an expense across
+  // multiple accounts (e.g. 60% 銷管 / 40% 製造), this `.find` will silently pick
+  // the first, producing an unbalanced allowance mirror. Switch to
+  // `.filter(...)` + strict length check then; caller falls back to manual
+  // account prompt (§5.2.2). Not added now because there's no edit path that
+  // can produce multi-expense lines yet (Phase 7 confirm produces exactly 1).
   const expenseLine = drLines.find((l) => l.account_code !== ACCT_INPUT_TAX);
   if (!expenseLine) {
     throw new Error("original input invoice entry missing expense (Dr) line");
@@ -239,6 +276,8 @@ function extractOutputInvoiceRoles(originalEntry: ComputedEntry): OutputInvoiceR
       `original output invoice entry must have exactly 1 Dr (settlement) line, got ${drLines.length}`,
     );
   }
+  // Phase 9 TODO: see matching note in extractInputInvoiceRoles — strict
+  // length check belongs in the edit-RPC PR, not here.
   const revenueLine = crLines.find((l) => l.account_code !== ACCT_OUTPUT_TAX);
   if (!revenueLine) {
     throw new Error("original output invoice entry missing revenue (Cr) line");

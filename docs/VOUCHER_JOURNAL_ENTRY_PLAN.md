@@ -589,6 +589,33 @@ flowchart TD
 **`extracted_data.account` 之精確性保證**
 發票 `confirmed` 之前置條件即為員工選妥 `extracted_data.account`（[invoice-review-dialog.tsx](../../components/invoice-review-dialog.tsx) 之 Zod 必填）。故進入 confirm RPC 時 account 必然非空,`computeEntryFromInvoice` 對缺 account 之進項發票直接 throw（fail loud,不容許靜默退化）。
 
+**v1 `taxType` 政策矩陣**
+
+`computeEntryFromInvoice` 對不同 `taxType` × 進銷項 採以下策略：
+
+| | 進項 | 銷項 |
+|---|---|---|
+| **應稅** | ✓ 一般路徑（可扣抵 3 行 / 不可扣抵 2 行） | ✓ 一般路徑（3 行） |
+| **零稅率** | ✓ 走 2 行不可扣抵路徑（等同 NON_VAT 收據） | ✗ throw — 銷項零稅率須跨 OCR / review / reports / entries 協調支援,v1 不做 |
+| **免稅** | ✓ 同 零稅率 進項（國內客戶實務上罕見,多為外銷情境） | ✗ throw — 同 零稅率 銷項 |
+| **作廢** | ✗ throw — 作廢 = 業務未發生,不應產出分錄 | ✗ throw — 同 |
+| **彙加** | ✗ throw — TET_U 合成 row 類型,非真實發票 | ✗ throw — 同 |
+
+**為何 進項 零稅率/免稅 直接吃 2 行不可扣抵路徑**：
+- `tax = 0`,3 行樣板會有一行金額為 0,違反 `journal_entry_lines` 之 `(debit > 0) !== (credit > 0)` refine
+- 結構上等同 NON_VAT 收據（雖然 v1 沒有正式的 `doc_type='other'` 路徑,但記帳形狀一致）
+- [reports.ts](../../lib/services/reports.ts) 之 `inputInvoices.filter(i => i.deductible === true)` 已將 零稅率/免稅 進項排除於可扣抵 input 區外,VAT 申報側不受影響
+
+**為何 銷項 零稅率/免稅 fail loud**：
+- [reports.ts](../../lib/services/reports.ts) 內 `零稅率銷售額` 之 `withDocuments` / `withoutDocuments` 分類仍為 TODO
+- 401 申報書之 `免稅銷售額` section (Fields 26-31) 硬寫 0
+- 若 journal entry 層靜默產出 2 行 銷項零稅率 分錄,使用者會以為「帳已記」,但 VAT 申報實際上不正確 —— 此屬危險的「成功假象」
+- 跨 OCR / review / reports / entries 四層協調支援後才解禁
+
+**`作廢` / `彙加` 為何 throw**：
+- `作廢` 屬業務動作（同期作廢之發票視同未發生）,不該產出分錄;若已 posted 則 §5.6 自動化路徑（v1.5+）負責建反向分錄,而非由 confirm 路徑產出
+- `彙加` 為 TET_U 報表之合成 row（標示未使用發票區間）,非真實 invoice row,不應出現在 confirm pipeline 中
+
 #### 5.2.2 折讓分錄：鏡像原發票之 posted entry（Decision #13）
 
 折讓**不**用固定樣板,而是**鏡像原發票之 posted entry 結構**：

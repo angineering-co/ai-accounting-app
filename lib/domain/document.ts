@@ -1,16 +1,11 @@
 import { z } from "zod";
 
-// v1 only uses `invoice` / `allowance`; rest reserved for v2+ (receipt, payroll, insurance, manual).
-export const DOC_TYPE = [
-  "invoice",
-  "allowance",
-  "receipt",
-  "payroll",
-  "insurance",
-  "manual",
-] as const;
+// `invoice` / `allowance` are VAT subtables (CTI children). `other` is the NON_VAT
+// container for any document that isn't a 統一發票 or 折讓單 — receipts, payroll,
+// insurance, etc. More specific NON_VAT subcategories can be ALTERed in later.
+export const DOC_TYPE = ["invoice", "allowance", "other"] as const;
 
-export const DOC_STATUS = ["active", "duplicate", "void", "deleted"] as const;
+export const DOC_STATUS = ["active", "deleted"] as const;
 
 export const DOC_VAT_TYPE = ["VAT", "NON_VAT"] as const;
 
@@ -26,7 +21,6 @@ export const documentSchema = z.object({
   file_url: z.string().nullable().optional(),
   ocr_status: z.enum(DOC_OCR_STATUS).nullable().optional(),
   amount: z.number().int().nullable().optional(),
-  duplicate_of: z.string().uuid().nullable().optional(),
   status: z.enum(DOC_STATUS).default("active"),
   created_by: z.string().uuid(),
   created_at: z.coerce.date(),

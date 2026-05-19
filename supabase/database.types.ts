@@ -148,6 +148,57 @@ export type Database = {
           },
         ]
       }
+      audit_trails: {
+        Row: {
+          action: string
+          actor_at: string
+          actor_id: string | null
+          before: Json | null
+          entity_id: string
+          entity_table: string
+          firm_id: string
+          id: string
+          reason: string | null
+        }
+        Insert: {
+          action: string
+          actor_at?: string
+          actor_id?: string | null
+          before?: Json | null
+          entity_id: string
+          entity_table: string
+          firm_id: string
+          id?: string
+          reason?: string | null
+        }
+        Update: {
+          action?: string
+          actor_at?: string
+          actor_id?: string | null
+          before?: Json | null
+          entity_id?: string
+          entity_table?: string
+          firm_id?: string
+          id?: string
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_trails_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_trails_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           address: string | null
@@ -216,6 +267,76 @@ export type Database = {
           },
         ]
       }
+      documents: {
+        Row: {
+          amount: number | null
+          client_id: string
+          created_at: string
+          created_by: string
+          doc_date: string
+          doc_type: string
+          file_url: string | null
+          firm_id: string
+          id: string
+          ocr_status: string | null
+          status: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number | null
+          client_id: string
+          created_at?: string
+          created_by: string
+          doc_date: string
+          doc_type: string
+          file_url?: string | null
+          firm_id: string
+          id?: string
+          ocr_status?: string | null
+          status?: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number | null
+          client_id?: string
+          created_at?: string
+          created_by?: string
+          doc_date?: string
+          doc_type?: string
+          file_url?: string | null
+          firm_id?: string
+          id?: string
+          ocr_status?: string | null
+          status?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       firms: {
         Row: {
           created_at: string | null
@@ -239,6 +360,58 @@ export type Database = {
           tax_id?: string
         }
         Relationships: []
+      }
+      fiscal_year_closes: {
+        Row: {
+          client_id: string
+          closed_at: string
+          closed_by: string
+          firm_id: string
+          gregorian_year: number
+          id: string
+          notes: string | null
+        }
+        Insert: {
+          client_id: string
+          closed_at?: string
+          closed_by: string
+          firm_id: string
+          gregorian_year: number
+          id?: string
+          notes?: string | null
+        }
+        Update: {
+          client_id?: string
+          closed_at?: string
+          closed_by?: string
+          firm_id?: string
+          gregorian_year?: number
+          id?: string
+          notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fiscal_year_closes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fiscal_year_closes_closed_by_fkey"
+            columns: ["closed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fiscal_year_closes_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       invoice_ranges: {
         Row: {
@@ -361,6 +534,141 @@ export type Database = {
             columns: ["uploaded_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      journal_entries: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string | null
+          description: string | null
+          document_id: string | null
+          entry_date: string
+          firm_id: string
+          id: string
+          posted_at: string | null
+          posted_by: string | null
+          reverses_entry_id: string | null
+          status: string
+          updated_at: string
+          voucher_no: string | null
+          voucher_type: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          document_id?: string | null
+          entry_date: string
+          firm_id: string
+          id?: string
+          posted_at?: string | null
+          posted_by?: string | null
+          reverses_entry_id?: string | null
+          status?: string
+          updated_at?: string
+          voucher_no?: string | null
+          voucher_type: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          document_id?: string | null
+          entry_date?: string
+          firm_id?: string
+          id?: string
+          posted_at?: string | null
+          posted_by?: string | null
+          reverses_entry_id?: string | null
+          status?: string
+          updated_at?: string
+          voucher_no?: string | null
+          voucher_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journal_entries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_entries_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_entries_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: true
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_entries_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_entries_posted_by_fkey"
+            columns: ["posted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_entries_reverses_entry_id_fkey"
+            columns: ["reverses_entry_id"]
+            isOneToOne: false
+            referencedRelation: "journal_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      journal_entry_lines: {
+        Row: {
+          account_code: string
+          credit: number
+          debit: number
+          description: string | null
+          id: string
+          journal_entry_id: string
+          line_number: number
+        }
+        Insert: {
+          account_code: string
+          credit?: number
+          debit?: number
+          description?: string | null
+          id?: string
+          journal_entry_id: string
+          line_number: number
+        }
+        Update: {
+          account_code?: string
+          credit?: number
+          debit?: number
+          description?: string | null
+          id?: string
+          journal_entry_id?: string
+          line_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journal_entry_lines_journal_entry_id_fkey"
+            columns: ["journal_entry_id"]
+            isOneToOne: false
+            referencedRelation: "journal_entries"
             referencedColumns: ["id"]
           },
         ]
@@ -538,6 +846,32 @@ export type Database = {
             columns: ["firm_id"]
             isOneToOne: false
             referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      voucher_sequences: {
+        Row: {
+          client_id: string
+          next_seq: number
+          seq_date: string
+        }
+        Insert: {
+          client_id: string
+          next_seq?: number
+          seq_date: string
+        }
+        Update: {
+          client_id?: string
+          next_seq?: number
+          seq_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voucher_sequences_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
             referencedColumns: ["id"]
           },
         ]

@@ -37,8 +37,6 @@ const ACTION_LABEL: Record<AuditAction, string> = {
   updated: "編輯",
   deleted: "刪除",
   posted: "過帳",
-  voided: "作廢",
-  marked_duplicate: "標記重複",
   reversed: "被沖銷",
 };
 

@@ -140,13 +140,24 @@ export async function cleanupTestFixture(
       .remove(fixture.storagePaths);
   }
 
-  await supabase.from("invoices").delete().eq("client_id", fixture.clientId);
-  await supabase
-    .from("invoice_ranges")
-    .delete()
-    .eq("client_id", fixture.clientId);
-  await supabase.from("clients").delete().eq("id", fixture.clientId);
-  await supabase.from("profiles").delete().eq("id", fixture.userId);
+  // GL leaf tables — all independent of each other and of invoice/client deletion below,
+  // so parallelize. journal_entry_lines cascades from journal_entries (no explicit delete).
+  // audit_trails scoped by firm_id since entries are about to disappear.
+  await Promise.all([
+    supabase.from("audit_trails").delete().eq("firm_id", fixture.firmId),
+    supabase.from("fiscal_year_closes").delete().eq("client_id", fixture.clientId),
+    supabase.from("voucher_sequences").delete().eq("client_id", fixture.clientId),
+    supabase.from("journal_entries").delete().eq("client_id", fixture.clientId),
+    supabase.from("documents").delete().eq("client_id", fixture.clientId),
+    supabase.from("invoices").delete().eq("client_id", fixture.clientId),
+    supabase.from("invoice_ranges").delete().eq("client_id", fixture.clientId),
+  ]);
+
+  // Clients and profiles both FK firms; both must be gone before firms.delete.
+  await Promise.all([
+    supabase.from("clients").delete().eq("id", fixture.clientId),
+    supabase.from("profiles").delete().eq("id", fixture.userId),
+  ]);
   await supabase.from("firms").delete().eq("id", fixture.firmId);
   await supabase.auth.admin.deleteUser(fixture.userId);
 }

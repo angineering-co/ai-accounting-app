@@ -2,16 +2,17 @@ import { z } from "zod";
 
 import { ACCOUNT_CODE_REGEX, VOUCHER_TYPE } from "./journal-entry";
 
+// `voided` / `marked_duplicate` 等舊 enum 值已隨 v1 schema 收斂移除 — `feedback_no_speculative_status_values`：
+// 作廢 / duplicate 的自動化處理 v1 範圍外，沒有對應 audit writer，DB CHECK 也只允許這 5 個值。
 export const AUDIT_ACTION = [
   "created",
   "updated",
   "deleted",
   "posted",
-  "voided",
-  "marked_duplicate",
   "reversed",
 ] as const;
 
+// 與 audit_trails.entity_table 無 DB CHECK；保留 invoices / allowances 是因為未來模組擴張。
 export const AUDIT_ENTITY_TABLE = [
   "journal_entries",
   "journal_entry_lines",

@@ -3,6 +3,7 @@ import {
   classifyAccount,
   computeBalanceSheet,
   computeIncomeStatement,
+  getAccountLedger,
 } from "./financial-statements";
 import { generateVoucherDemoData } from "@/tests/fixtures/voucher-demo-generator";
 
@@ -334,5 +335,168 @@ describe("computeBalanceSheet on demo fixture", () => {
     const rows3440 = bs.equity.rows.filter((r) => r.accountCode === "3440");
     expect(rows3440).toHaveLength(1);
     expect(rows3440[0].amount).toBe(bs.netIncomeToDate);
+  });
+});
+
+describe("getAccountLedger on demo fixture", () => {
+  // 用 demo 內已 booked 的 entry:
+  // entry1 (01-15, posted, 20260115-00001): 6112 +3000, 1144 +300, 1111 -3300
+  // entry2 (01-20, posted, 20260120-00001): 6113 +12000, 1144 +600, 1112 -12600
+  // entry3 (02-05, posted, 20260205-00001, 折讓): 1111 +1050, 6112 -1000, 1144 -50
+  // entry4 (02-10, reversed, 20260210-00001): 1112 +21000, 4101 +20000, 2134 +1000
+  // entry5 (02-15, posted, 20260215-00001, 反向 entry4): 4101 -20000, 2134 -1000, 1112 -21000
+  // entry6 (02-28, posted, 20260228-00001, 折舊): 6124 +5000, 1462 -5000
+
+  it("returns asset ledger sorted by voucher_no with closing balance matching BS", () => {
+    const demo = freshDemo();
+    const ledger = getAccountLedger({
+      entries: demo.entries,
+      lines: demo.lines,
+      clientId: CLIENT_ID,
+      accountCode: "1111",
+      asOfDate: "2026-12-31",
+    });
+
+    // 1111 出現在 entry1(credit 3300)+ entry3(debit 1050)。asset 自然方向 = debit - credit
+    expect(ledger.accountCode).toBe("1111");
+    expect(ledger.accountClass).toBe("asset");
+    expect(ledger.rows).toHaveLength(2);
+    expect(ledger.rows[0]).toMatchObject({
+      voucherNo: "20260115-00001",
+      entryDate: "2026-01-15",
+      status: "posted",
+      debit: 0,
+      credit: 3300,
+      runningBalance: -3300,
+    });
+    expect(ledger.rows[1]).toMatchObject({
+      voucherNo: "20260205-00001",
+      entryDate: "2026-02-05",
+      status: "posted",
+      debit: 1050,
+      credit: 0,
+      runningBalance: -2250,
+    });
+    expect(ledger.closingBalance).toBe(-2250);
+  });
+
+  it("marks reversed entries with status='reversed' and reverses-pair cancels to 0", () => {
+    const demo = freshDemo();
+    const ledger = getAccountLedger({
+      entries: demo.entries,
+      lines: demo.lines,
+      clientId: CLIENT_ID,
+      accountCode: "4101",
+      asOfDate: "2026-12-31",
+    });
+
+    // operating_revenue 自然方向 = credit - debit
+    // entry4 (reversed):credit 20000 → running 20000
+    // entry5 (posted 反向):debit 20000 → running 0
+    expect(ledger.accountClass).toBe("operating_revenue");
+    expect(ledger.rows).toHaveLength(2);
+    expect(ledger.rows[0].status).toBe("reversed");
+    expect(ledger.rows[0].voucherNo).toBe("20260210-00001");
+    expect(ledger.rows[0].runningBalance).toBe(20000);
+    expect(ledger.rows[1].status).toBe("posted");
+    expect(ledger.rows[1].voucherNo).toBe("20260215-00001");
+    expect(ledger.rows[1].runningBalance).toBe(0);
+    expect(ledger.closingBalance).toBe(0);
+  });
+
+  it("walks running balance correctly across an asset with reversal pair (1112)", () => {
+    const demo = freshDemo();
+    const ledger = getAccountLedger({
+      entries: demo.entries,
+      lines: demo.lines,
+      clientId: CLIENT_ID,
+      accountCode: "1112",
+      asOfDate: "2026-12-31",
+    });
+
+    // asset (debit - credit):
+    // entry2 (20260120-00001):credit 12600 → -12600
+    // entry4 (20260210-00001, reversed):debit 21000 → -12600 + 21000 = 8400
+    // entry5 (20260215-00001):credit 21000 → 8400 - 21000 = -12600
+    expect(ledger.rows.map((r) => r.runningBalance)).toEqual([
+      -12600,
+      8400,
+      -12600,
+    ]);
+    expect(ledger.closingBalance).toBe(-12600);
+  });
+
+  it("filters by asOfDate (inclusive)", () => {
+    const demo = freshDemo();
+    const ledger = getAccountLedger({
+      entries: demo.entries,
+      lines: demo.lines,
+      clientId: CLIENT_ID,
+      accountCode: "1112",
+      asOfDate: "2026-02-10",
+    });
+
+    // 只看到 entry2(01-20)+ entry4(02-10),不看到 entry5(02-15)
+    expect(ledger.rows).toHaveLength(2);
+    expect(ledger.rows.map((r) => r.voucherNo)).toEqual([
+      "20260120-00001",
+      "20260210-00001",
+    ]);
+    expect(ledger.closingBalance).toBe(8400);
+  });
+
+  it("excludes drafts; foreign client returns empty", () => {
+    const demo = freshDemo();
+    const ledger = getAccountLedger({
+      entries: demo.entries,
+      lines: demo.lines,
+      clientId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+      accountCode: "1111",
+      asOfDate: "2026-12-31",
+    });
+
+    expect(ledger.rows).toEqual([]);
+    expect(ledger.closingBalance).toBe(0);
+  });
+
+  it("returns empty ledger with closingBalance=0 when account has no booked lines", () => {
+    const demo = freshDemo();
+    // 1141 沒在任何 entry 內出現過
+    const ledger = getAccountLedger({
+      entries: demo.entries,
+      lines: demo.lines,
+      clientId: CLIENT_ID,
+      accountCode: "1141",
+      asOfDate: "2026-12-31",
+    });
+
+    expect(ledger.accountCode).toBe("1141");
+    expect(ledger.rows).toEqual([]);
+    expect(ledger.closingBalance).toBe(0);
+  });
+
+  it("closing balance per account matches corresponding BS row", () => {
+    const demo = freshDemo();
+    const bs = computeBalanceSheet({
+      entries: demo.entries,
+      lines: demo.lines,
+      clientId: CLIENT_ID,
+      asOfDate: "2026-12-31",
+    });
+
+    for (const row of [
+      ...bs.assets.rows,
+      ...bs.liabilities.rows,
+      // 不含 equity 因為合成 3440 不對應任何實際 lines
+    ]) {
+      const ledger = getAccountLedger({
+        entries: demo.entries,
+        lines: demo.lines,
+        clientId: CLIENT_ID,
+        accountCode: row.accountCode,
+        asOfDate: "2026-12-31",
+      });
+      expect(ledger.closingBalance).toBe(row.amount);
+    }
   });
 });

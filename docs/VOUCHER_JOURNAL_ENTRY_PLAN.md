@@ -57,9 +57,9 @@
 | 5 | 結構模型 | CTI：`documents`（父，事實層）+ `invoices`/`allowances`（子，CTI children，反向 FK 至 documents）；`journal_entries`（傳票 header）+ `journal_entry_lines`（借/貸明細） | 命名遵循國際 ERP 慣例：voucher = 傳票（記帳憑證），不是原始發票/收據 |
 | 6 | `voucher_no` | 格式 `YYYYMMDD-NNNNN`（5 位序號）；**強制 no-gap**；以 `voucher_sequences` 表 + `FOR UPDATE` 序列化賦號 | 跳號違反會計原則；draft 丟棄不會佔號（draft 階段 voucher_no 為 NULL，post 時才賦） |
 | 7 | IS / BS 計算 | v1 **不建** `account_period_balances` rollup 表，IS/BS 即時 SUM `journal_entry_lines`；單客戶單年估計 < 15K rows，預計 < 100ms | 介面（`getIncomeStatement` / `getBalanceSheet`）以服務層封裝，未來如需加速可內部切換為 rollup + backfill 而不影響呼叫方 |
-| 8 | Post 操作實作 | 一支 ~30 行 PL/pgSQL function `post_journal_entry(entry_id, user_id)`：`SELECT ... FOR UPDATE` 取 entry → 校驗借貸平衡 → atomic UPSERT 取 next seq → flip status；批次版本同邏輯 + 陣列入參 | 因 supabase.js SDK 無法跨 statement 開 transaction，no-gap 賦號 + status flip 必須在同一 RPC 內。其餘 CRUD 仍走純 SDK |
+| 8 | Post 操作實作 | `SELECT ... FOR UPDATE` 取 entry → 校驗借貸平衡 → atomic UPSERT 取 next seq → flip status；批次版本同邏輯 + 陣列入參 | 因 supabase.js SDK 無法跨 statement 開 transaction，no-gap 賦號 + status flip 必須在同一交易內。**實作宿主依 #10 修訂改為 Drizzle `db.transaction()`**（原訂為 PL/pgSQL function），FOR UPDATE + 原子賦號 + flip 之邏輯不變；見 §12 |
 | 9 | 沖銷模型 | `journal_entries.reverses_entry_id` self-FK；原分錄 `status` 變 `reversed` 但**不自 IS/BS 扣回**，沖銷效果完全來自新插入的反向分錄（借貸對調）。**僅用於跨年度（已關帳年）的修正**；當年度未關帳之 posted entry 採 in-place edit（見 #11） | 反向分錄是會計上跨年度修正的標準動作；當年度小錯（OCR 誤讀、key-in 錯）不該被它污染 |
-| 10 | 資料存取架構 | **Supabase.js SDK 為主，少量 PL/pgSQL RPC 為輔**：純讀、單表 CRUD、status 翻轉走 SDK；跨表原子操作（`confirm_invoice` / `regenerate_draft_entry` / `post_journal_entries`）走 RPC | SDK + RPC 是當前唯一一致的 client；ORM 混合架構（Drizzle）為未來選項，見 §12 |
+| 10 | 資料存取架構 | **（2026-05 修訂）** Supabase.js 負責 Auth / Storage / 純讀 / 單表 CRUD / status 翻轉（保留 RLS）；跨表原子寫入（`confirm` / `regenerate` / `post` / `edit` / `reverse`）改走 **Drizzle `db.transaction()`**。交易層建置見 PHASED_PLAN Phase 6.5 | 原訂（2026-04-27）為純 SDK + ~3 支 PL/pgSQL RPC（Option A）；後因實際原子操作達 6 支、documents-first 多表寫入、且確立不擴增 PostgREST RPC，改採 §12 Option C（Drizzle）。完整理由見 §12 |
 | 11 | 模組劃分與編輯權限 | **VAT 模組與 GL 模組正交**：VAT 模組（invoices / allowances / tax_filing_periods）服務申報，鎖點 `tax_filing_period.status='filed'`；GL 模組（documents / journal_entries / journal_entry_lines / fiscal_year_closes / audit_trails）服務帳本，鎖點 `fiscal_year_closes`。Post 為單向轉送點。**Posted journal_entry 在 GL 年度未關帳前允許 in-place edit**（保留 voucher_no，必填 reason 寫入 audit_trails）；跨年度才走反向分錄 / 前期損益調整 | 對應主流 ERP 模組分離；in-place edit 對應實務「key-in 錯誤直接修正」訴求；改動詳見 §1 第 4 點、§5.6.1、§5.8 |
 | 12 | Audit 軌跡 | v1 引入 `audit_trails` 表（§3.9），用於 in-place edit 之 diff log。v1 必填寫入點：journal_entry posted 後的編輯 + 沖銷（reason 必填）；其餘事件（create/delete/post 等）為可選擴充。本表為**通用模組**，未來可服務跨表 audit | 沒有 audit log，posted in-place edit 等於「悄悄塗改」；audit_trails 是 #11 政策的必要前提 |
 | 13 | 折讓分錄推導方式 | 折讓**不**用固定樣板，而是**鏡像原發票之 posted entry 結構**：科目（費用 / 收入 / 結算）從原 entry 的 lines 取出、借貸對調、金額替換為折讓本身的 amount / taxAmount。若原發票對應之 entry 不存在（罕見：原發票未上傳或在他客戶名下），UI 退回請員工手動指定費用 / 收入科目。詳見 §5.2 | 樣板法無法正確處理「原發票為不可扣抵（費用吸收稅額,2 行）」的情境——折讓必須鏡像為 2 行才平衡。且若員工在 draft 階段改過原 entry 之科目，折讓亦應追隨該編輯,而非從 invoice 端 OCR 值重新推導 |
@@ -1110,11 +1110,11 @@ GROUP BY jel.account_code;
 
 ---
 
-## 12. 未來架構演進選項（informational）
+## 12. 資料存取架構：採 Drizzle 交易層（Decision #10 修訂）
 
-**v1 採 Decision #10 的純 Supabase.js + 少量 RPC 路徑**。本節記錄一個經評估後**暫不採用、但未來值得回顧的替代架構**。
+> **修訂註記**：本節原為「未來架構演進選項（informational）」，記錄一個暫不採用的替代架構（Option C）。2026-05 經評估後**決定採用 Option C**，Decision #10 同步修訂。下方保留原始評估內容，並補上改採的理由與落地位置（PHASED_PLAN Phase 6.5）。
 
-### Option C：Supabase.js + Drizzle 混合架構
+### Option C：Supabase.js + Drizzle 混合架構（v1 採用）
 
 **動機**：用 Drizzle（或同類 ORM）直連 PG，原子操作完全在 TypeScript 內表達，避免 PL/pgSQL 寫作。
 
@@ -1123,8 +1123,8 @@ GROUP BY jel.account_code;
 | 操作類型 | Client |
 |---|---|
 | Auth、Storage、Realtime | Supabase.js（不可繞過） |
-| 純讀、單表 CRUD | Supabase.js（保留 RLS 自動套用） |
-| 跨表原子寫入（confirm / post / regenerate） | Drizzle（`db.transaction()` + `for('update')`）|
+| 純讀、單表 CRUD、status 翻轉 | Supabase.js（保留 RLS 自動套用） |
+| 跨表原子寫入（confirm / regenerate / post / edit / reverse） | Drizzle（`db.transaction()` + `for('update')`）|
 
 **Drizzle 範例**（取代 `post_journal_entries` RPC）：
 
@@ -1147,34 +1147,30 @@ async function postJournalEntries(entryIds: string[], userId: string) {
 - 無 PL/pgSQL 學習門檻 / 維護腐化風險
 - Stack trace 與 debugger 體驗較佳
 
-**代價**：
+**代價（採用後須於 Phase 6.5 處理）**：
 - **RLS 不再自動**：需在每個 transaction 內 `SET LOCAL request.jwt.claims = ...`，或改採 application-layer 手動 firm_id 篩選；錯一次就資料外洩
 - **Connection pool 多一份 ops 責任**：需配 Supabase Transaction Pooler（port 6543）+ `prepare: false` 設定
 - **兩個 client 並存**：service layer 每個函式須自覺選擇用哪一個，加 cognitive overhead
 - **Schema 雙重維護**：`drizzle-kit pull`（給 Drizzle）+ `supabase gen types`（給 SDK）兩條 codegen pipeline
 - **Edge Functions（Deno）難以共用**：`extraction-worker` 仍須 Supabase.js + service role；Drizzle 範圍限於 Next.js 服端
 
-### 何時可考慮切換
+### 為何於 2026-05 改採 Option C
 
-當以下任一觸發時值得重新評估：
+原 2026-04-27 決策採 Option A（純 SDK + 少量 PL/pgSQL RPC），理由為當時團隊單一工程師、原子操作僅估 3 支、RLS 為資料隔離最後防線。後續以下變化使原訂觸發條件成立：
 
-1. **第二位以上工程師加入且明顯偏好 TS-first**，PL/pgSQL 變成 review 與維護瓶頸
-2. **RPC 數量成長至 ~10 支以上**：當前只需 3 支（confirm / regenerate / post），可控；若日後業務複雜化迫使更多原子操作，TS 版維護優勢顯著
-3. **PL/pgSQL 出現偵錯或行為理解難題**，反覆造成 incidents
-4. **整體棄用 Supabase 平台**（極遠期，與本案無關）
+1. **原子操作數量被低估**：實際需 6 支（`confirm_invoice` / `confirm_allowance` / `regenerate_draft_entry` / `post_journal_entries` / `edit_posted_entry` / `reverse_entry`），逼近原觸發條件「~10 支」，PL/pgSQL 維護成本顯著上升
+2. **documents-first（PHASED_PLAN Phase 5.5 起）**：每次上傳變成多表寫入。缺交易使單張上傳只能靠 best-effort 清理、電子發票匯入只能靠 idempotent 重跑；而 post 的 no-gap 序號配發無法靠重跑收斂，必須有真交易
+3. **明確不擴增 PostgREST RPC**：與其每個原子操作各寫一支 PL/pgSQL，集中以 Drizzle 交易層承載更一致、更易測
 
-### 遷移路徑（若未來決定採 C）
+### 落地
 
-A → C 不需 big-bang，可逐步：
+遷移路徑（A → C 可逐步，非 big-bang）：
 
-1. 新增 `lib/db/drizzle.ts` connection、`lib/db/schema.ts`（drizzle-kit pull 自動產生）、`lib/db/rls.ts` helper
-2. 設定 Supabase Transaction Pooler 連線（新環境變數 `DATABASE_URL`）
-3. 把現有 RPC 一個個用 Drizzle service function 替換（service 介面不變，內部實作改）
-4. 對應 integration test 驗證行為一致
-5. 移除對應的 PL/pgSQL function（migration drop）
+1. 新增 `lib/db/drizzle.ts` connection、`lib/db/schema.ts`（`drizzle-kit pull` 自動產生）、`lib/db/rls.ts` helper
+2. 設定 Supabase Transaction Pooler 連線（新環境變數 `DATABASE_URL`、`prepare: false`）
+3. Phase 7 起的跨表原子寫入直接以 Drizzle service function 實作；service 介面形狀不變
+4. 對應 integration test 驗證行為（原子性、`FOR UPDATE`、fail-loud）
 
-每個 RPC 可獨立遷移，**選 A 不會綁死未來路徑**。
+交易層之建置獨立為 **PHASED_PLAN Phase 6.5**，排在 Phase 7 之前。Phase 7-11 內文出現的「RPC」、`*_rpc.sql` 字樣，實作時一律理解為 Drizzle `db.transaction()`。
 
-### 不採 C 的關鍵理由（給未來的讀者）
-
-當前團隊規模（單一工程師）+ 原子操作數量（3 支）+ RLS 是會計資料隔離的最後防線（不該手動處理） → A 的 100 行 PL/pgSQL 比 C 的雙 client + 手動 RLS + connection pool 設定划算。決策時點：2026-04-27。
+> **歷史註記（2026-04-27 原決策）**：原採 Option A 的關鍵理由為單一工程師 + 原子操作僅 3 支 + RLS 為最後防線 → 100 行 PL/pgSQL 比雙 client + 手動 RLS + connection pool 設定划算。此前提因上述三點變化而不再成立。

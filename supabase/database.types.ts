@@ -66,6 +66,7 @@ export type Database = {
           allowance_serial_code: string | null
           client_id: string | null
           created_at: string | null
+          document_id: string | null
           extracted_data: Json | null
           filename: string | null
           firm_id: string
@@ -82,6 +83,7 @@ export type Database = {
           allowance_serial_code?: string | null
           client_id?: string | null
           created_at?: string | null
+          document_id?: string | null
           extracted_data?: Json | null
           filename?: string | null
           firm_id: string
@@ -98,6 +100,7 @@ export type Database = {
           allowance_serial_code?: string | null
           client_id?: string | null
           created_at?: string | null
+          document_id?: string | null
           extracted_data?: Json | null
           filename?: string | null
           firm_id?: string
@@ -116,6 +119,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "allowances_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
             referencedColumns: ["id"]
           },
           {
@@ -465,6 +475,7 @@ export type Database = {
         Row: {
           client_id: string | null
           created_at: string | null
+          document_id: string | null
           extracted_data: Json | null
           filename: string
           firm_id: string
@@ -480,6 +491,7 @@ export type Database = {
         Insert: {
           client_id?: string | null
           created_at?: string | null
+          document_id?: string | null
           extracted_data?: Json | null
           filename: string
           firm_id: string
@@ -495,6 +507,7 @@ export type Database = {
         Update: {
           client_id?: string | null
           created_at?: string | null
+          document_id?: string | null
           extracted_data?: Json | null
           filename?: string
           firm_id?: string
@@ -513,6 +526,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
             referencedColumns: ["id"]
           },
           {

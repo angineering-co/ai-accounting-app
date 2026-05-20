@@ -50,6 +50,18 @@ export function formatDateTimeZhTW(date: Date): string {
   return zhTwDateTimeFormatter.format(date);
 }
 
+const taipeiDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Taipei",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/** Today's date in Asia/Taipei as YYYY-MM-DD, independent of server timezone. */
+export function todayInTaipeiISO(): string {
+  return taipeiDateFormatter.format(new Date());
+}
+
 export function normalizeDateInput(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const trimmed = value.trim();

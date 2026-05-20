@@ -17,7 +17,7 @@ import { enrichExtractedParties } from "@/lib/services/business-lookup";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ensurePeriodEditable } from "@/lib/services/tax-period";
 import { createDocument } from "@/lib/services/document";
-import { formatDateToISO } from "@/lib/utils";
+import { todayInTaipeiISO } from "@/lib/utils";
 
 /**
  * Create an allowance record
@@ -52,7 +52,7 @@ export async function createAllowance(
       {
         firm_id: validated.firm_id,
         client_id: validated.client_id,
-        doc_date: formatDateToISO(new Date()),
+        doc_date: todayInTaipeiISO(),
         type: 'VAT',
         doc_type: 'allowance',
         file_url: validated.storage_path ?? null,
@@ -75,7 +75,13 @@ export async function createAllowance(
 
   if (error) {
     if (documentId) {
-      await supabase.from('documents').delete().eq('id', documentId);
+      const { error: cleanupError } = await supabase
+        .from('documents')
+        .delete()
+        .eq('id', documentId);
+      if (cleanupError) {
+        console.error(`Failed to clean up orphan document ${documentId}:`, cleanupError);
+      }
     }
     throw error;
   }
@@ -310,13 +316,13 @@ export async function extractAllowanceDataAction(allowanceId: string) {
 /**
  * Delete an allowance record
  */
-export async function deleteAllowance(allowanceId: string) {
-  const supabase = await createClient();
+export async function deleteAllowance(allowanceId: string, options?: AllowanceServiceOptions) {
+  const supabase = options?.supabaseClient ?? (await createClient());
 
   // First, get the allowance to retrieve storage_path
   const { data: allowance, error: fetchError } = await supabase
     .from('allowances')
-    .select('storage_path')
+    .select('storage_path, document_id')
     .eq('id', allowanceId)
     .single();
 
@@ -339,6 +345,18 @@ export async function deleteAllowance(allowanceId: string) {
 
     if (storageError) {
       console.error(`Failed to delete storage object ${allowance.storage_path}:`, storageError);
+    }
+  }
+
+  // Remove the CTI parent document row — the allowance was its only child.
+  if (allowance.document_id) {
+    const { error: documentError } = await supabase
+      .from('documents')
+      .delete()
+      .eq('id', allowance.document_id);
+
+    if (documentError) {
+      console.error(`Failed to delete document ${allowance.document_id}:`, documentError);
     }
   }
 }

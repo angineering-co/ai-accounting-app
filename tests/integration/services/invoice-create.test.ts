@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { createInvoice } from "@/lib/services/invoice";
+import { createInvoice, deleteInvoice } from "@/lib/services/invoice";
 import {
   cleanupTestFixture,
   createTestFixture,
@@ -95,5 +95,52 @@ describe.skipIf(!hasDbEnv)("createInvoice — documents-first", () => {
       .eq("client_id", fixture.clientId);
 
     expect(after).toBe(before);
+  });
+});
+
+describe.skipIf(!hasDbEnv)("deleteInvoice — documents-first", () => {
+  let supabase: ReturnType<typeof getServiceClient>;
+  let fixture: TestFixture;
+
+  beforeAll(async () => {
+    supabase = getServiceClient();
+    fixture = await createTestFixture(supabase);
+  });
+
+  afterAll(async () => {
+    if (fixture) {
+      await cleanupTestFixture(supabase, fixture);
+    }
+  });
+
+  it("deletes the linked documents parent row along with the invoice", async () => {
+    const invoice = await createInvoice(
+      {
+        firm_id: fixture.firmId,
+        client_id: fixture.clientId,
+        storage_path: `${fixture.firmId}/11505/${fixture.clientId}/del.pdf`,
+        filename: "del.pdf",
+        in_or_out: "in",
+      },
+      { supabaseClient: supabase, userId: fixture.userId },
+    );
+    const documentId = invoice.document_id!;
+    expect(documentId).toBeTruthy();
+
+    await deleteInvoice(invoice.id, { supabaseClient: supabase });
+
+    const { data: invoiceRow } = await supabase
+      .from("invoices")
+      .select("id")
+      .eq("id", invoice.id)
+      .maybeSingle();
+    expect(invoiceRow).toBeNull();
+
+    const { data: documentRow } = await supabase
+      .from("documents")
+      .select("id")
+      .eq("id", documentId)
+      .maybeSingle();
+    expect(documentRow).toBeNull();
   });
 });

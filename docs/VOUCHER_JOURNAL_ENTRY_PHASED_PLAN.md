@@ -5,7 +5,7 @@
 > - ✅ Phase 2 完成（傳票 UI 全套：列表 / 詳情 / 編輯 dialog / 審計歷史 / 批次過帳 / 沖銷 dialog / sidebar 入口 / 期別頁雙處連結）
 > - ✅ Phase 3 完成（損益表 / 資產負債表 UI）
 > - ✅ Phase 4 完成（純函式：分錄推導 + 帳號代碼解析；130/130 測試綠，新增 22）
-> - 📋 Phase 5.5（新增）：documents-first 上傳流程（僅 row 建立，不動 storage；為 Upload Classifier 計畫鋪路）
+> - ✅ Phase 5.5 完成（documents-first row 建立：createInvoice / createAllowance 先建 documents 父表 row，子表以 document_id FK 連結；180/180 測試綠）
 > - 📋 Phase 5.6（新增）：storage 清理（建 documents bucket、搬移既有檔案、路徑重排）
 > - 📋 Phase 6.5（新增）：Drizzle ORM + 交易層（取代 PL/pgSQL RPC，為 Phase 7+ 原子寫入鋪路）
 >
@@ -174,7 +174,9 @@
 
 ---
 
-## Phase 5.5 — documents-first 上傳流程（僅 row 建立）
+## ✅ Phase 5.5 — documents-first 上傳流程（僅 row 建立）
+
+**狀態**：完成（PR #189）。
 
 **目標**：把 `createInvoice` / `createAllowance` 改為「**先建 documents 父表 row，再建 invoice / allowance 子表 row**」，子表透過新增的 `document_id` FK 連回父表。為日後 Upload Classifier 進場（判決天然寫 documents、子表是衍生）鋪路。UI、上傳入口、對外 service 簽章全部不變，使用者無感。
 

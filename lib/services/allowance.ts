@@ -9,37 +9,82 @@ import {
   type UpdateAllowanceInput,
   type ExtractedAllowanceData,
 } from "@/lib/domain/models";
-import { type Json, type TablesUpdate } from "@/supabase/database.types";
+import { type Json, type TablesUpdate, type Database } from "@/supabase/database.types";
 import { tryLinkOriginalInvoice } from "@/lib/services/invoice-import";
 import { extractAllowanceData, type ClientInfo } from "@/lib/services/gemini";
 import { getImportFileMimeType } from "@/lib/utils/mime-type";
 import { enrichExtractedParties } from "@/lib/services/business-lookup";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ensurePeriodEditable } from "@/lib/services/tax-period";
+import { createDocument } from "@/lib/services/document";
+import { todayInTaipeiISO } from "@/lib/utils";
 
 /**
  * Create an allowance record
  */
-export async function createAllowance(data: CreateAllowanceInput) {
-  const supabase = await createClient();
+type AllowanceServiceOptions = {
+  supabaseClient?: SupabaseClient<Database>;
+  userId?: string;
+};
+
+export async function createAllowance(
+  data: CreateAllowanceInput,
+  options?: AllowanceServiceOptions,
+) {
+  const supabase = options?.supabaseClient ?? (await createClient());
 
   // Get current user
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Unauthorized');
+  let userId = options?.userId;
+  if (!userId) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Unauthorized');
+    userId = user.id;
+  }
 
   const validated = createAllowanceSchema.parse(data);
+
+  // Documents-first: create the CTI parent row, then the allowance child row.
+  // There is no DB transaction, so a failed allowance insert below triggers a
+  // best-effort cleanup of the orphan document.
+  let documentId: string | null = null;
+  if (validated.client_id) {
+    documentId = await createDocument(
+      {
+        firm_id: validated.firm_id,
+        client_id: validated.client_id,
+        doc_date: todayInTaipeiISO(),
+        type: 'VAT',
+        doc_type: 'allowance',
+        file_url: validated.storage_path ?? null,
+        ocr_status: 'pending',
+      },
+      { supabaseClient: supabase, userId },
+    );
+  }
 
   const { data: allowance, error } = await supabase
     .from('allowances')
     .insert({
       ...validated,
-      uploaded_by: user.id,
+      document_id: documentId,
+      uploaded_by: userId,
       status: 'uploaded',
     })
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    if (documentId) {
+      const { error: cleanupError } = await supabase
+        .from('documents')
+        .delete()
+        .eq('id', documentId);
+      if (cleanupError) {
+        console.error(`Failed to clean up orphan document ${documentId}:`, cleanupError);
+      }
+    }
+    throw error;
+  }
   return allowance;
 }
 
@@ -271,13 +316,13 @@ export async function extractAllowanceDataAction(allowanceId: string) {
 /**
  * Delete an allowance record
  */
-export async function deleteAllowance(allowanceId: string) {
-  const supabase = await createClient();
+export async function deleteAllowance(allowanceId: string, options?: AllowanceServiceOptions) {
+  const supabase = options?.supabaseClient ?? (await createClient());
 
   // First, get the allowance to retrieve storage_path
   const { data: allowance, error: fetchError } = await supabase
     .from('allowances')
-    .select('storage_path')
+    .select('storage_path, document_id')
     .eq('id', allowanceId)
     .single();
 
@@ -300,6 +345,18 @@ export async function deleteAllowance(allowanceId: string) {
 
     if (storageError) {
       console.error(`Failed to delete storage object ${allowance.storage_path}:`, storageError);
+    }
+  }
+
+  // Remove the CTI parent document row — the allowance was its only child.
+  if (allowance.document_id) {
+    const { error: documentError } = await supabase
+      .from('documents')
+      .delete()
+      .eq('id', allowance.document_id);
+
+    if (documentError) {
+      console.error(`Failed to delete document ${allowance.document_id}:`, documentError);
     }
   }
 }

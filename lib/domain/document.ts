@@ -27,8 +27,21 @@ export const documentSchema = z.object({
   updated_at: z.coerce.date(),
 });
 
+// Args for creating a documents row (CTI parent). `status` / `created_by` /
+// timestamps are set server-side or by DB default, so they are absent here.
+export const createDocumentSchema = z.object({
+  firm_id: z.string().uuid(),
+  client_id: z.string().uuid(),
+  doc_date: z.string(), // YYYY-MM-DD
+  type: z.enum(DOC_VAT_TYPE).default("VAT"),
+  doc_type: z.enum(DOC_TYPE),
+  file_url: z.string().nullable().optional(),
+  ocr_status: z.enum(DOC_OCR_STATUS).nullable().optional(),
+});
+
 export type DocType = (typeof DOC_TYPE)[number];
 export type DocStatus = (typeof DOC_STATUS)[number];
 export type DocVatType = (typeof DOC_VAT_TYPE)[number];
 export type DocOcrStatus = (typeof DOC_OCR_STATUS)[number];
 export type Document = z.infer<typeof documentSchema>;
+export type CreateDocumentInput = z.infer<typeof createDocumentSchema>;

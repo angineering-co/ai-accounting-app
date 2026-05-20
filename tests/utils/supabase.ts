@@ -140,18 +140,23 @@ export async function cleanupTestFixture(
       .remove(fixture.storagePaths);
   }
 
-  // GL leaf tables — all independent of each other and of invoice/client deletion below,
-  // so parallelize. journal_entry_lines cascades from journal_entries (no explicit delete).
-  // audit_trails scoped by firm_id since entries are about to disappear.
+  // FK-ordered teardown in waves. `documents` is the CTI parent of invoices /
+  // allowances / journal_entries, and `allowances.original_invoice_id` references
+  // invoices — so: allowances first, then invoices + journal_entries, then
+  // documents. journal_entry_lines cascades from journal_entries (no explicit
+  // delete). audit_trails scoped by firm_id since entries are about to disappear.
   await Promise.all([
     supabase.from("audit_trails").delete().eq("firm_id", fixture.firmId),
     supabase.from("fiscal_year_closes").delete().eq("client_id", fixture.clientId),
     supabase.from("voucher_sequences").delete().eq("client_id", fixture.clientId),
-    supabase.from("journal_entries").delete().eq("client_id", fixture.clientId),
-    supabase.from("documents").delete().eq("client_id", fixture.clientId),
-    supabase.from("invoices").delete().eq("client_id", fixture.clientId),
     supabase.from("invoice_ranges").delete().eq("client_id", fixture.clientId),
+    supabase.from("allowances").delete().eq("client_id", fixture.clientId),
   ]);
+  await Promise.all([
+    supabase.from("journal_entries").delete().eq("client_id", fixture.clientId),
+    supabase.from("invoices").delete().eq("client_id", fixture.clientId),
+  ]);
+  await supabase.from("documents").delete().eq("client_id", fixture.clientId);
 
   // Clients and profiles both FK firms; both must be gone before firms.delete.
   await Promise.all([

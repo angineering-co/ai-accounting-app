@@ -15,9 +15,11 @@ import {
 } from "@/lib/services/gemini";
 import { getAccountListString } from "@/lib/services/account";
 import { ACCOUNT_LIST } from "@/lib/data/accounts";
-import { type Json, type TablesUpdate } from "@/supabase/database.types";
+import { type Json, type TablesUpdate, type Database } from "@/supabase/database.types";
 import { type ExtractedInvoiceData } from "@/lib/domain/models";
 import { ensurePeriodEditable } from "@/lib/services/tax-period";
+import { createDocument } from "@/lib/services/document";
+import { todayInTaipeiISO } from "@/lib/utils";
 import { getImportFileMimeType } from "@/lib/utils/mime-type";
 import { enrichExtractedParties } from "@/lib/services/business-lookup";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -73,12 +75,24 @@ async function saveExtractedInvoiceData(
   return validatedData;
 }
 
-export async function createInvoice(data: CreateInvoiceInput) {
-  const supabase = await createClient();
-  
+type InvoiceServiceOptions = {
+  supabaseClient?: SupabaseClient<Database>;
+  userId?: string;
+};
+
+export async function createInvoice(
+  data: CreateInvoiceInput,
+  options?: InvoiceServiceOptions,
+) {
+  const supabase = options?.supabaseClient ?? (await createClient());
+
   // Get current user
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Unauthorized');
+  let userId = options?.userId;
+  if (!userId) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Unauthorized');
+    userId = user.id;
+  }
 
   // Validate input
   const validated = createInvoiceSchema.parse(data);
@@ -88,18 +102,49 @@ export async function createInvoice(data: CreateInvoiceInput) {
     await ensurePeriodEditable(validated.client_id, validated.year_month);
   }
 
+  // Documents-first: create the CTI parent row, then the invoice child row.
+  // All validation above runs first — there is no DB transaction, so a failed
+  // invoice insert below triggers a best-effort cleanup of the orphan document.
+  let documentId: string | null = null;
+  if (validated.client_id) {
+    documentId = await createDocument(
+      {
+        firm_id: validated.firm_id,
+        client_id: validated.client_id,
+        doc_date: todayInTaipeiISO(),
+        type: 'VAT',
+        doc_type: 'invoice',
+        file_url: validated.storage_path,
+        ocr_status: 'pending',
+      },
+      { supabaseClient: supabase, userId },
+    );
+  }
+
   // Insert invoice record
   const { data: invoice, error } = await supabase
     .from('invoices')
     .insert({
       ...validated,
-      uploaded_by: user.id,
+      document_id: documentId,
+      uploaded_by: userId,
       status: 'uploaded',
     })
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    if (documentId) {
+      const { error: cleanupError } = await supabase
+        .from('documents')
+        .delete()
+        .eq('id', documentId);
+      if (cleanupError) {
+        console.error(`Failed to clean up orphan document ${documentId}:`, cleanupError);
+      }
+    }
+    throw error;
+  }
   return invoice;
 }
 
@@ -201,13 +246,14 @@ export async function updateInvoice(invoiceId: string, data: UpdateInvoiceInput)
   return { success: true as const, invoice };
 }
 
-export async function deleteInvoice(invoiceId: string) {
-  const supabase = await createClient();
-  
+export async function deleteInvoice(invoiceId: string, options?: InvoiceServiceOptions) {
+  const supabase = options?.supabaseClient ?? (await createClient());
+
+
   // First, get the invoice to retrieve storage_path and check period lock
   const { data: invoice, error: fetchError } = await supabase
     .from('invoices')
-    .select('storage_path, client_id, year_month')
+    .select('storage_path, client_id, year_month, document_id')
     .eq('id', invoiceId)
     .single();
 
@@ -232,10 +278,22 @@ export async function deleteInvoice(invoiceId: string) {
     const { error: storageError } = await supabase.storage
       .from('invoices')
       .remove([invoice.storage_path]);
-    
+
     if (storageError) {
       // Log this error but don't throw, as the DB record is already gone.
       console.error(`Failed to delete storage object ${invoice.storage_path}:`, storageError);
+    }
+  }
+
+  // Remove the CTI parent document row — the invoice was its only child.
+  if (invoice.document_id) {
+    const { error: documentError } = await supabase
+      .from('documents')
+      .delete()
+      .eq('id', invoice.document_id);
+
+    if (documentError) {
+      console.error(`Failed to delete document ${invoice.document_id}:`, documentError);
     }
   }
 }

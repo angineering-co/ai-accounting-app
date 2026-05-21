@@ -128,7 +128,14 @@ async function main(): Promise<void> {
   let skipped = 0;
   const failures: { srcKey: string; reason: string }[] = [];
 
-  for (const srcKey of srcKeys) {
+  for (const [index, srcKey] of srcKeys.entries()) {
+    if (!dryRun && index > 0 && index % 100 === 0) {
+      console.log(
+        `[migrate-storage] progress: ${index}/${srcKeys.length} ` +
+          `(copied ${copied}, skipped ${skipped}, failed ${failures.length})`,
+      );
+    }
+
     let destKey: string;
     try {
       destKey = toDocumentsKey(srcKey);

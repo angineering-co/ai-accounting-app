@@ -107,8 +107,8 @@ export function InvoiceUploadDialog({
   }, [open, period, uploadForm]);
 
   const uploadProps = useSupabaseUpload({
-    bucketName: "invoices",
-    path: `${firmId}/${period.toString()}/${clientId}`,
+    bucketName: "documents",
+    path: `${firmId}/${clientId}/${period.toString()}`,
     allowedMimeTypes: ["image/*", "application/pdf"],
     maxFiles: 10,
     maxFileSize: 50 * 1024 * 1024,

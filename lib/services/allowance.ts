@@ -17,6 +17,7 @@ import { enrichExtractedParties } from "@/lib/services/business-lookup";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ensurePeriodEditable } from "@/lib/services/tax-period";
 import { createDocument } from "@/lib/services/document";
+import { toDocumentsKey } from "@/lib/storage/documents-key";
 import { todayInTaipeiISO } from "@/lib/utils";
 
 /**
@@ -206,10 +207,10 @@ export async function extractAllowanceCore(
       throw new Error("Allowance storage path is missing");
     }
 
-    // Download allowance file from Supabase Storage (paper allowances stored in invoices bucket)
+    // Download allowance file from Supabase Storage
     const { data: fileData, error: downloadError } = await supabase.storage
-      .from("invoices")
-      .download(allowance.storage_path);
+      .from("documents")
+      .download(toDocumentsKey(allowance.storage_path));
 
     if (downloadError) {
       throw new Error(
@@ -340,8 +341,8 @@ export async function deleteAllowance(allowanceId: string, options?: AllowanceSe
   // After successfully deleting the DB record, remove the file from storage if exists
   if (allowance.storage_path) {
     const { error: storageError } = await supabase.storage
-      .from('invoices')  // Paper allowances are stored in invoices bucket
-      .remove([allowance.storage_path]);
+      .from('documents')
+      .remove([toDocumentsKey(allowance.storage_path)]);
 
     if (storageError) {
       console.error(`Failed to delete storage object ${allowance.storage_path}:`, storageError);

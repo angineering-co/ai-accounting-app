@@ -82,7 +82,7 @@ type DeleteTarget = {
 type PreviewTarget = {
   filename?: string | null;
   storagePath?: string | null;
-  bucketName: "invoices" | "electronic-invoices";
+  bucketName: "documents" | "electronic-invoices";
   previewUrl?: string;
 };
 
@@ -128,7 +128,7 @@ export default function PortalPeriodDetailPage({
         bucketName:
           item.extracted_data?.source === "import-excel"
             ? "electronic-invoices"
-            : "invoices",
+            : "documents",
         previewUrl: options?.previewUrl,
       });
     },

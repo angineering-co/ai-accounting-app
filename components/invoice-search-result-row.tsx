@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { toDocumentsKey } from "@/lib/storage/documents-key";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import {
   getSignedPreviewUrl,
@@ -103,8 +104,8 @@ export function InvoiceSearchResultRow({
     let mounted = true;
     void (async () => {
       const url = await getSignedPreviewUrl({
-        bucketName: "invoices",
-        storagePath: invoice.storage_path,
+        bucketName: "documents",
+        storagePath: toDocumentsKey(invoice.storage_path),
         expiresInSeconds: SIGNED_URL_EXPIRATION_SECONDS,
         transform: THUMBNAIL_TRANSFORM,
       });

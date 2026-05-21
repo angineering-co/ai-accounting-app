@@ -18,6 +18,7 @@ import { ACCOUNT_LIST } from "@/lib/data/accounts";
 import { type Json, type TablesUpdate, type Database } from "@/supabase/database.types";
 import { type ExtractedInvoiceData } from "@/lib/domain/models";
 import { ensurePeriodEditable } from "@/lib/services/tax-period";
+import { toDocumentsKey } from "@/lib/storage/documents-key";
 import { createDocument } from "@/lib/services/document";
 import { todayInTaipeiISO } from "@/lib/utils";
 import { getImportFileMimeType } from "@/lib/utils/mime-type";
@@ -276,8 +277,8 @@ export async function deleteInvoice(invoiceId: string, options?: InvoiceServiceO
   // After successfully deleting the DB record, remove the file from storage
   if (invoice.storage_path) {
     const { error: storageError } = await supabase.storage
-      .from('invoices')
-      .remove([invoice.storage_path]);
+      .from('documents')
+      .remove([toDocumentsKey(invoice.storage_path)]);
 
     if (storageError) {
       // Log this error but don't throw, as the DB record is already gone.
@@ -435,8 +436,8 @@ export async function extractInvoiceCore(
 
     // Download invoice file from Supabase Storage
     const { data: fileData, error: downloadError } = await supabase.storage
-      .from("invoices")
-      .download(invoice.storage_path);
+      .from("documents")
+      .download(toDocumentsKey(invoice.storage_path));
 
     if (downloadError) {
       throw new Error(

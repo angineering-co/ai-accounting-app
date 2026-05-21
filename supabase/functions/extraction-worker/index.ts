@@ -13,6 +13,7 @@
 import "@supabase/functions-js/edge-runtime.d.ts"
 import { createClient } from "npm:@supabase/supabase-js@2"
 import { encodeBase64 } from "jsr:@std/encoding@^1/base64"
+import { toDocumentsKey } from "./documents-key.ts"
 
 const BATCH_SIZE = 5;
 const CONCURRENCY_LIMIT = 2;
@@ -278,7 +279,7 @@ async function extractInvoice(
   // Download file from storage
   const dlStart = Date.now();
   const { data: fileData, error: dlErr } = await supabase.storage
-    .from("invoices").download(invoice.storage_path);
+    .from("documents").download(toDocumentsKey(invoice.storage_path));
   if (dlErr) throw new Error(`Failed to download: ${dlErr.message}`);
   if (!fileData) throw new Error("Invoice file not found in storage");
 
@@ -490,7 +491,7 @@ async function extractAllowance(
 
   const dlStart = Date.now();
   const { data: fileData, error: dlErr } = await supabase.storage
-    .from("invoices").download(allowance.storage_path);
+    .from("documents").download(toDocumentsKey(allowance.storage_path));
   if (dlErr) throw new Error(`Failed to download: ${dlErr.message}`);
   if (!fileData) throw new Error("Allowance file not found in storage");
 

@@ -19,6 +19,7 @@ import {
   FileText,
 } from "lucide-react";
 import { type Invoice } from "@/lib/domain/models";
+import { toDocumentsKey } from "@/lib/storage/documents-key";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import Image from "next/image";
@@ -134,8 +135,8 @@ export function InvoiceTable({
         PREVIEW_SIGNING_CONCURRENCY,
         async (invoice) => {
           const signedUrl = await getSignedPreviewUrl({
-            bucketName: "invoices",
-            storagePath: invoice.storage_path,
+            bucketName: "documents",
+            storagePath: toDocumentsKey(invoice.storage_path),
             expiresInSeconds: SIGNED_URL_EXPIRATION_SECONDS,
             transform: THUMBNAIL_TRANSFORM,
           });

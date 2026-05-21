@@ -83,8 +83,8 @@ export const DocumentUploadSection = forwardRef<
   });
 
   const uploadProps = useSupabaseUpload({
-    bucketName: "invoices",
-    path: `${firmId}/${periodYYYMM}/${clientId}`,
+    bucketName: "documents",
+    path: `${firmId}/${clientId}/${periodYYYMM}`,
     allowedMimeTypes: ["image/*", "application/pdf"],
     maxFiles: 10,
     maxFileSize: 50 * 1024 * 1024,

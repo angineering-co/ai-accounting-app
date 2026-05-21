@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Loader2 } from "lucide-react";
 import { getSignedPreviewUrl } from "@/lib/supabase/signed-preview-url-cache";
+import { toDocumentsKey } from "@/lib/storage/documents-key";
 import {
   Dialog,
   DialogContent,
@@ -36,7 +37,7 @@ const isPdfFilename = (filename: string | null | undefined) => {
 interface FilePreviewDialogProps {
   filename?: string | null;
   storagePath?: string | null;
-  bucketName?: "invoices" | "electronic-invoices";
+  bucketName?: "documents" | "electronic-invoices";
   initialPreviewUrl?: string;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
@@ -45,7 +46,7 @@ interface FilePreviewDialogProps {
 export function FilePreviewDialog({
   filename,
   storagePath,
-  bucketName = "invoices",
+  bucketName = "documents",
   initialPreviewUrl,
   isOpen,
   onOpenChange,
@@ -73,7 +74,10 @@ export function FilePreviewDialog({
       try {
         const signedUrl = await getSignedPreviewUrl({
           bucketName,
-          storagePath,
+          storagePath:
+            bucketName === "documents"
+              ? toDocumentsKey(storagePath)
+              : storagePath,
           expiresInSeconds: 3600,
           transform: isImage ? { quality: 80 } : undefined,
         });

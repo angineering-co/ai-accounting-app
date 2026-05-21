@@ -10,6 +10,7 @@ import {
   QUEUE_PREVIEW_TRANSFORM,
 } from "@/lib/supabase/signed-preview-url-cache";
 import { mapWithConcurrency } from "@/lib/async/map-with-concurrency";
+import { toDocumentsKey } from "@/lib/storage/documents-key";
 import type { Database } from "@/supabase/database.types";
 
 type UploadQueueType = "invoice" | "allowance";
@@ -128,8 +129,8 @@ export function usePreAiUploadQueue({
         PREVIEW_SIGNING_CONCURRENCY,
         async (row) => {
           const signedUrl = await getSignedPreviewUrl({
-            bucketName: "invoices",
-            storagePath: row.storage_path!,
+            bucketName: "documents",
+            storagePath: toDocumentsKey(row.storage_path!),
             expiresInSeconds: 60 * 30,
             transform: QUEUE_PREVIEW_TRANSFORM,
           });

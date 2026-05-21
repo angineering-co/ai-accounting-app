@@ -55,6 +55,7 @@ import { toast } from "sonner";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { toDocumentsKey } from "@/lib/storage/documents-key";
 import Image from "next/image";
 import {
   cn,
@@ -483,8 +484,8 @@ export function InvoiceReviewDialog({
             if (data) setExcelDownloadUrl(data.signedUrl);
           } else {
             const { data, error } = await supabase.storage
-              .from("invoices")
-              .createSignedUrl(invoice.storage_path, 3600);
+              .from("documents")
+              .createSignedUrl(toDocumentsKey(invoice.storage_path), 3600);
             if (error) throw error;
             if (data) setPreviewUrl(data.signedUrl);
           }

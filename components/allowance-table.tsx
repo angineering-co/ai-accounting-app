@@ -18,6 +18,7 @@ import {
   FileText,
 } from "lucide-react";
 import { type Allowance } from "@/lib/domain/models";
+import { toDocumentsKey } from "@/lib/storage/documents-key";
 import {
   Tooltip,
   TooltipContent,
@@ -127,8 +128,8 @@ export function AllowanceTable({
           }
 
           const signedUrl = await getSignedPreviewUrl({
-            bucketName: "invoices",
-            storagePath: allowance.storage_path,
+            bucketName: "documents",
+            storagePath: toDocumentsKey(allowance.storage_path),
             expiresInSeconds: SIGNED_URL_EXPIRATION_SECONDS,
             transform: THUMBNAIL_TRANSFORM,
           });

@@ -99,12 +99,15 @@ function parseDocDate(raw: unknown, createdAt: string | null): string {
     const m = raw.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
     if (m) {
       const iso = `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
-      const parsed = new Date(iso);
-      if (
-        !Number.isNaN(parsed.getTime()) &&
-        parsed.toISOString().slice(0, 10) === iso
-      ) {
-        return iso;
+      // Parse as local midnight and validate with local getters — appending
+      // T00:00:00 keeps parse and read on the same timezone basis, so a
+      // rollover (e.g. 2026/02/30) is reliably rejected.
+      const parsed = new Date(`${iso}T00:00:00`);
+      if (!Number.isNaN(parsed.getTime())) {
+        const yy = parsed.getFullYear();
+        const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+        const dd = String(parsed.getDate()).padStart(2, "0");
+        if (`${yy}-${mm}-${dd}` === iso) return iso;
       }
     }
   }
@@ -254,7 +257,10 @@ async function backfillTable(
       ? base.eq("client_id", clientId)
       : base
     )
+      // `id` tiebreaker keeps pagination deterministic — `created_at` alone is
+      // non-unique, which can skip or repeat rows across page boundaries.
       .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
       .range(offset, offset + PAGE_SIZE - 1);
     if (error) throw error;
 
@@ -270,6 +276,9 @@ async function backfillTable(
         result.failed++;
         tableFailures++;
         result.failures.push({ table, rowId: row.id, reason: outcome.reason });
+      }
+      if ((tableDone + tableFailures) % 100 === 0) {
+        log(`[backfill] ${table}: ${tableDone} done, ${tableFailures} failed so far`);
       }
     }
 

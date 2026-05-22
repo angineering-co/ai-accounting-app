@@ -34,9 +34,11 @@ export function assertLocalUrl(envName: string, value: string): void {
   try {
     host = new URL(value).hostname;
   } catch {
-    throw new Error(`${envName} is not a valid URL: ${value}`);
+    // Omit the value — a malformed connection string may carry credentials.
+    throw new Error(`${envName} is not a valid URL`);
   }
-  if (host !== "127.0.0.1" && host !== "localhost") {
+  // URL.hostname returns the IPv6 loopback bracketed, e.g. "[::1]".
+  if (host !== "127.0.0.1" && host !== "localhost" && host !== "[::1]") {
     throw new Error(
       `Refusing to run integration tests against non-local ${envName} ` +
         `(host "${host}"). Point ${envName} at local Supabase in .env.local.`,

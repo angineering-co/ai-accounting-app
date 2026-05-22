@@ -6,8 +6,11 @@
 > - ✅ Phase 3 完成（損益表 / 資產負債表 UI）
 > - ✅ Phase 4 完成（純函式：分錄推導 + 帳號代碼解析；130/130 測試綠，新增 22）
 > - ✅ Phase 5.5 完成（documents-first row 建立：createInvoice / createAllowance 先建 documents 父表 row，子表以 document_id FK 連結；180/180 測試綠）
-> - 📋 Phase 5.6（新增）：storage 清理（建 documents bucket、搬移既有檔案、路徑重排）
-> - 📋 Phase 6.5（新增）：Drizzle ORM + 交易層（取代 PL/pgSQL RPC，為 Phase 7+ 原子寫入鋪路）
+> - ✅ Phase 5.6 完成（storage 清理：documents bucket、檔案搬遷、路徑重排；PR #190）
+> - ✅ Phase 6a 完成（既有 invoice / allowance 的 document_id backfill 腳本；191/191 測試綠）
+> - 📋 Phase 6a.1：documents 維持子表 amount / doc_date 的 denormalized cache（修補 forward write flow；既有少量分歧 row 人工修正）
+> - 📋 Phase 6.5：Drizzle ORM + 交易層（取代 PL/pgSQL RPC，為 Phase 7+ 原子寫入鋪路）
+> - 📋 Phase 6b：電子發票匯入改 documents-first（交易式）+ document_id 收緊為 NOT NULL UNIQUE（Phase 6 拆分後段，需 Phase 6.5 的交易層）
 >
 > **配套文件**：[`VOUCHER_JOURNAL_ENTRY_PLAN.md`](./VOUCHER_JOURNAL_ENTRY_PLAN.md) — 已收斂的設計提案（Decisions #1–#12）。本文件中所有 §x.y 章節編號皆指向設計提案。
 
@@ -242,40 +245,100 @@
 
 ---
 
-## Phase 6 — `documents` CTI backfill（invoices + **allowances 同步**）
+## ✅ Phase 6a — 既有 invoice / allowance 的 `document_id` backfill
 
-**目標**：把**既有**（Phase 5.5 之前留下的、subtable-first 路徑建立的）invoices 與 allowances 收斂到 documents 之下。Phase 5 已建空表；Phase 5.5 之後經 `createInvoice` / `createAllowance` 新建的 invoice / allowance 已是 documents-first 流程、不需 backfill。本階段做 backfill + 加 `NOT NULL UNIQUE`，並把最後一條未收編的寫入路徑（電子發票匯入 `processElectronicInvoiceFile`）也改為 documents-first，否則 `NOT NULL` 上線後新的匯入會違反約束。
+**狀態**：完成（branch `phase-6`）。
 
-> **方向說明**：Phase 6 backfill 是「subtable → documents」（舊資料補建父表 row），Phase 5.5 之後的新流程是「documents → subtable」。兩者方向相反但邏輯獨立、可共存；Phase 6 結束後 `invoices.document_id` / `allowances.document_id` 之 `NOT NULL UNIQUE` 對新舊資料一體適用。
+**目標**：把 Phase 5.5 之前留下的 invoice / allowance（`document_id IS NULL`）補建 documents 父表 row 並連結回去。Phase 5.5 之後經 `createInvoice` / `createAllowance` 新建的子表 row 已是 documents-first 流程，不需 backfill。
 
-**改動**：
-- Migration `<ts>_backfill_documents_from_invoices_allowances.sql`：
-  - 為每張既有 `invoice` INSERT 對應 documents row（`doc_type='invoice'`、`type='VAT'`、`doc_date = extracted_data.date` 缺漏退回 `created_at::date`、`amount = extracted_data.totalAmount`、`file_url = storage_path`、`status='active'`、firm_id / client_id 從 invoice 帶）
-  - **同次 backfill 處理 allowances**（`doc_type='allowance'`、`type='VAT'`、`amount = extracted_data.amount + taxAmount`、其他欄位 mapping 同上）
-  - `document_id` 欄位已於 Phase 5.5 加為 nullable → 本階段回填既有 NULL row → `RAISE EXCEPTION` 若仍 NULL（fail loud）→ 加 `NOT NULL UNIQUE` 約束
-  - **同次 migration 對 `allowances` 做完全相同的處理**：回填 → fail loud → 加 NOT NULL UNIQUE
-- **電子發票匯入路徑收編（`lib/services/invoice-import.ts::processElectronicInvoiceFile`）**：此路徑用 `chunkedUpsert` 批次寫入 invoices / allowances，從未經過 `createInvoice` / `createAllowance`，Phase 5.5 未涵蓋。本階段改為 documents-first：
-  - 每個 upsert 之前，先以 conflict key（invoice 為 `client_id, invoice_serial_code`；allowance 為對應 key）pre-fetch 既有 row 的 `document_id`
-  - 既有 row 已有 `document_id` → reuse；新 row 或 `document_id` 為 NULL → 批次 INSERT documents（`doc_date` / `amount` 直接取自 `extracted_data`，電子發票擷取已完成，`ocr_status` 標 `done`）
-  - 把 `document_id` 併入 row 物件後再 `chunkedUpsert`
-  - **idempotent**：匯入本就支援重跑；document 建立也做成「既有則 reuse」，故重跑不產生重複 documents、也不需交易。此路徑無需等 Drizzle（見 Phase 6.5）
-  - **上線順序**：此程式碼改動必須與「加 `NOT NULL` 約束」的 migration 同時或更早部署，否則新匯入會違反約束
-- `lib/services/document.ts`：補 `updateDocument` helper（`createDocument` 已於 Phase 5.5 建立）
-- 重新產生 `supabase/database.types.ts`
+**與原計畫的差異（Phase 6 拆分）**：原 Phase 6 把三件事綁在一起：(A) backfill 既有 row、(B) 電子發票匯入改 documents-first、(C) `document_id` 收緊為 `NOT NULL UNIQUE`。規劃時兩個發現導致拆分：
 
-**參考**：`supabase/migrations/20260126000001_backfill_periods.sql` 為相同 pattern。
+- 無交易的 Work B 在批次匯入部分失敗時會留下 orphan `documents`（documents 在多請求的 `chunkedUpsert` 之前就已 commit；原計畫「idempotent 重跑即可」的假設只保證子表資料收斂，沒顧到 orphan 累積）。
+- Work C 只能在「所有寫入路徑都會產生 `document_id`」之後才能加，而電子發票匯入正是這樣一條路徑，故 C 依賴 B。
+
+決定把 Phase 6 拆成 **Phase 6a**（本階段，只做 Work A backfill）與 **Phase 6b**（Work B + C，排在 Phase 6.5 Drizzle 之後，讓匯入路徑一開始就是交易式、永不產生 orphan）。Phase 6a 之後 `document_id` 維持 nullable、不加約束。
+
+**已交付**：
+- `scripts/backfill-document-id.ts`：可重複執行的 backfill 腳本（仿 `scripts/migrate-storage-to-documents.ts`：service-role client、`--dry-run`、分頁、結束時驗證、失敗 exit 非零）。核心邏輯為 exported `backfillDocumentIds(supabase, opts?)`，外層 `main()` CLI wrapper，便於整合測試
+  - 分頁掃 `document_id IS NULL` 的 invoices 再 allowances，逐筆建 documents row 並回寫 `document_id`
+  - 欄位 mapping：`doc_date` 由 `extracted_data.date`（YYYY/MM/DD）解析，缺漏或格式錯退回 `created_at` 日期部分；`ocr_status` 由子表 status 推導（`processed`/`confirmed` → `done`、`failed` → `failed`、其餘 → `pending`）；`amount` 取 `totalAmount`（invoice）或 `amount + taxAmount`（allowance）；`created_by` 取 `uploaded_by`，allowance 之 `uploaded_by` 可為 NULL 時退回該 firm 最早建立的 profile（per-firm cache）
+  - **兩層 idempotency**：(1) 只動 `document_id IS NULL` 的 row，乾淨重跑自動略過已完成者；(2) 每個 document 的 `id` 以 UUIDv5 由來源 row id 確定性導出，故「建 document 後、回寫連結前」當掉時，重跑算出同一 id，`upsert ... ON CONFLICT (id) DO NOTHING` 不會產生重複，連結再被補寫。**不會留下 orphan documents**
+- `tests/integration/scripts/backfill-document-id.test.ts`：6 個測試（欄位 mapping、malformed date 退回、NULL uploaded_by 退回 firm profile、乾淨重跑不產生重複、模擬當掉後重跑連回同一 document）
+
+**驗證紀錄**：`npm run lint` 無錯誤；`npm run test:run` 191/191 全綠（新增 6）。
+
+**執行方式**：`npx tsx scripts/backfill-document-id.ts --dry-run` 先看清單，再不帶 flag 實跑；可重複跑到 remaining 為 0。對 production 跑時把 env 指向 prod、選離峰時段。Phase 6b 開工前可再跑一次，把這段期間電子發票匯入產生的 NULL row 一併補上。
+
+---
+
+## Phase 6a.1 — documents 維持子表 amount / doc_date 的 denormalized cache
+
+**狀態**：未開始。可獨立於 Phase 6.5 / 6b 進行（不需交易層）。
+
+**背景**：Phase 5.5 在「上傳當下、OCR 之前」建 document，故 `doc_date` 是今日佔位、`amount` 為 NULL，之後沒有任何路徑回寫。Phase 6a 的 backfill 因執行時 OCR 早已完成而填了真值，造成不一致：backfill 的 row 帶真實 amount / doc_date，Phase 5.5 流程 live 上傳的 row 是 NULL / 佔位。v1 UI 讀子表、不讀 documents，故目前無功能影響，但未來 `/documents` 頁與報表、以及 `documents(client_id, doc_date)` index 都會踩到半真半假的資料。
+
+**設計決定**：`documents.amount` / `doc_date` 對 `doc_type IN ('invoice','allowance')` 而言是子表 `extracted_data` 的 denormalized cache（子表為真實來源）；對 `doc_type='other'`（未來 Classifier）則父表自身為真實來源（無子表）。本階段把所有寫 `extracted_data` 的路徑補上同步，讓新資料一開始就對齊。
+
+**範圍刻意限縮，不做 reconciler**：Phase 5.5 之後、本階段之前已建立、帶佔位值的 documents 數量少（documents 寫入量很低），由人工修正即可，不寫一次性 reconcile 腳本。
+
+**需同步的寫入路徑**：
+- `createInvoice` / `createAllowance`：上傳當下無 OCR 資料，維持佔位（不變）
+- OCR 完成回寫：**兩條路徑**，server action 路徑、以及 pgmq `extraction-worker`（Deno edge function）。這是 amount / doc_date 第一次有真值的時點
+- review / edit：`updateInvoice` / `updateAllowance` 修改 `extracted_data` 時
+- 電子發票匯入：由 Phase 6b 的 Work B 涵蓋（匯入當下已有 amount / date，建 document 時直接帶，不需另外回寫）
+
+**同步點實作方式（待定，實作時定案）**：
+- **App-layer helper**：新增 `syncDocumentFromSubtable()`（內部呼叫 `updateDocument`），接到上述每個 TS 呼叫點。缺點是 `extraction-worker` 是獨立部署的 Deno function，需另外處理
+- **DB trigger**：在 `invoices` / `allowances` 上 `AFTER INSERT OR UPDATE OF extracted_data` 觸發，更新父 `documents` 的 amount / doc_date。一處涵蓋所有路徑（含 edge function、raw SQL），cache 結構上恆正確；缺點是 DB 端邏輯，與偏好 app-layer SQL 的方向有張力。trigger 非 PostgREST RPC，不違反 avoid-RPC 偏好
+- **傾向**：因需涵蓋獨立部署的 edge function，trigger 較穩健。最終定案待實作
+- 若採 app-layer 方案，本階段需在 `lib/services/document.ts` 補 `updateDocument` helper（原列於 Phase 7，提前到此）；若採 trigger 則不需要
 
 **驗證**：
-- Integration test：
-  - `SELECT count(*) FROM invoices WHERE document_id IS NULL` = 0
-  - `SELECT count(*) FROM allowances WHERE document_id IS NULL` = 0
-  - `SELECT count(*) FROM documents d JOIN invoices i ON i.document_id = d.id WHERE d.firm_id != i.firm_id` = 0
-  - 同上 for allowances
-- Integration test：跑一次電子發票匯入 → 每張匯入的 invoice / allowance 都有對應 documents row；**重跑同一檔案 → documents 數量不變（idempotent、無重複）**
-- 既有 invoice / allowance 整合測試全綠（含 `invoice-import.test.ts`）
-- 手動：既有期別頁、TET_U 報表匯出完全正常
+- 手動：上傳 invoice → OCR → review → confirm，對應 documents row 的 `amount` / `doc_date` 與子表 `extracted_data` 一致；allowance 同上
+- 編輯 `extracted_data`（review dialog 改金額 / 日期）後，documents 同步更新
+- Integration test 覆蓋 OCR 回寫與 edit 兩個同步點
 
-**退出條件**：CTI 完成（雙子表）；所有寫入路徑（單張上傳 + 電子發票匯入）皆 documents-first；`document_id` 為 `NOT NULL UNIQUE`；既有功能不退步。
+**退出條件**：所有 forward 寫入路徑都讓 `documents.amount` / `doc_date` 與子表對齊；新上傳 / 擷取 / 編輯後父子一致。既有少量分歧 row 由人工修正。
+
+---
+
+## Phase 6b — 電子發票匯入改 documents-first + `document_id` 收緊
+
+**狀態**：未開始。**前置：Phase 6.5（Drizzle 交易層）必須先完成**，本階段 Work B 要在 `db.transaction()` 內做。
+
+**目標**：把最後一條未收編的寫入路徑（電子發票匯入 `processElectronicInvoiceFile`）改為 documents-first，然後把 `invoices.document_id` / `allowances.document_id` 收緊為 `NOT NULL UNIQUE`。
+
+**Work B — 電子發票匯入 documents-first**（`lib/services/invoice-import.ts`）：
+此路徑用 `chunkedUpsert` 批次寫入 invoices / allowances（invoice conflict key `client_id, invoice_serial_code`；allowance `client_id, allowance_serial_code`），從未經過 `createInvoice` / `createAllowance`。`processInvoiceExcelFile` / `processAllowanceExcelFile` 各組好 `TablesInsert[]` 後呼叫 `chunkedUpsert`。改動：
+- 在 `chunkedUpsert` 之前新增一個 private helper `ensureDocumentsForRows`：
+  1. **pre-fetch**：以本次匯入檔案內的 serial code（經既有 `chunkedIn` helper 做 `IN (...)` 分塊查詢）查既有子表 row 的 `document_id`。**只查檔案內的 serial code，不是該 client 全部 row**，故掃描量受檔案大小所限、可擴展
+  2. **partition**：serial code 對到既有非空 `document_id` → reuse；否則 → 需新建 document
+  3. **批次建 documents**：對「需新建」者用 `supabase.from('documents').insert([...])` 批次插入（documents 無業務 unique key，無法 upsert；批次 insert 一次 round trip）。`ocr_status='done'`（電子發票已擷取）、`doc_date` / `amount` 取自 `extracted_data`、`type='VAT'`
+  4. 把 `document_id` 併回 row 物件後再 `chunkedUpsert`
+- **關鍵：整段放進 `db.transaction()`**（Phase 6.5 之後才有）。document insert 與子表 upsert 同一交易，一起 commit 或一起 rollback，部分失敗時不留 orphan documents；對同 client 並發匯入以 `SELECT ... FOR UPDATE` 鎖既有 row，關掉「兩個請求各自建 document」的競態
+- `firm_id` / `client_id` / `userId` 本就是 `process*ExcelFile` 的參數，直接往下傳
+
+**Work C — `document_id` 收緊為 `NOT NULL UNIQUE`**：
+- Migration `<ts>_tighten_document_id.sql`：`ALTER TABLE invoices / allowances ALTER COLUMN document_id SET NOT NULL` + 各加 `UNIQUE (document_id)`；`UNIQUE` 會自建 index，可順手 `DROP INDEX` 掉 Phase 5.5 加的 `invoices_document_id_idx` / `allowances_document_id_idx`
+- 套用前置：先確認所有寫入路徑都是 documents-first（`createInvoice` / `createAllowance` 已是；Work B 完成後電子發票匯入也是），再跑一次 `scripts/backfill-document-id.ts` 把殘留 NULL 清乾淨，確認 remaining 為 0 才套 migration
+- **注意：`UNIQUE (document_id)` 不能防 orphan**。orphan 是「沒有子表指向的 document」（零 child），uniqueness 約束無法表達「至少一個 referrer」。orphan 的真正解法是 Work B 的交易式寫入（部分失敗時 rollback）；殘留的極少數 orphan 走日後的清理 job（見下方偵測 query）
+
+**上線順序**：
+1. 先部署 Work B 的程式碼。連同 Phase 5.5 的 `createInvoice` / `createAllowance`，此後所有新 invoice / allowance 都帶 `document_id`，不再產生 NULL
+2. 跑 `scripts/backfill-document-id.ts` 直到 remaining 為 0
+3. 套用 Work C 的 `NOT NULL` migration、regenerate `supabase/database.types.ts`
+
+**orphan 偵測 / 清理 query**（供日後清理 job 參考）：
+`documents d WHERE d.doc_type IN ('invoice','allowance') AND d.status='active' AND NOT EXISTS (SELECT 1 FROM invoices WHERE document_id=d.id) AND NOT EXISTS (SELECT 1 FROM allowances WHERE document_id=d.id)`。注意：電子發票匯入重跑時新 document 會沿用同一 `file_url`（`storage_path` 不變），orphan 與正本可能共用 `file_url`，故清理只刪 document row，**不可**據此刪 storage 檔案，除非確認無其他 document / invoice 引用該 `file_url`。
+
+**`updateDocument` helper**：原 Phase 6 計畫列入，但 documents-first 匯入沒有呼叫端（重跑只是 reuse 既有 `document_id`）。延後到 Phase 7（confirm / edit 流程真正需要時）再加。
+
+**驗證**：
+- Integration test（`invoice-import.test.ts`）：新匯入 → 每張 invoice / allowance 都有對應 documents row（`doc_type` / `ocr_status='done'` / `doc_date` / `amount` 正確）；**重跑同一檔案 → documents 數量不變、`document_id` 穩定**；混合檔（部分 serial code 已有 document、部分新）reuse vs 新建 partition 正確；交易測試：匯入中途 throw → documents 與子表一起 rollback
+- Integration test（Work C）：`SELECT count(*) FROM invoices / allowances WHERE document_id IS NULL` = 0；跨 firm 一致性檢查
+- 既有 invoice / allowance 整合測試全綠；手動：期別頁、TET_U 匯出不退步
+
+**退出條件**：所有寫入路徑（單張上傳 + 電子發票匯入）皆 documents-first；`document_id` 為 `NOT NULL UNIQUE`；既有功能不退步。
 
 ---
 
@@ -478,7 +541,8 @@
 - 檔案搬遷腳本（`invoices` bucket → `documents` bucket，storage API copy）
 
 **新增 — Phase 6 起**：
-- `supabase/migrations/<ts>_backfill_documents_from_invoices_allowances.sql`（phase 6，**雙子表同步**）
+- `scripts/backfill-document-id.ts` + `tests/integration/scripts/backfill-document-id.test.ts`（phase 6a，已完成）
+- `supabase/migrations/<ts>_tighten_document_id.sql`（phase 6b，`document_id` 加 NOT NULL UNIQUE）
 - `supabase/migrations/<ts>_create_confirm_invoice_rpc.sql`（phase 7）
 - `supabase/migrations/<ts>_create_confirm_allowance_rpc.sql`（phase 7，**鏡像 invoice 版**）
 - `supabase/migrations/<ts>_create_regenerate_draft_entry_rpc.sql`（phase 7，吃 entity_type + entity_id）
@@ -495,7 +559,7 @@
 **修改**：
 - `lib/services/invoice.ts`（**phase 5.5 createInvoice 改 documents-first，對外行為不變**；phase 7 接 confirm/regenerate RPC、phase 9 派發至 editPostedEntry）
 - `lib/services/allowance.ts`（**phase 5.5 / 7 / 9 全部鏡像 invoice 的改動**）
-- `lib/services/invoice-import.ts`（**phase 6** `processElectronicInvoiceFile` 改 documents-first，upsert 前 idempotent 批次建 documents）
+- `lib/services/invoice-import.ts`（**phase 6b** `processElectronicInvoiceFile` 改 documents-first，在 `db.transaction()` 內批次建 documents 後再 `chunkedUpsert`）
 - `lib/domain/document.ts`（phase 5.5 加 `createDocumentSchema`）
 - `tests/utils/supabase.ts`（phase 5 cleanup 加新表；**phase 5.5 修 `cleanupTestFixture` FK 刪除順序、補 allowances**）
 - **Storage（phase 5.6）**：建 `documents` bucket、搬遷既有檔案、改 key 路徑為 `/{firmId}/{clientId}/{periodYYYMM}/`、替換所有 `supabase.storage.from('invoices')` 呼叫點（上傳點、download / delete / signed URL、`extraction-worker`），extraction-worker 重新部署。詳見 Phase 5.6

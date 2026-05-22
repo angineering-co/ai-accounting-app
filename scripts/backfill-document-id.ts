@@ -11,11 +11,17 @@
  * link is rewritten. No orphan `documents` rows.
  *
  * Usage:
- *   npx tsx scripts/backfill-document-id.ts --dry-run   # report only
- *   npx tsx scripts/backfill-document-id.ts             # perform backfill
+ *   npx tsx scripts/backfill-document-id.ts --dry-run        # report only
+ *   npx tsx scripts/backfill-document-id.ts                  # backfill (local)
+ *   npx tsx scripts/backfill-document-id.ts --confirm-remote # backfill a remote host
  *
  * Reads NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY from .env.local.
- * To run against production, point those env vars at the prod project.
+ * The target host is printed at startup. To run against production, pass the
+ * prod values inline for that one command rather than editing .env.local
+ * (which also feeds the app and the test suite):
+ *   NEXT_PUBLIC_SUPABASE_URL=<prod-url> SUPABASE_SERVICE_ROLE_KEY=<prod-key> \
+ *     npx tsx scripts/backfill-document-id.ts --dry-run
+ * A real (non-dry-run) write to a non-local host requires --confirm-remote.
  */
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -319,7 +325,9 @@ export async function backfillDocumentIds(
 }
 
 async function main(): Promise<void> {
-  const dryRun = process.argv.slice(2).includes("--dry-run");
+  const args = process.argv.slice(2);
+  const dryRun = args.includes("--dry-run");
+  const confirmRemote = args.includes("--confirm-remote");
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -327,11 +335,24 @@ async function main(): Promise<void> {
     throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
   }
 
+  const host = new URL(url).hostname;
+  const isLocal = host === "127.0.0.1" || host === "localhost";
+
+  console.log(`[backfill] mode: ${dryRun ? "DRY RUN" : "BACKFILL"}`);
+  console.log(`[backfill] target: ${host} ${isLocal ? "(local)" : "(REMOTE)"}`);
+
+  // A real write to a remote host must be deliberate — never accidental.
+  if (!dryRun && !isLocal && !confirmRemote) {
+    console.error(
+      `[backfill] refusing to write to remote host "${host}" without --confirm-remote.\n` +
+        `[backfill] re-run with --dry-run to preview, or add --confirm-remote to proceed.`,
+    );
+    process.exit(1);
+  }
+
   const supabase = createClient<Database>(url, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-
-  console.log(`[backfill] mode: ${dryRun ? "DRY RUN" : "BACKFILL"}`);
 
   const result = await backfillDocumentIds(supabase, {
     dryRun,

@@ -6,6 +6,7 @@ import type { Database } from "@/supabase/database.types";
 import type { TetUConfig } from "@/lib/domain/models";
 import { Client as PgClient } from "pg";
 import { TEST_FIRM_NAME, TEST_FIRM_ID } from "./constants";
+import { assertLocalUrl } from "./supabase";
 
 // ============================================================================
 // Types
@@ -163,7 +164,9 @@ function getEnvOrThrow(name: string): string {
 }
 
 async function withPgClient<T>(fn: (client: PgClient) => Promise<T>): Promise<T> {
-  const client = new PgClient({ connectionString: getEnvOrThrow("DATABASE_URL") });
+  const databaseUrl = getEnvOrThrow("DATABASE_URL");
+  assertLocalUrl("DATABASE_URL", databaseUrl);
+  const client = new PgClient({ connectionString: databaseUrl });
   await client.connect();
   try {
     return await fn(client);

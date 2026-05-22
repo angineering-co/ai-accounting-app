@@ -24,9 +24,32 @@ function getEnvOrThrow(name: string): string {
   return value;
 }
 
+/**
+ * Fail fast if a connection URL points anywhere other than local Supabase.
+ * Integration tests create and delete real rows — they must never run against
+ * a remote (prod) project, regardless of what `.env.local` happens to hold.
+ */
+export function assertLocalUrl(envName: string, value: string): void {
+  let host: string;
+  try {
+    host = new URL(value).hostname;
+  } catch {
+    // Omit the value — a malformed connection string may carry credentials.
+    throw new Error(`${envName} is not a valid URL`);
+  }
+  // URL.hostname returns the IPv6 loopback bracketed, e.g. "[::1]".
+  if (host !== "127.0.0.1" && host !== "localhost" && host !== "[::1]") {
+    throw new Error(
+      `Refusing to run integration tests against non-local ${envName} ` +
+        `(host "${host}"). Point ${envName} at local Supabase in .env.local.`,
+    );
+  }
+}
+
 export function getServiceClient(): SupabaseClient<Database> {
   const supabaseUrl = getEnvOrThrow("NEXT_PUBLIC_SUPABASE_URL");
   const serviceRoleKey = getEnvOrThrow("SUPABASE_SERVICE_ROLE_KEY");
+  assertLocalUrl("NEXT_PUBLIC_SUPABASE_URL", supabaseUrl);
   return createClient<Database>(supabaseUrl, serviceRoleKey, {
     auth: {
       persistSession: false,

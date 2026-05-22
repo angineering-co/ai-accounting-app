@@ -218,11 +218,15 @@ async function backfillRow(
 async function countNullDocumentId(
   supabase: Client,
   table: SourceTable,
+  clientId: string | undefined,
 ): Promise<number> {
-  const { count, error } = await supabase
+  const base = supabase
     .from(table)
     .select("id", { count: "exact", head: true })
     .is("document_id", null);
+  const { count, error } = await (clientId
+    ? base.eq("client_id", clientId)
+    : base);
   if (error) throw error;
   return count ?? 0;
 }
@@ -234,6 +238,7 @@ async function backfillTable(
   result: BackfillResult,
   cache: Map<string, string | null>,
   dryRun: boolean,
+  clientId: string | undefined,
   log: (msg: string) => void,
 ): Promise<void> {
   let offset = 0;
@@ -241,10 +246,14 @@ async function backfillTable(
   let tableFailures = 0;
 
   for (;;) {
-    const { data, error } = await supabase
+    const base = supabase
       .from(table)
       .select(SELECT_COLS)
-      .is("document_id", null)
+      .is("document_id", null);
+    const { data, error } = await (clientId
+      ? base.eq("client_id", clientId)
+      : base
+    )
       .order("created_at", { ascending: true })
       .range(offset, offset + PAGE_SIZE - 1);
     if (error) throw error;
@@ -277,19 +286,25 @@ async function backfillTable(
 
 export async function backfillDocumentIds(
   supabase: Client,
-  opts: { dryRun?: boolean; log?: (msg: string) => void } = {},
+  opts: {
+    dryRun?: boolean;
+    /** Limit the scan to one client. Unscoped (global) when omitted. */
+    clientId?: string;
+    log?: (msg: string) => void;
+  } = {},
 ): Promise<BackfillResult> {
   const dryRun = opts.dryRun ?? false;
+  const clientId = opts.clientId;
   const log = opts.log ?? (() => {});
   const result: BackfillResult = { done: 0, failed: 0, remaining: 0, failures: [] };
   const profileCache = new Map<string, string | null>();
 
-  await backfillTable(supabase, "invoices", "invoice", result, profileCache, dryRun, log);
-  await backfillTable(supabase, "allowances", "allowance", result, profileCache, dryRun, log);
+  await backfillTable(supabase, "invoices", "invoice", result, profileCache, dryRun, clientId, log);
+  await backfillTable(supabase, "allowances", "allowance", result, profileCache, dryRun, clientId, log);
 
   result.remaining =
-    (await countNullDocumentId(supabase, "invoices")) +
-    (await countNullDocumentId(supabase, "allowances"));
+    (await countNullDocumentId(supabase, "invoices", clientId)) +
+    (await countNullDocumentId(supabase, "allowances", clientId));
 
   return result;
 }

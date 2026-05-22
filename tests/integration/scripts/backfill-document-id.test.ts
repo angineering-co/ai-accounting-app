@@ -90,7 +90,7 @@ describe.skipIf(!hasDbEnv)("backfillDocumentIds", () => {
   });
 
   it("creates a documents parent for every legacy invoice/allowance", async () => {
-    const result = await backfillDocumentIds(supabase);
+    const result = await backfillDocumentIds(supabase, { clientId: fixture.clientId });
 
     // The scan is global; only assert that none of our rows failed.
     const ourIds = [validInvoiceId, malformedDateInvoiceId, nullUploaderAllowanceId];
@@ -180,7 +180,7 @@ describe.skipIf(!hasDbEnv)("backfillDocumentIds", () => {
       .select("id", { count: "exact", head: true })
       .eq("client_id", fixture.clientId);
 
-    await backfillDocumentIds(supabase);
+    await backfillDocumentIds(supabase, { clientId: fixture.clientId });
 
     const linkedAfter = await supabase
       .from("invoices")
@@ -219,7 +219,7 @@ describe.skipIf(!hasDbEnv)("backfillDocumentIds", () => {
       .select("id", { count: "exact", head: true })
       .eq("client_id", fixture.clientId);
 
-    await backfillDocumentIds(supabase);
+    await backfillDocumentIds(supabase, { clientId: fixture.clientId });
 
     const { data: after } = await supabase
       .from("invoices")

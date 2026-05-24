@@ -5,6 +5,7 @@ import { GoogleAnalytics } from "@next/third-parties/google";
 import "./globals.css";
 import { Toaster } from "sonner";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
+import { MetaPixel } from "@/components/meta-pixel";
 
 const defaultUrl =
   process.env.NODE_ENV === "production"
@@ -72,6 +73,9 @@ export default function RootLayout({
         </ThemeProvider>
         {process.env.NEXT_PUBLIC_GA_ID && (
           <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GA_ID} />
+        )}
+        {process.env.NEXT_PUBLIC_META_PIXEL_ID && (
+          <MetaPixel pixelId={process.env.NEXT_PUBLIC_META_PIXEL_ID} />
         )}
       </body>
     </html>

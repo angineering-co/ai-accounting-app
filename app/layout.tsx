@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
 import { Geist, Noto_Serif_TC } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { GoogleAnalytics } from "@next/third-parties/google";
@@ -6,6 +7,7 @@ import "./globals.css";
 import { Toaster } from "sonner";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { MetaPixel } from "@/components/meta-pixel";
+import { MetaPixelPageView } from "@/components/meta-pixel-page-view";
 
 const defaultUrl =
   process.env.NODE_ENV === "production"
@@ -78,6 +80,11 @@ export default function RootLayout({
         </ThemeProvider>
         {process.env.NEXT_PUBLIC_GA_ID && (
           <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GA_ID} />
+        )}
+        {process.env.NEXT_PUBLIC_META_PIXEL_ID && (
+          <Suspense fallback={null}>
+            <MetaPixelPageView />
+          </Suspense>
         )}
       </body>
     </html>

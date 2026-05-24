@@ -60,6 +60,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-Hant" suppressHydrationWarning>
+      <head>
+        {process.env.NEXT_PUBLIC_META_PIXEL_ID && (
+          <MetaPixel pixelId={process.env.NEXT_PUBLIC_META_PIXEL_ID} />
+        )}
+      </head>
       <body className={`${geistSans.className} ${notoSerifTC.variable} antialiased`}>
         <ThemeProvider
           attribute="class"
@@ -73,9 +78,6 @@ export default function RootLayout({
         </ThemeProvider>
         {process.env.NEXT_PUBLIC_GA_ID && (
           <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GA_ID} />
-        )}
-        {process.env.NEXT_PUBLIC_META_PIXEL_ID && (
-          <MetaPixel pixelId={process.env.NEXT_PUBLIC_META_PIXEL_ID} />
         )}
       </body>
     </html>

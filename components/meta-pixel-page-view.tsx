@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 
 declare global {
@@ -11,8 +11,13 @@ declare global {
 
 export function MetaPixelPageView() {
   const pathname = usePathname();
+  const isFirstRun = useRef(true);
 
   useEffect(() => {
+    if (isFirstRun.current) {
+      isFirstRun.current = false;
+      return;
+    }
     if (typeof window.fbq === "function") {
       window.fbq("track", "PageView");
     }

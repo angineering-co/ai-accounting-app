@@ -1,6 +1,12 @@
 import { sendGAEvent } from "@next/third-parties/google";
 import type { ApplyFormPath } from "@/lib/actions/apply";
 
+declare global {
+  interface Window {
+    fbq?: (...args: unknown[]) => void;
+  }
+}
+
 export function trackCtaClick(location: string) {
   sendGAEvent("event", "cta_click", {
     cta_location: location,
@@ -36,12 +42,25 @@ const APPLY_CONVERSION_VALUE_TWD: Record<ApplyFormPath, number> = {
   bookkeeping: 15120,
 };
 
-export function trackApplySubmit(path: ApplyFormPath) {
+export function trackApplySubmit(path: ApplyFormPath, leadCode: string) {
+  const value = APPLY_CONVERSION_VALUE_TWD[path];
+
   sendGAEvent("event", "apply_submit", {
     apply_path: path,
-    value: APPLY_CONVERSION_VALUE_TWD[path],
+    value,
     currency: "TWD",
   });
+
+  // Meta Pixel Lead event. eventID matches the lead code so a future
+  // Conversions API server-side call can dedupe against this client event.
+  if (typeof window !== "undefined" && typeof window.fbq === "function") {
+    window.fbq(
+      "track",
+      "Lead",
+      { value, currency: "TWD", content_category: path },
+      { eventID: leadCode },
+    );
+  }
 }
 
 export function trackCouponGeneration(location: string, code: string) {

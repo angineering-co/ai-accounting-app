@@ -151,7 +151,7 @@ export function ApplyFormClient() {
     startTransition(async () => {
       const res = await submitApplyForm(formData);
       if (res.success && res.leadCode) {
-        trackApplySubmit(path);
+        trackApplySubmit(path, res.leadCode);
         localStorage.setItem("apply_lead_code", res.leadCode);
         setResult({ leadCode: res.leadCode });
       } else {

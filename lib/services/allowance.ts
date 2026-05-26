@@ -47,6 +47,9 @@ export async function createAllowance(
   // Documents-first: create the CTI parent row, then the allowance child row.
   // There is no DB transaction, so a failed allowance insert below triggers a
   // best-effort cleanup of the orphan document.
+  // doc_date / amount / ocr_status here are placeholders: the DB trigger
+  // `sync_documents_cache_from_allowances` overwrites them once the child row
+  // gets real `extracted_data` (OCR completion or review edit).
   let documentId: string | null = null;
   if (validated.client_id) {
     documentId = await createDocument(
@@ -90,7 +93,11 @@ export async function createAllowance(
 }
 
 /**
- * Update an allowance record
+ * Update an allowance record.
+ *
+ * Updates to `extracted_data` / `status` are mirrored onto the parent
+ * `documents` row by the DB trigger `sync_documents_cache_from_allowances`
+ * (see `supabase/migrations/20260526000000_sync_documents_cache_from_subtables.sql`).
  */
 export async function updateAllowance(allowanceId: string, data: UpdateAllowanceInput) {
   const supabase = await createClient();

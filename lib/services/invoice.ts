@@ -25,6 +25,10 @@ import { getImportFileMimeType } from "@/lib/utils/mime-type";
 import { enrichExtractedParties } from "@/lib/services/business-lookup";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+// `documents.{amount, doc_date, ocr_status}` are kept in sync via the DB trigger
+// `sync_documents_cache_from_invoices` (see
+// `supabase/migrations/20260526000000_sync_documents_cache_from_subtables.sql`).
+// Updating `extracted_data` / `status` here propagates automatically.
 async function saveExtractedInvoiceData(
   invoiceId: string,
   validatedData: ExtractedInvoiceData,
@@ -106,6 +110,9 @@ export async function createInvoice(
   // Documents-first: create the CTI parent row, then the invoice child row.
   // All validation above runs first — there is no DB transaction, so a failed
   // invoice insert below triggers a best-effort cleanup of the orphan document.
+  // doc_date / amount / ocr_status here are placeholders: the DB trigger
+  // `sync_documents_cache_from_invoices` overwrites them once the child row
+  // gets real `extracted_data` (OCR completion or review edit).
   let documentId: string | null = null;
   if (validated.client_id) {
     documentId = await createDocument(

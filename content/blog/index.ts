@@ -26,6 +26,7 @@ export const blogSlugs: string[] = [
   "what-is-book-review-tax",
   "business-tax-vat-guide",
   "business-income-tax-guide",
+  "e-invoice-complete-guide",
 ];
 
 export async function getPublishedPosts(): Promise<BlogPost[]> {

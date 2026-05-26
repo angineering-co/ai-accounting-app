@@ -1,11 +1,10 @@
 import crypto from "node:crypto";
 
 import type { ApplyFormPath } from "@/lib/actions/apply";
+import { APPLY_CONVERSION_VALUE_TWD } from "@/lib/pricing";
 
-const APPLY_CONVERSION_VALUE_TWD: Record<ApplyFormPath, number> = {
-  registration: 21620,
-  bookkeeping: 15120,
-};
+// Bump periodically; Meta supports each Graph API version for ~2 years.
+const META_GRAPH_API_VERSION = "v23.0";
 
 export interface ServerLeadInput {
   path: ApplyFormPath;
@@ -85,7 +84,7 @@ async function sendMetaCapi(input: ServerLeadInput): Promise<void> {
 
   try {
     const res = await fetch(
-      `https://graph.facebook.com/v18.0/${pixelId}/events?access_token=${encodeURIComponent(accessToken)}`,
+      `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${pixelId}/events?access_token=${encodeURIComponent(accessToken)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

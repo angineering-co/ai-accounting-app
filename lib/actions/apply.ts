@@ -185,6 +185,7 @@ async function buildTrackingInput(
 ): Promise<ServerLeadInput> {
   const reqHeaders = await headers();
   const reqCookies = await cookies();
+  const host = reqHeaders.get("host");
   return {
     path: formData.path,
     leadCode,
@@ -195,6 +196,6 @@ async function buildTrackingInput(
     gaClientId: parseGaClientId(reqCookies.get("_ga")?.value),
     fbp: reqCookies.get("_fbp")?.value,
     fbc: reqCookies.get("_fbc")?.value,
-    eventSourceUrl: "https://snapbooks.ai/apply",
+    eventSourceUrl: host ? `https://${host}/apply` : "https://snapbooks.ai/apply",
   };
 }

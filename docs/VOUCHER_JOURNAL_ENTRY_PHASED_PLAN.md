@@ -368,6 +368,10 @@
 
 **退出條件**：Drizzle 連線 + 交易 helper 可用；RLS 策略定案並有測試；Phase 7-11 可在此基礎上以 app-layer transaction 取代 PL/pgSQL RPC。
 
+**Phase 7 wiring 時要回頭處理的兩個 deferred 項**（Phase 6.5 code review 找到，暫不修；當 rls.ts 第一次被 Server Action 引用時一併處理）：
+- `lib/db/drizzle.ts` module-load 即 throw `Missing DATABASE_URL`：第一個 Server Action 進來時，`next build` 的 page-data collection pass 會走到 drizzle.ts。若 build env 沒給 `DATABASE_URL`，build fail。處理選項：(a) 改 lazy `getDb()` factory，或 (b) 確保 Vercel 的 build env 帶 `DATABASE_URL`。任一即可。
+- postgres-js pool 設 `max: 10` + 無 shutdown hook：今日 Drizzle 測試只有 1 個檔，沒事；當 Phase 7 開始多支 service test 進場（vitest forks × 多檔案 × 10 connections）會撞 local Postgres 的 `max_connections`。屆時把 `max` 降到 2-4，或在測試 setup 加 `afterAll(() => client.end())`。
+
 > **對 Phase 7-11 的影響**：以下各階段標題與內文出現的「RPC」、`Migration <ts>_create_*_rpc.sql` 等字樣，實作時應理解為 **Drizzle app-layer transaction**（在 `lib/services/` 內以 `db.transaction()` 實作），而非 PostgREST RPC。原子性、`FOR UPDATE` 行鎖、fail-loud 等語意不變，只是實作層從 PL/pgSQL 移到 TypeScript。各階段內文待實作時逐一改寫。
 
 ---

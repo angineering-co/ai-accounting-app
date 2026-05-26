@@ -89,6 +89,14 @@ export interface BackfillResult {
 const SELECT_COLS =
   "id, firm_id, client_id, storage_path, status, extracted_data, created_at, uploaded_by";
 
+// The three helpers below — deriveOcrStatus / parseDocDate / computeAmount —
+// are the historical-fill twin of the forward-sync DB triggers in
+// `supabase/migrations/20260526000000_sync_documents_cache_from_subtables.sql`.
+// Backfill walks Phase 5.5-era rows and writes documents directly; the trigger
+// keeps everything written from now on aligned. If you change a rule here,
+// change it in the trigger too (and vice versa) — they MUST stay in lockstep,
+// otherwise a rerun of the backfill could disagree with a freshly synced row.
+
 /** Map an invoice/allowance status onto the document OCR lifecycle. */
 function deriveOcrStatus(status: string | null): "done" | "pending" | "failed" {
   if (status === "processed" || status === "confirmed") return "done";

@@ -322,6 +322,10 @@ async function extractInvoice(
   await saveInvoiceResult(supabase, invoiceId, extractedData);
 }
 
+// `documents.{amount, doc_date, ocr_status}` are kept in sync via the DB
+// trigger `sync_documents_cache_from_invoices` (see
+// `supabase/migrations/20260526000000_sync_documents_cache_from_subtables.sql`).
+// Writing `extracted_data` / `status` here propagates automatically.
 async function saveInvoiceResult(
   supabase: ReturnType<typeof createClient>,
   invoiceId: string,
@@ -537,6 +541,10 @@ async function extractAllowance(
   }
   const fallbackInOrOut = allowance.in_or_out === "in" ? "in" : "out";
 
+  // `documents.{amount, doc_date, ocr_status}` are kept in sync via the DB
+  // trigger `sync_documents_cache_from_allowances` (see
+  // `supabase/migrations/20260526000000_sync_documents_cache_from_subtables.sql`).
+  // Writing `extracted_data` / `status` here propagates automatically.
   const { error } = await supabase
     .from("allowances")
     .update({

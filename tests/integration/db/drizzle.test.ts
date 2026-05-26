@@ -210,3 +210,71 @@ describe.skipIf(!hasDbEnv)("Drizzle infrastructure (role=client scope)", () => {
     ).rejects.toThrow(/client user cannot access firm-level operation/i);
   });
 });
+
+// Defense-in-depth: even if a future caller leaks nullish identifiers across
+// type boundaries (un-validated Server Action input, casts), the guards must
+// reject. The strict-inequality gate alone would let `null !== null` slip
+// through; these tests pin the explicit !value short-circuits.
+describe.skipIf(!hasDbEnv)("Drizzle infrastructure (null-bypass defense)", () => {
+  let supabase: ReturnType<typeof getServiceClient>;
+  let unlinkedUserId: string;
+  let unlinkedClientUserId: string;
+
+  beforeAll(async () => {
+    supabase = getServiceClient();
+
+    // A profile that exists but is not linked to any firm (firm_id NULL).
+    const { data: u1, error: e1 } = await supabase.auth.admin.createUser({
+      email: `test-unlinked-${randomUUID()}@example.com`,
+      password: "TestPassword123!",
+      email_confirm: true,
+    });
+    if (e1 || !u1.user) throw e1 ?? new Error("create unlinked user failed");
+    unlinkedUserId = u1.user.id;
+
+    // A client-role profile with NULL client_id (e.g., link not yet completed).
+    const { data: u2, error: e2 } = await supabase.auth.admin.createUser({
+      email: `test-unlinkedclient-${randomUUID()}@example.com`,
+      password: "TestPassword123!",
+      email_confirm: true,
+    });
+    if (e2 || !u2.user) throw e2 ?? new Error("create unlinkedclient user failed");
+    unlinkedClientUserId = u2.user.id;
+    const { error: e3 } = await supabase
+      .from("profiles")
+      .update({ role: "client" })
+      .eq("id", unlinkedClientUserId);
+    if (e3) throw e3;
+  });
+
+  afterAll(async () => {
+    await supabase.from("profiles").delete().eq("id", unlinkedUserId);
+    await supabase.from("profiles").delete().eq("id", unlinkedClientUserId);
+    await supabase.auth.admin.deleteUser(unlinkedUserId);
+    await supabase.auth.admin.deleteUser(unlinkedClientUserId);
+  });
+
+  it("assertCallerCanAccessFirm rejects unlinked profile (firm_id NULL) even with nullish firmId", async () => {
+    await expect(
+      db.transaction(async (tx) => {
+        await assertCallerCanAccessFirm(
+          tx,
+          unlinkedUserId,
+          null as unknown as string,
+        );
+      }),
+    ).rejects.toThrow(/cannot access this firm/i);
+  });
+
+  it("assertCallerCanAccessClient (role=client) rejects null client_id even with nullish clientId", async () => {
+    await expect(
+      db.transaction(async (tx) => {
+        await assertCallerCanAccessClient(
+          tx,
+          unlinkedClientUserId,
+          null as unknown as string,
+        );
+      }),
+    ).rejects.toThrow(/client user cannot access this client/i);
+  });
+});

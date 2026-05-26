@@ -9,7 +9,7 @@
 > - ✅ Phase 5.6 完成（storage 清理：documents bucket、檔案搬遷、路徑重排；PR #190）
 > - ✅ Phase 6a 完成（既有 invoice / allowance 的 document_id backfill 腳本；191/191 測試綠）
 > - 📋 Phase 6a.1：documents 維持子表 amount / doc_date 的 denormalized cache（修補 forward write flow；既有少量分歧 row 人工修正）
-> - 📋 Phase 6.5：Drizzle ORM + 交易層（取代 PL/pgSQL RPC，為 Phase 7+ 原子寫入鋪路）
+> - ✅ Phase 6.5 完成（Drizzle ORM + 交易層基礎建設：postgres-js + Proxy lazy init、rls.ts 雙重 firm/client guard、drizzle-kit pull codegen、auth.users via drizzle-orm/supabase；PR #201）
 > - 📋 Phase 6b：電子發票匯入改 documents-first（交易式）+ document_id 收緊為 NOT NULL UNIQUE（Phase 6 拆分後段，需 Phase 6.5 的交易層）
 >
 > **配套文件**：[`VOUCHER_JOURNAL_ENTRY_PLAN.md`](./VOUCHER_JOURNAL_ENTRY_PLAN.md) — 已收斂的設計提案（Decisions #1–#12）。本文件中所有 §x.y 章節編號皆指向設計提案。
@@ -368,8 +368,7 @@
 
 **退出條件**：Drizzle 連線 + 交易 helper 可用；RLS 策略定案並有測試；Phase 7-11 可在此基礎上以 app-layer transaction 取代 PL/pgSQL RPC。
 
-**Phase 7 wiring 時要回頭處理的兩個 deferred 項**（Phase 6.5 code review 找到，暫不修；當 rls.ts 第一次被 Server Action 引用時一併處理）：
-- `lib/db/drizzle.ts` module-load 即 throw `Missing DATABASE_URL`：第一個 Server Action 進來時，`next build` 的 page-data collection pass 會走到 drizzle.ts。若 build env 沒給 `DATABASE_URL`，build fail。處理選項：(a) 改 lazy `getDb()` factory，或 (b) 確保 Vercel 的 build env 帶 `DATABASE_URL`。任一即可。
+**Phase 7 wiring 時要回頭處理的 deferred 項**（Phase 6.5 code review 找到，暫不修；當 rls.ts 第一次被 Server Action 引用時一併處理）：
 - postgres-js pool 設 `max: 10` + 無 shutdown hook：今日 Drizzle 測試只有 1 個檔，沒事；當 Phase 7 開始多支 service test 進場（vitest forks × 多檔案 × 10 connections）會撞 local Postgres 的 `max_connections`。屆時把 `max` 降到 2-4，或在測試 setup 加 `afterAll(() => client.end())`。
 
 > **對 Phase 7-11 的影響**：以下各階段標題與內文出現的「RPC」、`Migration <ts>_create_*_rpc.sql` 等字樣，實作時應理解為 **Drizzle app-layer transaction**（在 `lib/services/` 內以 `db.transaction()` 實作），而非 PostgREST RPC。原子性、`FOR UPDATE` 行鎖、fail-loud 等語意不變，只是實作層從 PL/pgSQL 移到 TypeScript。各階段內文待實作時逐一改寫。

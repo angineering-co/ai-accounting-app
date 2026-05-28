@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState, useTransition } from "react";
+import Link from "next/link";
 import { ArrowLeft, ArrowRight, RotateCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -28,8 +29,6 @@ import {
 } from "@/lib/actions/company-setup-check";
 
 type Phase = "intro" | "questioning" | "loading" | "result";
-
-const CTA_FORM_URL = "https://forms.gle/oBeQCq6SJxsgHJ1V6";
 
 export function CompanySetupCheckClient() {
   const [phase, setPhase] = useState<Phase>("intro");
@@ -260,10 +259,10 @@ export function CompanySetupCheckClient() {
             asChild
             className="mt-6 rounded-full bg-white px-8 py-6 text-base font-semibold text-emerald-700 shadow-lg hover:bg-emerald-50"
           >
-            <a href={CTA_FORM_URL} target="_blank" rel="noopener noreferrer">
+            <Link href="/apply">
               立即申請
               <ArrowRight className="ml-2 h-5 w-5" />
-            </a>
+            </Link>
           </Button>
           <button
             onClick={handleRestart}

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, BellRing } from "lucide-react";
+import { AlertTriangle, BellRing, Inbox } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -10,11 +10,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PeriodStatusBadge } from "@/components/period-status-badge";
+import { LeadsTable } from "@/components/leads-table";
 import { listPeriodsReadyForReview } from "@/lib/services/tax-period";
 import {
   getCurrentPeriodUploadCounts,
   listStuckOrFailedExtractions,
 } from "@/lib/services/firm-dashboard";
+import { listLeads } from "@/lib/services/leads";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { cn, formatDateToYYYYMMDD, formatDateZhTW } from "@/lib/utils";
 
@@ -40,10 +42,11 @@ export default async function DashboardPage({
         : "text-muted-foreground",
   );
 
-  const [readyForReview, stuckOrFailed, uploadCounts] = await Promise.all([
+  const [readyForReview, stuckOrFailed, uploadCounts, leads] = await Promise.all([
     listPeriodsReadyForReview(firmId),
     listStuckOrFailedExtractions(firmId),
     getCurrentPeriodUploadCounts(firmId, currentPeriod.toString()),
+    listLeads(),
   ]);
 
   return (
@@ -54,6 +57,20 @@ export default async function DashboardPage({
           本期：{currentPeriod.format()} · 截止日 {formatDateToYYYYMMDD(cutoff)} · 距今 {daysRemaining} 天
         </p>
       </div>
+
+      {leads.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Inbox className="h-5 w-5 text-emerald-600" />
+              申請名單（{leads.length}）
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <LeadsTable leads={leads} />
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

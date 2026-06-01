@@ -9,6 +9,14 @@ import { ALLOWANCE_FORMAT_CODE_MAP } from "@/lib/domain/format-codes";
 import { formatDateToYYYYMMDD } from "@/lib/utils";
 import * as XLSX from 'xlsx';
 import { getTaxPeriodByYYYMM } from "@/lib/services/tax-period";
+import { and, eq, inArray, sql } from "drizzle-orm";
+import { db, type Tx } from "@/lib/db/drizzle";
+import { assertCallerCanAccessClient } from "@/lib/db/rls";
+import {
+  documents as documentsTable,
+  invoices as invoicesTable,
+  allowances as allowancesTable,
+} from "@/lib/db/schema";
 
 // PostgREST encodes .in() values as URL query params. With thousands of
 // values the URL exceeds the ~8 KB server limit → "URL too long".
@@ -204,18 +212,12 @@ export async function processElectronicInvoiceFile(
       period
     );
 
-    // Batch upsert with ON CONFLICT (override duplicates)
-    // Chunked to avoid PostgREST URL-length limits on large imports.
     if (invoicesToInsert.length > 0) {
-      const upserted = await chunkedUpsert<{ id: string }>(
-        supabase,
-        'invoices',
-        invoicesToInsert as unknown as Record<string, unknown>[],
-        'client_id, invoice_serial_code',
-        'id',
+      result.succeeded = await commitInvoiceRowsAtomically(
+        invoicesToInsert,
+        clientId,
+        userId,
       );
-
-      result.succeeded = upserted.length;
     }
   } catch (error) {
     console.error("Import error:", error);
@@ -499,22 +501,20 @@ async function processAllowanceExcelFile(
     }
   }
 
-  // Batch upsert — chunked to avoid PostgREST URL-length limits.
   if (allowancesToInsert.length > 0) {
     try {
-      const upserted = await chunkedUpsert<{ id: string }>(
-        supabase,
-        'allowances',
-        allowancesToInsert as unknown as Record<string, unknown>[],
-        'client_id, allowance_serial_code',
-        'id',
+      const upsertedIds = await commitAllowanceRowsAtomically(
+        allowancesToInsert,
+        clientId,
+        userId,
       );
 
-      result.succeeded = upserted.length;
+      result.succeeded = upsertedIds.length;
 
-      // Attempt to link to original invoices
-      const allowanceIds = upserted.map(a => a.id);
-      await linkAllowancesToInvoices(clientId, allowanceIds, supabase);
+      // Attempt to link to original invoices (outside the documents
+      // transaction — this only writes to allowances.original_invoice_id
+      // and is a separate concern from the documents-first guarantee).
+      await linkAllowancesToInvoices(clientId, upsertedIds, supabase);
     } catch (error) {
       result.failed += allowancesToInsert.length;
       result.errors.push(error instanceof Error ? error.message : String(error));
@@ -764,4 +764,264 @@ async function linkAllowancesToInvoices(
   }
 
   return { linked: linkedCount, unlinked: unlinkedCount };
+}
+
+// ===== documents-first commit helpers (Phase 6b) =====
+//
+// The two functions below wrap the document-row creation and the
+// invoice/allowance upsert in a single Drizzle transaction so that the
+// documents-first invariant ("every invoice/allowance has a document parent")
+// holds atomically. Partial failures roll both sides back; no orphan
+// `documents` rows are left behind.
+//
+// Pre-fetch (`.for('update')`) + per-(client, doc_type) advisory lock cover
+// concurrent imports of the same serial code. The COALESCE in the upsert's
+// ON CONFLICT clause preserves any existing document_id even if a racing
+// writer briefly created a competing one (which then becomes orphan-and-rolled-
+// back because the second writer's transaction commits without referencing it).
+
+const SERIAL_CHUNK_SIZE = 300;
+const UPSERT_CHUNK_SIZE = 500;
+
+/** `extracted_data.date` is "YYYY/MM/DD". Fall back to today on malformed input. */
+function parseExtractedDataDate(raw: unknown): string {
+  if (typeof raw === "string") {
+    const m = raw.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+    if (m) {
+      const iso = `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+      const parsed = new Date(`${iso}T00:00:00`);
+      if (!Number.isNaN(parsed.getTime())) {
+        const yy = parsed.getFullYear();
+        const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+        const dd = String(parsed.getDate()).padStart(2, "0");
+        if (`${yy}-${mm}-${dd}` === iso) return iso;
+      }
+    }
+  }
+  return new Date().toISOString().slice(0, 10);
+}
+
+function computeInvoiceAmount(ed: Record<string, unknown>): number | null {
+  return typeof ed.totalAmount === "number" ? Math.round(ed.totalAmount) : null;
+}
+
+function computeAllowanceAmount(ed: Record<string, unknown>): number | null {
+  const net = typeof ed.amount === "number" ? ed.amount : undefined;
+  const tax = typeof ed.taxAmount === "number" ? ed.taxAmount : undefined;
+  if (net === undefined && tax === undefined) return null;
+  return Math.round((net ?? 0) + (tax ?? 0));
+}
+
+async function fetchExistingDocLinks(
+  tx: Tx,
+  table: typeof invoicesTable | typeof allowancesTable,
+  serialCol: typeof invoicesTable.invoice_serial_code | typeof allowancesTable.allowance_serial_code,
+  clientId: string,
+  serialCodes: string[],
+): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>();
+  for (let i = 0; i < serialCodes.length; i += SERIAL_CHUNK_SIZE) {
+    const chunk = serialCodes.slice(i, i + SERIAL_CHUNK_SIZE);
+    if (chunk.length === 0) continue;
+    // .for('update') locks rows we find; new (not-yet-existing) rows are
+    // covered by the per-client advisory lock the caller takes earlier.
+    const rows = await tx
+      .select({ serial: serialCol, document_id: table.document_id })
+      .from(table)
+      .where(and(eq(table.client_id, clientId), inArray(serialCol, chunk)))
+      .for("update");
+    for (const r of rows) {
+      if (r.serial !== null) out.set(r.serial, r.document_id);
+    }
+  }
+  return out;
+}
+
+async function commitInvoiceRowsAtomically(
+  rows: TablesInsert<"invoices">[],
+  clientId: string,
+  userId: string,
+): Promise<number> {
+  return db.transaction(async (tx) => {
+    await assertCallerCanAccessClient(tx, userId, clientId);
+
+    // Serialize same-client imports so two writers don't each build a
+    // brand-new document for the same serial code. `.for('update')` alone
+    // only locks rows that already exist.
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${`import:invoice:${clientId}`}, 0))`,
+    );
+
+    const serialCodes = rows
+      .map((r) => r.invoice_serial_code)
+      .filter((c): c is string => Boolean(c));
+
+    const existing = await fetchExistingDocLinks(
+      tx,
+      invoicesTable,
+      invoicesTable.invoice_serial_code,
+      clientId,
+      serialCodes,
+    );
+
+    const rowsNeedingDoc = rows.filter((r) => {
+      const existingDocId = r.invoice_serial_code
+        ? existing.get(r.invoice_serial_code)
+        : null;
+      return !existingDocId;
+    });
+
+    if (rowsNeedingDoc.length > 0) {
+      const docInserts = rowsNeedingDoc.map((r) => {
+        const ed = (r.extracted_data ?? {}) as Record<string, unknown>;
+        return {
+          firm_id: r.firm_id!,
+          client_id: r.client_id!,
+          doc_type: "invoice" as const,
+          type: "VAT" as const,
+          ocr_status: "done" as const,
+          doc_date: parseExtractedDataDate(ed.date),
+          amount: computeInvoiceAmount(ed),
+          created_by: userId,
+          status: "active" as const,
+        };
+      });
+      const inserted = await tx
+        .insert(documentsTable)
+        .values(docInserts)
+        .returning({ id: documentsTable.id });
+      rowsNeedingDoc.forEach((row, i) => {
+        row.document_id = inserted[i].id;
+      });
+    }
+
+    for (const row of rows) {
+      if (!row.document_id && row.invoice_serial_code) {
+        const reused = existing.get(row.invoice_serial_code);
+        if (reused) row.document_id = reused;
+      }
+    }
+
+    let total = 0;
+    for (let i = 0; i < rows.length; i += UPSERT_CHUNK_SIZE) {
+      const chunk = rows.slice(i, i + UPSERT_CHUNK_SIZE);
+      const upserted = await tx
+        .insert(invoicesTable)
+        // Drizzle's TablesInsert and our supabase-generated TablesInsert
+        // disagree on a few nullable columns; the runtime shape is identical.
+        .values(chunk as unknown as typeof invoicesTable.$inferInsert[])
+        .onConflictDoUpdate({
+          target: [invoicesTable.client_id, invoicesTable.invoice_serial_code],
+          set: {
+            storage_path: sql`excluded.storage_path`,
+            filename: sql`excluded.filename`,
+            in_or_out: sql`excluded.in_or_out`,
+            status: sql`excluded.status`,
+            extracted_data: sql`excluded.extracted_data`,
+            year_month: sql`excluded.year_month`,
+            tax_filing_period_id: sql`excluded.tax_filing_period_id`,
+            uploaded_by: sql`excluded.uploaded_by`,
+            // COALESCE protects a re-import from overwriting an existing
+            // document_id with a freshly-built one — keeps document FK
+            // stable across re-imports and across rare racing writers.
+            document_id: sql`COALESCE(invoices.document_id, excluded.document_id)`,
+          },
+        })
+        .returning({ id: invoicesTable.id });
+      total += upserted.length;
+    }
+    return total;
+  });
+}
+
+async function commitAllowanceRowsAtomically(
+  rows: TablesInsert<"allowances">[],
+  clientId: string,
+  userId: string,
+): Promise<string[]> {
+  return db.transaction(async (tx) => {
+    await assertCallerCanAccessClient(tx, userId, clientId);
+
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${`import:allowance:${clientId}`}, 0))`,
+    );
+
+    const serialCodes = rows
+      .map((r) => r.allowance_serial_code)
+      .filter((c): c is string => Boolean(c));
+
+    const existing = await fetchExistingDocLinks(
+      tx,
+      allowancesTable,
+      allowancesTable.allowance_serial_code,
+      clientId,
+      serialCodes,
+    );
+
+    const rowsNeedingDoc = rows.filter((r) => {
+      const existingDocId = r.allowance_serial_code
+        ? existing.get(r.allowance_serial_code)
+        : null;
+      return !existingDocId;
+    });
+
+    if (rowsNeedingDoc.length > 0) {
+      const docInserts = rowsNeedingDoc.map((r) => {
+        const ed = (r.extracted_data ?? {}) as Record<string, unknown>;
+        return {
+          firm_id: r.firm_id!,
+          client_id: r.client_id!,
+          doc_type: "allowance" as const,
+          type: "VAT" as const,
+          ocr_status: "done" as const,
+          doc_date: parseExtractedDataDate(ed.date),
+          amount: computeAllowanceAmount(ed),
+          created_by: userId,
+          status: "active" as const,
+        };
+      });
+      const inserted = await tx
+        .insert(documentsTable)
+        .values(docInserts)
+        .returning({ id: documentsTable.id });
+      rowsNeedingDoc.forEach((row, i) => {
+        row.document_id = inserted[i].id;
+      });
+    }
+
+    for (const row of rows) {
+      if (!row.document_id && row.allowance_serial_code) {
+        const reused = existing.get(row.allowance_serial_code);
+        if (reused) row.document_id = reused;
+      }
+    }
+
+    const allIds: string[] = [];
+    for (let i = 0; i < rows.length; i += UPSERT_CHUNK_SIZE) {
+      const chunk = rows.slice(i, i + UPSERT_CHUNK_SIZE);
+      const upserted = await tx
+        .insert(allowancesTable)
+        .values(chunk as unknown as typeof allowancesTable.$inferInsert[])
+        .onConflictDoUpdate({
+          target: [allowancesTable.client_id, allowancesTable.allowance_serial_code],
+          set: {
+            storage_path: sql`excluded.storage_path`,
+            filename: sql`excluded.filename`,
+            in_or_out: sql`excluded.in_or_out`,
+            status: sql`excluded.status`,
+            extracted_data: sql`excluded.extracted_data`,
+            tax_filing_period_id: sql`excluded.tax_filing_period_id`,
+            original_invoice_serial_code: sql`excluded.original_invoice_serial_code`,
+            uploaded_by: sql`excluded.uploaded_by`,
+            // Same rationale as invoices: keep the existing FK stable on
+            // re-imports. linkAllowancesToInvoices handles original_invoice_id
+            // separately and is not in this transaction.
+            document_id: sql`COALESCE(allowances.document_id, excluded.document_id)`,
+          },
+        })
+        .returning({ id: allowancesTable.id });
+      for (const r of upserted) allIds.push(r.id);
+    }
+    return allIds;
+  });
 }

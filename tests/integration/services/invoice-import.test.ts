@@ -510,3 +510,202 @@ describe.skipIf(!hasDbEnv)("processElectronicInvoiceFile – 91044604", () => {
     expect(invoices.length).toBe(referenceInvoices.length);
   });
 });
+
+// ── Phase 6b: documents-first import ──────────────────────────────────
+
+describe.skipIf(!hasDbEnv)("processElectronicInvoiceFile – documents-first (Phase 6b)", () => {
+  let supabase: ReturnType<typeof getServiceClient>;
+  let fixture: TestFixture;
+  const testPeriod = "11411"; // matches 60707504.xlsx invoice dates
+  const filename = "60707504.xlsx";
+
+  beforeAll(async () => {
+    supabase = getServiceClient();
+    fixture = await createTestFixture(supabase);
+
+    const filePath = path.resolve(__dirname, "../../fixtures/files", filename);
+    const fileBuffer = readFileSync(filePath);
+    const storagePath = `${fixture.firmId}/${fixture.clientId}/${filename}`;
+    const { error } = await supabase.storage
+      .from("electronic-invoices")
+      .upload(storagePath, fileBuffer, {
+        contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        upsert: true,
+      });
+    if (error) throw error;
+    fixture.storagePaths.push(storagePath);
+
+    await supabase.from("tax_filing_periods").insert({
+      firm_id: fixture.firmId,
+      client_id: fixture.clientId,
+      year_month: testPeriod,
+      status: "open",
+    });
+  });
+
+  afterAll(async () => {
+    if (fixture) await cleanupTestFixture(supabase, fixture);
+  });
+
+  it("first import: each invoice gets a documents parent with matching fields", async () => {
+    const storagePath = `${fixture.firmId}/${fixture.clientId}/${filename}`;
+    const result = await processElectronicInvoiceFile(
+      fixture.clientId,
+      fixture.firmId,
+      storagePath,
+      filename,
+      testPeriod,
+      { supabaseClient: supabase, userId: fixture.userId },
+    );
+
+    expect(result.failed).toBe(0);
+    expect(result.succeeded).toBeGreaterThan(0);
+
+    const { data: invoices, error: invErr } = await supabase
+      .from("invoices")
+      .select("id, document_id, extracted_data")
+      .eq("client_id", fixture.clientId);
+    if (invErr || !invoices) throw invErr ?? new Error("fetch invoices failed");
+
+    expect(invoices.length).toBeGreaterThan(0);
+    for (const inv of invoices) {
+      expect(inv.document_id, "every invoice must have a document_id").not.toBeNull();
+    }
+
+    const docIds = invoices.map((i) => i.document_id!).filter((x): x is string => Boolean(x));
+    expect(new Set(docIds).size).toBe(docIds.length); // 1-to-1
+
+    const { data: docs, error: docErr } = await supabase
+      .from("documents")
+      .select("id, firm_id, client_id, doc_type, type, ocr_status, status, amount, doc_date, created_by")
+      .in("id", docIds);
+    if (docErr || !docs) throw docErr ?? new Error("fetch documents failed");
+
+    expect(docs.length).toBe(docIds.length);
+    for (const d of docs) {
+      expect(d.firm_id).toBe(fixture.firmId);
+      expect(d.client_id).toBe(fixture.clientId);
+      expect(d.doc_type).toBe("invoice");
+      expect(d.type).toBe("VAT");
+      // Phase 6a.1 trigger may have re-synced ocr_status from the invoice
+      // child row (subtable as source of truth for cache columns). Either
+      // "done" (what we wrote) or whatever the trigger derived from the
+      // invoice status are acceptable; here we just assert it's not null.
+      expect(d.ocr_status).not.toBeNull();
+      expect(d.status).toBe("active");
+      expect(d.created_by).toBe(fixture.userId);
+      expect(d.doc_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+  });
+
+  it("re-import is idempotent for documents (count unchanged, document_id stable)", async () => {
+    const storagePath = `${fixture.firmId}/${fixture.clientId}/${filename}`;
+
+    const { data: invoicesBefore } = await supabase
+      .from("invoices")
+      .select("id, invoice_serial_code, document_id")
+      .eq("client_id", fixture.clientId);
+    const before = new Map(
+      (invoicesBefore ?? []).map((r) => [r.invoice_serial_code!, r.document_id!] as const),
+    );
+
+    const { count: docsCountBefore } = await supabase
+      .from("documents")
+      .select("id", { count: "exact", head: true })
+      .eq("client_id", fixture.clientId);
+
+    await processElectronicInvoiceFile(
+      fixture.clientId,
+      fixture.firmId,
+      storagePath,
+      filename,
+      testPeriod,
+      { supabaseClient: supabase, userId: fixture.userId },
+    );
+
+    const { data: invoicesAfter } = await supabase
+      .from("invoices")
+      .select("invoice_serial_code, document_id")
+      .eq("client_id", fixture.clientId);
+    expect(invoicesAfter!.length).toBe(before.size);
+    for (const inv of invoicesAfter!) {
+      expect(before.get(inv.invoice_serial_code!)).toBe(inv.document_id);
+    }
+
+    const { count: docsCountAfter } = await supabase
+      .from("documents")
+      .select("id", { count: "exact", head: true })
+      .eq("client_id", fixture.clientId);
+    expect(docsCountAfter).toBe(docsCountBefore);
+  });
+});
+
+describe.skipIf(!hasDbEnv)("commitInvoiceRowsAtomically – transaction rollback (Phase 6b)", () => {
+  let supabase: ReturnType<typeof getServiceClient>;
+  let fixture: TestFixture;
+  const testPeriod = "11411";
+  const filename = "60707504.xlsx";
+
+  beforeAll(async () => {
+    supabase = getServiceClient();
+    fixture = await createTestFixture(supabase);
+
+    const filePath = path.resolve(__dirname, "../../fixtures/files", filename);
+    const fileBuffer = readFileSync(filePath);
+    const storagePath = `${fixture.firmId}/${fixture.clientId}/${filename}`;
+    await supabase.storage
+      .from("electronic-invoices")
+      .upload(storagePath, fileBuffer, { upsert: true });
+    fixture.storagePaths.push(storagePath);
+
+    await supabase.from("tax_filing_periods").insert({
+      firm_id: fixture.firmId,
+      client_id: fixture.clientId,
+      year_month: testPeriod,
+      status: "open",
+    });
+  });
+
+  afterAll(async () => {
+    if (fixture) await cleanupTestFixture(supabase, fixture);
+  });
+
+  it("unauthorized userId aborts the transaction without writing documents or invoices", async () => {
+    const storagePath = `${fixture.firmId}/${fixture.clientId}/${filename}`;
+
+    const { count: docsBefore } = await supabase
+      .from("documents")
+      .select("id", { count: "exact", head: true })
+      .eq("client_id", fixture.clientId);
+    const { count: invBefore } = await supabase
+      .from("invoices")
+      .select("id", { count: "exact", head: true })
+      .eq("client_id", fixture.clientId);
+
+    // A random uuid as userId — assertCallerCanAccessClient should reject it
+    // and roll the transaction back.
+    const intruderUserId = "00000000-0000-0000-0000-000000000001";
+    await expect(
+      processElectronicInvoiceFile(
+        fixture.clientId,
+        fixture.firmId,
+        storagePath,
+        filename,
+        testPeriod,
+        { supabaseClient: supabase, userId: intruderUserId },
+      ),
+    ).rejects.toThrow();
+
+    const { count: docsAfter } = await supabase
+      .from("documents")
+      .select("id", { count: "exact", head: true })
+      .eq("client_id", fixture.clientId);
+    const { count: invAfter } = await supabase
+      .from("invoices")
+      .select("id", { count: "exact", head: true })
+      .eq("client_id", fixture.clientId);
+
+    expect(docsAfter).toBe(docsBefore);
+    expect(invAfter).toBe(invBefore);
+  });
+});

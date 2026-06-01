@@ -6,7 +6,7 @@ import { type Database, type TablesInsert, type Json } from "@/supabase/database
 import { type SupabaseClient } from "@supabase/supabase-js";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { ALLOWANCE_FORMAT_CODE_MAP } from "@/lib/domain/format-codes";
-import { formatDateToYYYYMMDD } from "@/lib/utils";
+import { formatDateToISO, formatDateToYYYYMMDD } from "@/lib/utils";
 import * as XLSX from 'xlsx';
 import { getTaxPeriodByYYYMM } from "@/lib/services/tax-period";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -783,10 +783,17 @@ async function linkAllowancesToInvoices(
 const SERIAL_CHUNK_SIZE = 300;
 const UPSERT_CHUNK_SIZE = 500;
 
-/** `extracted_data.date` is "YYYY/MM/DD". Fall back to today on malformed input. */
+/**
+ * Parse `extracted_data.date` into a Postgres-friendly "YYYY-MM-DD".
+ *
+ * The import path always writes slash format via `formatDateToYYYYMMDD`, but
+ * we accept dash too so that downstream consumers (single-row uploads, future
+ * paths, hand-edited rows) keep working. Malformed input falls back to today
+ * (local date via `formatDateToISO`, not UTC).
+ */
 function parseExtractedDataDate(raw: unknown): string {
   if (typeof raw === "string") {
-    const m = raw.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+    const m = raw.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
     if (m) {
       const iso = `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
       const parsed = new Date(`${iso}T00:00:00`);
@@ -798,7 +805,7 @@ function parseExtractedDataDate(raw: unknown): string {
       }
     }
   }
-  return new Date().toISOString().slice(0, 10);
+  return formatDateToISO(new Date());
 }
 
 function computeInvoiceAmount(ed: Record<string, unknown>): number | null {
@@ -864,15 +871,23 @@ async function commitInvoiceRowsAtomically(
       serialCodes,
     );
 
-    const rowsNeedingDoc = rows.filter((r) => {
-      const existingDocId = r.invoice_serial_code
-        ? existing.get(r.invoice_serial_code)
-        : null;
-      return !existingDocId;
-    });
+    // Dedupe by serial code: if the same invoice number appears multiple
+    // times in one Excel (rare but possible), we want a single document per
+    // serial. Without dedup, every duplicate row would mint its own document
+    // but only one row would survive the upsert's conflict resolution —
+    // leaving the rest as orphan documents.
+    const newDocBySerial = new Map<string, string>();
+    const seedRowBySerial = new Map<string, TablesInsert<"invoices">>();
+    for (const r of rows) {
+      const code = r.invoice_serial_code;
+      if (!code) continue;
+      if (existing.get(code)) continue;
+      if (!seedRowBySerial.has(code)) seedRowBySerial.set(code, r);
+    }
 
-    if (rowsNeedingDoc.length > 0) {
-      const docInserts = rowsNeedingDoc.map((r) => {
+    if (seedRowBySerial.size > 0) {
+      const seedEntries = [...seedRowBySerial.entries()];
+      const docInserts = seedEntries.map(([, r]) => {
         const ed = (r.extracted_data ?? {}) as Record<string, unknown>;
         return {
           firm_id: r.firm_id!,
@@ -890,16 +905,17 @@ async function commitInvoiceRowsAtomically(
         .insert(documentsTable)
         .values(docInserts)
         .returning({ id: documentsTable.id });
-      rowsNeedingDoc.forEach((row, i) => {
-        row.document_id = inserted[i].id;
+      seedEntries.forEach(([code], i) => {
+        newDocBySerial.set(code, inserted[i].id);
       });
     }
 
     for (const row of rows) {
-      if (!row.document_id && row.invoice_serial_code) {
-        const reused = existing.get(row.invoice_serial_code);
-        if (reused) row.document_id = reused;
-      }
+      if (row.document_id || !row.invoice_serial_code) continue;
+      const reused = existing.get(row.invoice_serial_code);
+      const fresh = newDocBySerial.get(row.invoice_serial_code);
+      if (reused) row.document_id = reused;
+      else if (fresh) row.document_id = fresh;
     }
 
     let total = 0;
@@ -958,15 +974,20 @@ async function commitAllowanceRowsAtomically(
       serialCodes,
     );
 
-    const rowsNeedingDoc = rows.filter((r) => {
-      const existingDocId = r.allowance_serial_code
-        ? existing.get(r.allowance_serial_code)
-        : null;
-      return !existingDocId;
-    });
+    // See commitInvoiceRowsAtomically for the dedup rationale: one document
+    // per serial code, regardless of how many duplicate rows hit the batch.
+    const newDocBySerial = new Map<string, string>();
+    const seedRowBySerial = new Map<string, TablesInsert<"allowances">>();
+    for (const r of rows) {
+      const code = r.allowance_serial_code;
+      if (!code) continue;
+      if (existing.get(code)) continue;
+      if (!seedRowBySerial.has(code)) seedRowBySerial.set(code, r);
+    }
 
-    if (rowsNeedingDoc.length > 0) {
-      const docInserts = rowsNeedingDoc.map((r) => {
+    if (seedRowBySerial.size > 0) {
+      const seedEntries = [...seedRowBySerial.entries()];
+      const docInserts = seedEntries.map(([, r]) => {
         const ed = (r.extracted_data ?? {}) as Record<string, unknown>;
         return {
           firm_id: r.firm_id!,
@@ -984,16 +1005,17 @@ async function commitAllowanceRowsAtomically(
         .insert(documentsTable)
         .values(docInserts)
         .returning({ id: documentsTable.id });
-      rowsNeedingDoc.forEach((row, i) => {
-        row.document_id = inserted[i].id;
+      seedEntries.forEach(([code], i) => {
+        newDocBySerial.set(code, inserted[i].id);
       });
     }
 
     for (const row of rows) {
-      if (!row.document_id && row.allowance_serial_code) {
-        const reused = existing.get(row.allowance_serial_code);
-        if (reused) row.document_id = reused;
-      }
+      if (row.document_id || !row.allowance_serial_code) continue;
+      const reused = existing.get(row.allowance_serial_code);
+      const fresh = newDocBySerial.get(row.allowance_serial_code);
+      if (reused) row.document_id = reused;
+      else if (fresh) row.document_id = fresh;
     }
 
     const allIds: string[] = [];

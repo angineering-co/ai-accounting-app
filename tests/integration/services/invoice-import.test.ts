@@ -582,6 +582,7 @@ describe.skipIf(!hasDbEnv)("processElectronicInvoiceFile – documents-first (Ph
     if (docErr || !docs) throw docErr ?? new Error("fetch documents failed");
 
     expect(docs.length).toBe(docIds.length);
+    const invoiceByDocId = new Map(invoices.map((i) => [i.document_id, i] as const));
     for (const d of docs) {
       expect(d.firm_id).toBe(fixture.firmId);
       expect(d.client_id).toBe(fixture.clientId);
@@ -594,7 +595,15 @@ describe.skipIf(!hasDbEnv)("processElectronicInvoiceFile – documents-first (Ph
       expect(d.ocr_status).not.toBeNull();
       expect(d.status).toBe("active");
       expect(d.created_by).toBe(fixture.userId);
-      expect(d.doc_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+      const inv = invoiceByDocId.get(d.id);
+      expect(inv, `document ${d.id} should have a matching invoice`).toBeDefined();
+      const ed = inv!.extracted_data as { date?: string; totalAmount?: number };
+      // doc_date must equal the invoice's extracted date (YYYY/MM/DD → YYYY-MM-DD).
+      // If parseExtractedDataDate ever silently fell through to "today", this
+      // assertion catches it.
+      expect(d.doc_date).toBe((ed.date ?? "").replace(/\//g, "-"));
+      expect(d.amount).toBe(Math.round(ed.totalAmount ?? 0));
     }
   });
 

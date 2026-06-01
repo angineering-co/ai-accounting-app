@@ -121,6 +121,11 @@ const comparisonRows = [
     traditional: "向事務所索取",
     snapbooks: "雲端隨時調閱",
   },
+  {
+    label: "服務地區",
+    traditional: "鄰近區域為主",
+    snapbooks: "全台線上服務",
+  },
 ];
 
 const featureTourRows = [
@@ -365,7 +370,7 @@ export default function Home() {
         </section>
 
         {/* ── Comparison ── */}
-        <section className="bg-gradient-to-br from-emerald-50/50 via-white to-sky-50/50 py-24 md:py-36">
+        <section id="comparison" className="scroll-mt-20 bg-gradient-to-br from-emerald-50/50 via-white to-sky-50/50 py-24 md:py-36">
           <div className="mx-auto max-w-5xl px-5">
             <div className="mb-16 text-center">
               <p className="mb-4 text-sm font-semibold uppercase tracking-widest text-emerald-600">

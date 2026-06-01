@@ -15,9 +15,14 @@ let instance: DrizzleDb | null = null;
 export const db = new Proxy({} as DrizzleDb, {
   get(_target, prop, receiver) {
     if (!instance) {
-      const connectionString = process.env.DATABASE_URL;
+      // Prefer DATABASE_URL (what we set locally + can override in prod), fall
+      // back to POSTGRES_URL (auto-provisioned by the Vercel-Supabase
+      // integration as the Supavisor transaction-mode URL). Either is the
+      // same shape; the fallback removes a manual sync step on Vercel.
+      const connectionString =
+        process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
       if (!connectionString) {
-        throw new Error("Missing DATABASE_URL");
+        throw new Error("Missing DATABASE_URL (or POSTGRES_URL)");
       }
       const client = postgres(connectionString, {
         prepare: false,

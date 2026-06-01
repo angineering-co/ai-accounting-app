@@ -353,7 +353,7 @@
 
 **改動**（遷移路徑見 `VOUCHER_JOURNAL_ENTRY_PLAN.md` §12「落地」）：
 - 加入 `drizzle-orm` + `drizzle-kit` 依賴；以 `drizzle-kit pull`（introspection）產生 `lib/db/schema.ts`。`supabase/migrations` 仍是 schema 的 single source of truth，Drizzle schema 只供型別與查詢建構
-- `lib/db/drizzle.ts`（新）：connection。走 Supabase Supavisor 的 transaction-mode pooler（port 6543），新環境變數 `DATABASE_URL`，須設 `prepare: false`
+- `lib/db/drizzle.ts`（新）：connection。走 Supabase Supavisor 的 transaction-mode pooler（port 6543），須設 `prepare: false`。Prod 由 Vercel-Supabase integration 自動帶入 `POSTGRES_URL`（drizzle.ts fallback：`DATABASE_URL ?? POSTGRES_URL`，local 維持 `DATABASE_URL`）
 - `lib/db/rls.ts`（新）：RLS helper（依下方決策實作）
 - **RLS 決策（關鍵，本階段須定案）**：Drizzle 走直連 Postgres，**繞過 RLS**。二擇一：
   - (a) 每個 transaction 內 `SET LOCAL request.jwt.claims = ...`，讓既有 RLS 政策仍生效

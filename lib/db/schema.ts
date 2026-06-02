@@ -227,7 +227,7 @@ export const invoices = pgTable("invoices", {
 	year_month: text(),
 	invoice_serial_code: text(),
 	tax_filing_period_id: uuid(),
-	document_id: uuid(),
+	document_id: uuid().notNull(),
 }, (table) => [
 	index("idx_invoices_client_id").using("btree", table.client_id.asc().nullsLast().op("uuid_ops")),
 	uniqueIndex("idx_invoices_client_serial_unique").using("btree", table.client_id.asc().nullsLast().op("text_ops"), table.invoice_serial_code.asc().nullsLast().op("text_ops")),
@@ -236,7 +236,6 @@ export const invoices = pgTable("invoices", {
 	index("idx_invoices_status").using("btree", table.status.asc().nullsLast().op("text_ops")),
 	index("idx_invoices_tax_filing_period_id").using("btree", table.tax_filing_period_id.asc().nullsLast().op("uuid_ops")),
 	index("idx_invoices_year_month").using("btree", table.year_month.asc().nullsLast().op("text_ops")),
-	index("invoices_document_id_idx").using("btree", table.document_id.asc().nullsLast().op("uuid_ops")),
 	foreignKey({
 			columns: [table.client_id],
 			foreignColumns: [clients.id],
@@ -262,6 +261,7 @@ export const invoices = pgTable("invoices", {
 			foreignColumns: [profiles.id],
 			name: "invoices_uploaded_by_fkey"
 		}),
+	unique("invoices_document_id_key").on(table.document_id),
 	pgPolicy("Users can manage invoices in their firm", { as: "permissive", for: "all", to: ["public"], using: sql`(((firm_id = get_auth_user_firm_id()) AND ((get_auth_user_client_id() IS NULL) OR (client_id = get_auth_user_client_id()))) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`, withCheck: sql`(((firm_id = get_auth_user_firm_id()) AND ((get_auth_user_client_id() IS NULL) OR (client_id = get_auth_user_client_id()))) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`  }),
 	check("invoices_in_or_out_check", sql`in_or_out = ANY (ARRAY['in'::text, 'out'::text])`),
 	check("invoices_status_check", sql`status = ANY (ARRAY['uploaded'::text, 'processing'::text, 'processed'::text, 'confirmed'::text, 'failed'::text])`),
@@ -282,9 +282,8 @@ export const allowances = pgTable("allowances", {
 	extracted_data: jsonb(),
 	uploaded_by: uuid(),
 	created_at: timestamp({ withTimezone: true, mode: 'string' }).defaultNow(),
-	document_id: uuid(),
+	document_id: uuid().notNull(),
 }, (table) => [
-	index("allowances_document_id_idx").using("btree", table.document_id.asc().nullsLast().op("uuid_ops")),
 	index("idx_allowances_client_period").using("btree", table.client_id.asc().nullsLast().op("uuid_ops"), table.tax_filing_period_id.asc().nullsLast().op("uuid_ops")),
 	uniqueIndex("idx_allowances_client_serial_unique").using("btree", table.client_id.asc().nullsLast().op("uuid_ops"), table.allowance_serial_code.asc().nullsLast().op("text_ops")),
 	index("idx_allowances_original_invoice_id").using("btree", table.original_invoice_id.asc().nullsLast().op("uuid_ops")).where(sql`(original_invoice_id IS NOT NULL)`),
@@ -318,6 +317,7 @@ export const allowances = pgTable("allowances", {
 			foreignColumns: [profiles.id],
 			name: "allowances_uploaded_by_fkey"
 		}),
+	unique("allowances_document_id_key").on(table.document_id),
 	pgPolicy("Users can manage allowances in their firm", { as: "permissive", for: "all", to: ["public"], using: sql`(((firm_id = get_auth_user_firm_id()) AND ((get_auth_user_client_id() IS NULL) OR (client_id = get_auth_user_client_id()))) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`, withCheck: sql`(((firm_id = get_auth_user_firm_id()) AND ((get_auth_user_client_id() IS NULL) OR (client_id = get_auth_user_client_id()))) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`  }),
 ]);
 

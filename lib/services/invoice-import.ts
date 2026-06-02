@@ -90,6 +90,18 @@ interface ImportResult {
   fileType?: 'invoice' | 'allowance';
 }
 
+// Row shape during the bulk-import flow, before `commitXxxRowsAtomically`
+// resolves and assigns the `document_id`. After Phase 6b Work C the column
+// is NOT NULL at the DB layer (and required by `TablesInsert<'invoices'>` /
+// `TablesInsert<'allowances'>`), but the producers below build rows without
+// it and the commit helpers fill it in inside the transaction.
+type PreLinkInvoiceInsert = Omit<TablesInsert<'invoices'>, 'document_id'> & {
+  document_id?: string;
+};
+type PreLinkAllowanceInsert = Omit<TablesInsert<'allowances'>, 'document_id'> & {
+  document_id?: string;
+};
+
 type FileType = 'invoice' | 'allowance';
 
 /**
@@ -260,7 +272,7 @@ async function processInvoiceExcelFile(
     userId: string,
     result: ImportResult,
     filingPeriod: TaxFilingPeriod
-): Promise<TablesInsert<'invoices'>[]> {
+): Promise<PreLinkInvoiceInsert[]> {
   const filingPeriodRoc = RocPeriod.fromYYYMM(filingPeriod.year_month);
   const filingPeriodId = filingPeriod.id;
   result.fileType = 'invoice';
@@ -312,7 +324,7 @@ async function processInvoiceExcelFile(
     }
   }
   
-  const invoices: TablesInsert<'invoices'>[] = [];
+  const invoices: PreLinkInvoiceInsert[] = [];
   
   for (let i = 0; i < headerRows.length; i++) {
     try {
@@ -480,7 +492,7 @@ async function processAllowanceExcelFile(
   }
 
   result.total = groupedRows.size;
-  const allowancesToInsert: TablesInsert<'allowances'>[] = [];
+  const allowancesToInsert: PreLinkAllowanceInsert[] = [];
 
   for (const [serialCode, itemRows] of groupedRows) {
     try {
@@ -537,7 +549,7 @@ function parseAllowanceFromRows(
   filename: string,
   periodId: string,
   userId: string
-): TablesInsert<'allowances'> {
+): PreLinkAllowanceInsert {
   // Take common fields from first row
   const firstRow = itemRows[0];
   const formatCode = getString(firstRow, '格式代號');
@@ -880,7 +892,7 @@ async function fetchExistingDocLinks(
  * dedup-within-batch / fresh) each input row falls into.
  */
 async function commitInvoiceRowsAtomically(
-  rows: TablesInsert<"invoices">[],
+  rows: PreLinkInvoiceInsert[],
   clientId: string,
   userId: string,
 ): Promise<number> {
@@ -913,7 +925,7 @@ async function commitInvoiceRowsAtomically(
     // document's fields. Duplicate rows in the batch all end up pointing
     // at the single seed-row's document, avoiding orphan documents.
     const newDocIdBySerial = new Map<string, string>();
-    const docSourceBySerial = new Map<string, TablesInsert<"invoices">>();
+    const docSourceBySerial = new Map<string, PreLinkInvoiceInsert>();
     for (const r of rows) {
       const code = r.invoice_serial_code;
       if (!code) continue;
@@ -1011,7 +1023,7 @@ async function commitInvoiceRowsAtomically(
  * afterward.
  */
 async function commitAllowanceRowsAtomically(
-  rows: TablesInsert<"allowances">[],
+  rows: PreLinkAllowanceInsert[],
   clientId: string,
   userId: string,
 ): Promise<string[]> {
@@ -1038,7 +1050,7 @@ async function commitAllowanceRowsAtomically(
     // Pick one row per "needs a new document" serial code; duplicate rows
     // in the batch share that single document. See commitInvoiceRowsAtomically.
     const newDocIdBySerial = new Map<string, string>();
-    const docSourceBySerial = new Map<string, TablesInsert<"allowances">>();
+    const docSourceBySerial = new Map<string, PreLinkAllowanceInsert>();
     for (const r of rows) {
       const code = r.allowance_serial_code;
       if (!code) continue;

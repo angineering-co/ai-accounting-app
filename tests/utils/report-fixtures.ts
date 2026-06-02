@@ -264,11 +264,22 @@ export async function seedTestCase(
         );
       }
 
-      // Insert invoices
+      // Insert invoices. Post-Phase-6b each row needs a `documents` parent
+      // (invoices.document_id is NOT NULL). The fixture isn't testing CTI
+      // semantics, so the document just gets placeholder values that satisfy
+      // the constraints — the reports under test read invoices.extracted_data,
+      // not documents.amount / doc_date.
       for (const invoice of invoices) {
+        const documentId = crypto.randomUUID();
         await pg.query(
-          `INSERT INTO invoices (id, firm_id, client_id, in_or_out, invoice_serial_code, year_month, status, extracted_data, uploaded_by, created_at, tax_filing_period_id, storage_path, filename)
-           VALUES ($1, $2, $3, $4, $5, $6, 'confirmed', $7, $8, NOW(), $9, '', '')
+          `INSERT INTO documents (id, firm_id, client_id, doc_date, type, doc_type, status, created_by, created_at, updated_at)
+           VALUES ($1, $2, $3, NOW()::date, 'VAT', 'invoice', 'active', $4, NOW(), NOW())
+           ON CONFLICT (id) DO NOTHING`,
+          [documentId, TEST_FIRM_ID, client.id, userId]
+        );
+        await pg.query(
+          `INSERT INTO invoices (id, firm_id, client_id, in_or_out, invoice_serial_code, year_month, status, extracted_data, uploaded_by, created_at, tax_filing_period_id, storage_path, filename, document_id)
+           VALUES ($1, $2, $3, $4, $5, $6, 'confirmed', $7, $8, NOW(), $9, '', '', $10)
            ON CONFLICT (id) DO NOTHING`,
           [
             invoice.id,
@@ -280,15 +291,23 @@ export async function seedTestCase(
             JSON.stringify(invoice.extracted_data),
             userId,
             taxPeriodId,
+            documentId,
           ]
         );
       }
 
-      // Insert allowances
+      // Insert allowances (same parent-then-child pattern).
       for (const allowance of allowances) {
+        const documentId = crypto.randomUUID();
         await pg.query(
-          `INSERT INTO allowances (id, firm_id, client_id, in_or_out, original_invoice_serial_code, status, extracted_data, uploaded_by, created_at, tax_filing_period_id, storage_path, filename)
-           VALUES ($1, $2, $3, $4, $5, 'confirmed', $6, $7, NOW(), $8, '', '')
+          `INSERT INTO documents (id, firm_id, client_id, doc_date, type, doc_type, status, created_by, created_at, updated_at)
+           VALUES ($1, $2, $3, NOW()::date, 'VAT', 'allowance', 'active', $4, NOW(), NOW())
+           ON CONFLICT (id) DO NOTHING`,
+          [documentId, TEST_FIRM_ID, client.id, userId]
+        );
+        await pg.query(
+          `INSERT INTO allowances (id, firm_id, client_id, in_or_out, original_invoice_serial_code, status, extracted_data, uploaded_by, created_at, tax_filing_period_id, storage_path, filename, document_id)
+           VALUES ($1, $2, $3, $4, $5, 'confirmed', $6, $7, NOW(), $8, '', '', $9)
            ON CONFLICT (id) DO NOTHING`,
           [
             allowance.id,
@@ -299,6 +318,7 @@ export async function seedTestCase(
             JSON.stringify(allowance.extracted_data),
             userId,
             taxPeriodId,
+            documentId,
           ]
         );
       }
@@ -316,6 +336,9 @@ export async function seedTestCase(
     await withPgClient(async (pg) => {
       await pg.query(`DELETE FROM invoices WHERE uploaded_by = $1`, [userId]);
       await pg.query(`DELETE FROM allowances WHERE uploaded_by = $1`, [userId]);
+      // Phase 6b: the documents we created in the seed point at this user via
+      // `created_by`. Drop them before the profile delete or the FK blocks it.
+      await pg.query(`DELETE FROM documents WHERE created_by = $1`, [userId]);
       await pg.query(`DELETE FROM profiles WHERE id = $1`, [userId]);
     });
     await supabase.auth.admin.deleteUser(userId);

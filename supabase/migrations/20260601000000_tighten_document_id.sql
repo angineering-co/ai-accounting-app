@@ -14,14 +14,6 @@
 -- to "upsert documents", and the orphan-detection query in
 -- docs/VOUCHER_JOURNAL_ENTRY_PHASED_PLAN.md is the only remaining gap (orphans
 -- are documents without ANY child, which UNIQUE cannot express).
---
--- Why we DON'T tighten `client_id` here even though documents-first implicitly
--- needs it: the invoices/allowances FK on client_id is `ON DELETE SET NULL`,
--- which would conflict with a hard NOT NULL (deleting a client would try to
--- null-out the column and fail). Enforcing the "client_id always present"
--- invariant at the app layer (Zod + the now-unconditional createDocument call
--- in createInvoice / createAllowance) gives us the guarantee without changing
--- the FK's deletion semantics.
 
 DO $$
 BEGIN

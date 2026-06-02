@@ -153,7 +153,6 @@ export const extractedInvoiceDataSchema = z.object({
 export const invoiceSchema = z.object({
   id: z.string().uuid(),
   firm_id: z.string().uuid(),
-  // Phase 6b Work C: DB-enforced NOT NULL. Every invoice belongs to a client.
   client_id: z.string().uuid(),
   storage_path: z.string().min(1),
   filename: z.string().min(1),
@@ -242,7 +241,6 @@ export const extractedAllowanceDataSchema = z.object({
 export const allowanceSchema = z.object({
   id: z.string().uuid(),
   firm_id: z.string().uuid(),
-  // Phase 6b Work C: DB-enforced NOT NULL. Every allowance belongs to a client.
   client_id: z.string().uuid(),
   tax_filing_period_id: z.string().uuid().nullable().optional(),
   allowance_serial_code: z.string().nullable().optional(),

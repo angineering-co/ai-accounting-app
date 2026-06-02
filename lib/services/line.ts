@@ -54,22 +54,31 @@ const BINDING_CODE_RE = /^LB-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}$/;
 const UNBIND_COMMAND = "解除綁定";
 const BINDING_EXPIRY_HOURS = 48;
 
-// Welcome-message quick replies. Tapping one posts the label as the user's own
-// message, which both starts the conversation (so we may message them back) and
-// tells us what they need, replacing the old "paste your code" instruction.
-// The text values are intended to double as recognized intents in
-// handleTextMessage (wired up separately).
-const INTENT_REGISTRATION = "我要公司設立";
-const INTENT_BOOKKEEPING = "我要記帳服務";
-const INTENT_CONSULT = "我想先諮詢";
+// Welcome quick-reply intents. Tapping a button posts its `label` as the user's
+// own message; handleTextMessage matches that text and replies with `ack`, then
+// a human takes over. Keeping label/ack together means adding an intent is a
+// single entry. The bot only acknowledges and hands off; it does not record the
+// intent or converse further.
+const WELCOME_INTENTS = [
+  {
+    label: "我要公司設立",
+    ack: "好的，您想了解公司設立。我們的專員會盡快與您聯繫，也歡迎先告訴我們預計的營業項目或公司名稱。",
+  },
+  {
+    label: "我要記帳服務",
+    ack: "好的，您需要記帳服務。我們的專員會盡快與您聯繫，也歡迎先告訴我們目前每月大約的單據數量。",
+  },
+  {
+    label: "我想先諮詢",
+    ack: "沒問題，您可以直接把問題傳給我們，專員會盡快回覆您。",
+  },
+] as const;
 
 const WELCOME_QUICK_REPLY: QuickReply = {
-  items: [INTENT_REGISTRATION, INTENT_BOOKKEEPING, INTENT_CONSULT].map(
-    (intent) => ({
-      type: "action",
-      action: { type: "message", label: intent, text: intent },
-    }),
-  ),
+  items: WELCOME_INTENTS.map((intent) => ({
+    type: "action",
+    action: { type: "message", label: intent.label, text: intent.label },
+  })),
 };
 
 // ---------------------------------------------------------------------------
@@ -414,6 +423,14 @@ async function handleTextMessage(
 
   if (trimmed === UNBIND_COMMAND) {
     await handleUnbindRequest(supabase, lineUserId, replyToken);
+    return;
+  }
+
+  const intent = WELCOME_INTENTS.find((i) => i.label === trimmed);
+  if (intent) {
+    if (replyToken) {
+      await replyToLine(replyToken, [{ type: "text", text: intent.ack }]);
+    }
     return;
   }
 }

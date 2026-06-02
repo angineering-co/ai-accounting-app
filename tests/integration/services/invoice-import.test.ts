@@ -577,7 +577,7 @@ describe.skipIf(!hasDbEnv)("processElectronicInvoiceFile – documents-first (Ph
 
     const { data: docs, error: docErr } = await supabase
       .from("documents")
-      .select("id, firm_id, client_id, doc_type, type, ocr_status, status, amount, doc_date, created_by")
+      .select("id, firm_id, client_id, doc_type, type, ocr_status, status, amount, doc_date, file_url, created_by")
       .in("id", docIds);
     if (docErr || !docs) throw docErr ?? new Error("fetch documents failed");
 
@@ -595,6 +595,8 @@ describe.skipIf(!hasDbEnv)("processElectronicInvoiceFile – documents-first (Ph
       expect(d.ocr_status).not.toBeNull();
       expect(d.status).toBe("active");
       expect(d.created_by).toBe(fixture.userId);
+      // Parity with createInvoice + Phase 6a backfill: file_url = storage_path.
+      expect(d.file_url).toBe(`${fixture.firmId}/${fixture.clientId}/${filename}`);
 
       const inv = invoiceByDocId.get(d.id);
       expect(inv, `document ${d.id} should have a matching invoice`).toBeDefined();

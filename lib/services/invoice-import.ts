@@ -933,6 +933,12 @@ async function commitInvoiceRowsAtomically(
           ocr_status: "done" as const,
           doc_date: parseExtractedDataDate(ed.date),
           amount: computeInvoiceAmount(ed),
+          // For batch imports `storage_path` is the shared Excel-batch file
+          // (one path across all rows in the same import), not a per-invoice
+          // PDF. We mirror it here to match `createInvoice` and Phase 6a
+          // backfill — keeps documents.file_url uniformly populated across
+          // every write path.
+          file_url: r.storage_path ?? null,
           created_by: userId,
           status: "active" as const,
         };
@@ -1052,6 +1058,8 @@ async function commitAllowanceRowsAtomically(
           ocr_status: "done" as const,
           doc_date: parseExtractedDataDate(ed.date),
           amount: computeAllowanceAmount(ed),
+          // See commitInvoiceRowsAtomically for the parity rationale.
+          file_url: r.storage_path ?? null,
           created_by: userId,
           status: "active" as const,
         };

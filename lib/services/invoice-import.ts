@@ -768,20 +768,38 @@ async function linkAllowancesToInvoices(
 
 // ===== documents-first commit helpers (Phase 6b) =====
 //
-// The two functions below wrap the document-row creation and the
-// invoice/allowance upsert in a single Drizzle transaction so that the
-// documents-first invariant ("every invoice/allowance has a document parent")
-// holds atomically. Partial failures roll both sides back; no orphan
-// `documents` rows are left behind.
+// The two helpers below wrap document-row creation and the invoice/allowance
+// upsert in a single Drizzle transaction. Each row in the input batch lands
+// in one of three buckets:
 //
-// Pre-fetch (`.for('update')`) + per-(client, doc_type) advisory lock cover
-// concurrent imports of the same serial code. The COALESCE in the upsert's
-// ON CONFLICT clause preserves any existing document_id even if a racing
-// writer briefly created a competing one (which then becomes orphan-and-rolled-
-// back because the second writer's transaction commits without referencing it).
+//   (a) Row's serial code already exists in DB AND already has a document_id
+//       (re-import case — e.g. user re-uploaded the same Excel to fix the
+//       filing period, or Phase 6a backfill ran earlier). Reuse the existing
+//       document_id so any audit_trails / journal_entries that already point
+//       at it stay valid.
+//
+//   (b) Row's serial code is brand-new but appears multiple times in this
+//       batch (rare; Excel duplicate). Build one document and point all
+//       duplicate rows at it. Without this dedup we'd mint N documents, the
+//       upsert's ON CONFLICT would resolve to one invoice row keeping one
+//       document_id, and the other N-1 documents would be orphans.
+//
+//   (c) Row's serial code is brand-new and unique. One document, one row.
+//
+// Concurrency: a per-client `pg_advisory_xact_lock` at the top serializes
+// imports for the same client so two writers can't each create a fresh
+// document for the same brand-new serial code. The `.for('update')` row
+// lock in fetchExistingDocLinks alone wouldn't help — it can only lock
+// rows that exist. The COALESCE in the upsert's ON CONFLICT set clause is
+// belt-and-braces: it preserves any existing document_id even if a race
+// somehow slipped through.
 
 const SERIAL_CHUNK_SIZE = 300;
 const UPSERT_CHUNK_SIZE = 500;
+// Postgres caps bind parameters at 65,535 per statement. Documents has ~9
+// columns, so a single batch insert maxes out around ~7k rows. Match the
+// upsert chunk size for symmetry and a safe margin (500 × 9 ≈ 4.5k params).
+const DOC_INSERT_CHUNK_SIZE = UPSERT_CHUNK_SIZE;
 
 /**
  * Parse `extracted_data.date` into a Postgres-friendly "YYYY-MM-DD".
@@ -819,6 +837,17 @@ function computeAllowanceAmount(ed: Record<string, unknown>): number | null {
   return Math.round((net ?? 0) + (tax ?? 0));
 }
 
+/**
+ * For each serial code in the input batch, find the existing row in
+ * `invoices` / `allowances` (if any) and return its `document_id`. Used by
+ * the commit helpers to decide which rows can reuse a document vs need a
+ * fresh one. Rows we find are row-locked with `.for('update')` so
+ * concurrent imports don't change them under us.
+ *
+ * Returned map values can be `null` — meaning "the row exists but its
+ * document_id hasn't been backfilled". Treat that the same as "missing"
+ * (needs a fresh document).
+ */
 async function fetchExistingDocLinks(
   tx: Tx,
   table: typeof invoicesTable | typeof allowancesTable,
@@ -830,8 +859,6 @@ async function fetchExistingDocLinks(
   for (let i = 0; i < serialCodes.length; i += SERIAL_CHUNK_SIZE) {
     const chunk = serialCodes.slice(i, i + SERIAL_CHUNK_SIZE);
     if (chunk.length === 0) continue;
-    // .for('update') locks rows we find; new (not-yet-existing) rows are
-    // covered by the per-client advisory lock the caller takes earlier.
     const rows = await tx
       .select({ serial: serialCol, document_id: table.document_id })
       .from(table)
@@ -844,6 +871,14 @@ async function fetchExistingDocLinks(
   return out;
 }
 
+/**
+ * Atomically commit a batch of invoice rows along with their `documents`
+ * parents. Either everything in the batch lands together or nothing does.
+ * Returns the number of upserted invoice rows.
+ *
+ * See the file-level comment block above for the three buckets (reuse /
+ * dedup-within-batch / fresh) each input row falls into.
+ */
 async function commitInvoiceRowsAtomically(
   rows: TablesInsert<"invoices">[],
   clientId: string,
@@ -852,9 +887,12 @@ async function commitInvoiceRowsAtomically(
   return db.transaction(async (tx) => {
     await assertCallerCanAccessClient(tx, userId, clientId);
 
-    // Serialize same-client imports so two writers don't each build a
-    // brand-new document for the same serial code. `.for('update')` alone
-    // only locks rows that already exist.
+    // `pg_advisory_xact_lock` is a Postgres co-operative lock keyed by a
+    // 64-bit int. The `_xact_` flavour auto-releases at COMMIT/ROLLBACK so
+    // it can't leak. We key it on (operation, client_id) so two imports for
+    // the same client serialize — but different clients still run in
+    // parallel. This closes the gap left by `.for('update')` in the
+    // pre-fetch, which can only lock rows that already exist.
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtextextended(${`import:invoice:${clientId}`}, 0))`,
     );
@@ -871,22 +909,20 @@ async function commitInvoiceRowsAtomically(
       serialCodes,
     );
 
-    // Dedupe by serial code: if the same invoice number appears multiple
-    // times in one Excel (rare but possible), we want a single document per
-    // serial. Without dedup, every duplicate row would mint its own document
-    // but only one row would survive the upsert's conflict resolution —
-    // leaving the rest as orphan documents.
-    const newDocBySerial = new Map<string, string>();
-    const seedRowBySerial = new Map<string, TablesInsert<"invoices">>();
+    // Pick one row per "needs a new document" serial code to seed that
+    // document's fields. Duplicate rows in the batch all end up pointing
+    // at the single seed-row's document, avoiding orphan documents.
+    const newDocIdBySerial = new Map<string, string>();
+    const docSourceBySerial = new Map<string, TablesInsert<"invoices">>();
     for (const r of rows) {
       const code = r.invoice_serial_code;
       if (!code) continue;
       if (existing.get(code)) continue;
-      if (!seedRowBySerial.has(code)) seedRowBySerial.set(code, r);
+      if (!docSourceBySerial.has(code)) docSourceBySerial.set(code, r);
     }
 
-    if (seedRowBySerial.size > 0) {
-      const seedEntries = [...seedRowBySerial.entries()];
+    if (docSourceBySerial.size > 0) {
+      const seedEntries = [...docSourceBySerial.entries()];
       const docInserts = seedEntries.map(([, r]) => {
         const ed = (r.extracted_data ?? {}) as Record<string, unknown>;
         return {
@@ -901,19 +937,26 @@ async function commitInvoiceRowsAtomically(
           status: "active" as const,
         };
       });
-      const inserted = await tx
-        .insert(documentsTable)
-        .values(docInserts)
-        .returning({ id: documentsTable.id });
-      seedEntries.forEach(([code], i) => {
-        newDocBySerial.set(code, inserted[i].id);
-      });
+      // Chunk the insert: a single statement is capped by Postgres' 65,535
+      // parameter limit. Without chunking, a batch of ~7,000+ unique new
+      // serial codes would overflow and fail at runtime.
+      for (let i = 0; i < docInserts.length; i += DOC_INSERT_CHUNK_SIZE) {
+        const chunk = docInserts.slice(i, i + DOC_INSERT_CHUNK_SIZE);
+        const inserted = await tx
+          .insert(documentsTable)
+          .values(chunk)
+          .returning({ id: documentsTable.id });
+        for (let j = 0; j < chunk.length; j++) {
+          const [code] = seedEntries[i + j];
+          newDocIdBySerial.set(code, inserted[j].id);
+        }
+      }
     }
 
     for (const row of rows) {
       if (row.document_id || !row.invoice_serial_code) continue;
       const reused = existing.get(row.invoice_serial_code);
-      const fresh = newDocBySerial.get(row.invoice_serial_code);
+      const fresh = newDocIdBySerial.get(row.invoice_serial_code);
       if (reused) row.document_id = reused;
       else if (fresh) row.document_id = fresh;
     }
@@ -926,6 +969,10 @@ async function commitInvoiceRowsAtomically(
         // Drizzle's TablesInsert and our supabase-generated TablesInsert
         // disagree on a few nullable columns; the runtime shape is identical.
         .values(chunk as unknown as typeof invoicesTable.$inferInsert[])
+        // `excluded` is the standard Postgres alias inside ON CONFLICT for
+        // "the row the INSERT was trying to write". So `excluded.<col>`
+        // takes the incoming row's value — equivalent to Supabase JS's
+        // `.upsert()` default (update every non-conflict column).
         .onConflictDoUpdate({
           target: [invoicesTable.client_id, invoicesTable.invoice_serial_code],
           set: {
@@ -937,9 +984,11 @@ async function commitInvoiceRowsAtomically(
             year_month: sql`excluded.year_month`,
             tax_filing_period_id: sql`excluded.tax_filing_period_id`,
             uploaded_by: sql`excluded.uploaded_by`,
-            // COALESCE protects a re-import from overwriting an existing
-            // document_id with a freshly-built one — keeps document FK
-            // stable across re-imports and across rare racing writers.
+            // COALESCE(a, b) returns `a` if non-null, else `b`. Here it
+            // keeps the existing document_id whenever there is one, and
+            // only takes the incoming value when the row had no prior FK.
+            // Belt-and-braces — prevents a freshly-built document from
+            // overwriting a stable FK that other tables may reference.
             document_id: sql`COALESCE(invoices.document_id, excluded.document_id)`,
           },
         })
@@ -950,6 +999,11 @@ async function commitInvoiceRowsAtomically(
   });
 }
 
+/**
+ * Allowance mirror of `commitInvoiceRowsAtomically`. Returns the ids of the
+ * upserted allowance rows so the caller can run `linkAllowancesToInvoices`
+ * afterward.
+ */
 async function commitAllowanceRowsAtomically(
   rows: TablesInsert<"allowances">[],
   clientId: string,
@@ -958,6 +1012,7 @@ async function commitAllowanceRowsAtomically(
   return db.transaction(async (tx) => {
     await assertCallerCanAccessClient(tx, userId, clientId);
 
+    // See commitInvoiceRowsAtomically for the advisory-lock rationale.
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtextextended(${`import:allowance:${clientId}`}, 0))`,
     );
@@ -974,19 +1029,19 @@ async function commitAllowanceRowsAtomically(
       serialCodes,
     );
 
-    // See commitInvoiceRowsAtomically for the dedup rationale: one document
-    // per serial code, regardless of how many duplicate rows hit the batch.
-    const newDocBySerial = new Map<string, string>();
-    const seedRowBySerial = new Map<string, TablesInsert<"allowances">>();
+    // Pick one row per "needs a new document" serial code; duplicate rows
+    // in the batch share that single document. See commitInvoiceRowsAtomically.
+    const newDocIdBySerial = new Map<string, string>();
+    const docSourceBySerial = new Map<string, TablesInsert<"allowances">>();
     for (const r of rows) {
       const code = r.allowance_serial_code;
       if (!code) continue;
       if (existing.get(code)) continue;
-      if (!seedRowBySerial.has(code)) seedRowBySerial.set(code, r);
+      if (!docSourceBySerial.has(code)) docSourceBySerial.set(code, r);
     }
 
-    if (seedRowBySerial.size > 0) {
-      const seedEntries = [...seedRowBySerial.entries()];
+    if (docSourceBySerial.size > 0) {
+      const seedEntries = [...docSourceBySerial.entries()];
       const docInserts = seedEntries.map(([, r]) => {
         const ed = (r.extracted_data ?? {}) as Record<string, unknown>;
         return {
@@ -1001,19 +1056,25 @@ async function commitAllowanceRowsAtomically(
           status: "active" as const,
         };
       });
-      const inserted = await tx
-        .insert(documentsTable)
-        .values(docInserts)
-        .returning({ id: documentsTable.id });
-      seedEntries.forEach(([code], i) => {
-        newDocBySerial.set(code, inserted[i].id);
-      });
+      // Chunk for Postgres' 65,535-parameter-per-statement cap. See
+      // commitInvoiceRowsAtomically.
+      for (let i = 0; i < docInserts.length; i += DOC_INSERT_CHUNK_SIZE) {
+        const chunk = docInserts.slice(i, i + DOC_INSERT_CHUNK_SIZE);
+        const inserted = await tx
+          .insert(documentsTable)
+          .values(chunk)
+          .returning({ id: documentsTable.id });
+        for (let j = 0; j < chunk.length; j++) {
+          const [code] = seedEntries[i + j];
+          newDocIdBySerial.set(code, inserted[j].id);
+        }
+      }
     }
 
     for (const row of rows) {
       if (row.document_id || !row.allowance_serial_code) continue;
       const reused = existing.get(row.allowance_serial_code);
-      const fresh = newDocBySerial.get(row.allowance_serial_code);
+      const fresh = newDocIdBySerial.get(row.allowance_serial_code);
       if (reused) row.document_id = reused;
       else if (fresh) row.document_id = fresh;
     }

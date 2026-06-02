@@ -26,7 +26,11 @@ export const db = new Proxy({} as DrizzleDb, {
       }
       const client = postgres(connectionString, {
         prepare: false,
-        max: 10,
+        // vitest runs in forks × multiple test files; the default of 10
+        // connections per worker quickly exhausts local Postgres
+        // `max_connections`. 3 is enough for one transaction + a couple of
+        // helper selects, and keeps the multiplied total in budget.
+        max: 3,
       });
       instance = drizzle(client);
     }

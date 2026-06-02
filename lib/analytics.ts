@@ -14,11 +14,21 @@ export function trackCtaClick(location: string) {
   });
 }
 
+// Entry points that link to our LINE OA. A closed union (rather than a free
+// string) so a typo in a conversion-critical key fails the build instead of
+// silently splitting the Google Ads signal.
+export type LineJoinLocation =
+  | "floating"
+  | "apply_success"
+  | "apply_faq"
+  | "blog_cta"
+  | "coupon";
+
 // Fired whenever a visitor clicks through to join our LINE OA, from any entry
-// point (floating button, post-apply CTA, blog, coupon dialog). This is the
-// attributable, browser-side signal Google Ads optimizes toward: the click
-// carries the gclid, whereas the downstream LINE follow/first-message does not.
-export function trackLineJoinClick(location: string) {
+// point. This is the attributable, browser-side signal Google Ads optimizes
+// toward: the click carries the gclid, whereas the downstream LINE
+// follow/first-message does not.
+export function trackLineJoinClick(location: LineJoinLocation) {
   sendGAEvent("event", "line_join_click", {
     line_location: location,
   });

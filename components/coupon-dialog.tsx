@@ -9,8 +9,8 @@ import {
   trackCouponCopy,
   trackCouponGeneration,
   trackCouponLineClick,
-  trackLineJoinClick,
 } from "@/lib/analytics";
+import { LineJoinLink } from "@/components/line-join-link";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,7 +20,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { LINE_URL } from "@/lib/pricing";
 
 export function CouponDialog({
   trigger,
@@ -72,7 +71,6 @@ export function CouponDialog({
 
   function handleLineClick() {
     trackCouponLineClick(location, code);
-    trackLineJoinClick("coupon");
   }
 
   return (
@@ -123,16 +121,14 @@ export function CouponDialog({
           </li>
         </ol>
 
-        <a
-          href={LINE_URL}
-          target="_blank"
-          rel="noopener noreferrer"
+        <LineJoinLink
+          location="coupon"
           onClick={handleLineClick}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#06C755] px-5 py-3 text-base font-semibold text-white transition-colors hover:bg-[#05b54c]"
         >
           加入 Line 好友
           <ExternalLink className="h-4 w-4" />
-        </a>
+        </LineJoinLink>
 
         <p className="text-center text-xs text-slate-400">
           本優惠適用於設立登記加購服務，每間公司限用一次，優惠碼於一個月內有效。

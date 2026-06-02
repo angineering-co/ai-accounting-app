@@ -64,20 +64,12 @@ const INTENT_BOOKKEEPING = "我要記帳服務";
 const INTENT_CONSULT = "我想先諮詢";
 
 const WELCOME_QUICK_REPLY: QuickReply = {
-  items: [
-    {
+  items: [INTENT_REGISTRATION, INTENT_BOOKKEEPING, INTENT_CONSULT].map(
+    (intent) => ({
       type: "action",
-      action: { type: "message", label: INTENT_REGISTRATION, text: INTENT_REGISTRATION },
-    },
-    {
-      type: "action",
-      action: { type: "message", label: INTENT_BOOKKEEPING, text: INTENT_BOOKKEEPING },
-    },
-    {
-      type: "action",
-      action: { type: "message", label: INTENT_CONSULT, text: INTENT_CONSULT },
-    },
-  ],
+      action: { type: "message", label: intent, text: intent },
+    }),
+  ),
 };
 
 // ---------------------------------------------------------------------------

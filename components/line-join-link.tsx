@@ -1,21 +1,24 @@
 "use client";
 
 import { LINE_URL } from "@/lib/pricing";
-import { trackLineJoinClick } from "@/lib/analytics";
+import { trackLineJoinClick, type LineJoinLocation } from "@/lib/analytics";
 
-// Anchor that opens our LINE OA and fires the line_join_click conversion event.
-// Use this for LINE entry points rendered inside Server Components; Client
-// Components can call trackLineJoinClick() directly on their own onClick.
+// Canonical anchor for any link that opens our LINE OA: owns LINE_URL, the
+// target/rel attributes, and the line_join_click conversion event in one place.
+// Use this everywhere (Server and Client Components alike). Pass `onClick` for
+// any extra per-click tracking that should fire alongside the conversion.
 export function LineJoinLink({
   location,
   className,
   children,
   ariaLabel,
+  onClick,
 }: {
-  location: string;
+  location: LineJoinLocation;
   className?: string;
   children: React.ReactNode;
   ariaLabel?: string;
+  onClick?: () => void;
 }) {
   return (
     <a
@@ -24,7 +27,10 @@ export function LineJoinLink({
       rel="noopener noreferrer"
       aria-label={ariaLabel}
       className={className}
-      onClick={() => trackLineJoinClick(location)}
+      onClick={() => {
+        trackLineJoinClick(location);
+        onClick?.();
+      }}
     >
       {children}
     </a>

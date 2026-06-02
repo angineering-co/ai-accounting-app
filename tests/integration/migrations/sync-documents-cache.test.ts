@@ -19,7 +19,9 @@ import {
 
 const hasDbEnv = Boolean(
   process.env.NEXT_PUBLIC_SUPABASE_URL &&
-    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    process.env.SUPABASE_SERVICE_ROLE_KEY &&
+    // createInvoice / createAllowance now write through Drizzle, which needs DATABASE_URL.
+    process.env.DATABASE_URL,
 );
 
 describe.skipIf(!hasDbEnv)("documents cache sync — invoices", () => {

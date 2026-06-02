@@ -102,8 +102,8 @@ export async function createInvoice(
   // Validate input
   const validated = createInvoiceSchema.parse(data);
 
-  // Check if period is locked (if year_month and client_id are provided)
-  if (validated.year_month && validated.client_id) {
+  // Check if period is locked (if year_month provided).
+  if (validated.year_month) {
     await ensurePeriodEditable(validated.client_id, validated.year_month);
   }
 
@@ -113,21 +113,18 @@ export async function createInvoice(
   // doc_date / amount / ocr_status here are placeholders: the DB trigger
   // `sync_documents_cache_from_invoices` overwrites them once the child row
   // gets real `extracted_data` (OCR completion or review edit).
-  let documentId: string | null = null;
-  if (validated.client_id) {
-    documentId = await createDocument(
-      {
-        firm_id: validated.firm_id,
-        client_id: validated.client_id,
-        doc_date: todayInTaipeiISO(),
-        type: 'VAT',
-        doc_type: 'invoice',
-        file_url: validated.storage_path,
-        ocr_status: 'pending',
-      },
-      { supabaseClient: supabase, userId },
-    );
-  }
+  const documentId = await createDocument(
+    {
+      firm_id: validated.firm_id,
+      client_id: validated.client_id,
+      doc_date: todayInTaipeiISO(),
+      type: 'VAT',
+      doc_type: 'invoice',
+      file_url: validated.storage_path,
+      ocr_status: 'pending',
+    },
+    { supabaseClient: supabase, userId },
+  );
 
   // Insert invoice record
   const { data: invoice, error } = await supabase
@@ -142,14 +139,12 @@ export async function createInvoice(
     .single();
 
   if (error) {
-    if (documentId) {
-      const { error: cleanupError } = await supabase
-        .from('documents')
-        .delete()
-        .eq('id', documentId);
-      if (cleanupError) {
-        console.error(`Failed to clean up orphan document ${documentId}:`, cleanupError);
-      }
+    const { error: cleanupError } = await supabase
+      .from('documents')
+      .delete()
+      .eq('id', documentId);
+    if (cleanupError) {
+      console.error(`Failed to clean up orphan document ${documentId}:`, cleanupError);
     }
     throw error;
   }

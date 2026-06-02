@@ -153,7 +153,8 @@ export const extractedInvoiceDataSchema = z.object({
 export const invoiceSchema = z.object({
   id: z.string().uuid(),
   firm_id: z.string().uuid(),
-  client_id: z.string().uuid().nullable().optional(),
+  // Phase 6b Work C: DB-enforced NOT NULL. Every invoice belongs to a client.
+  client_id: z.string().uuid(),
   storage_path: z.string().min(1),
   filename: z.string().min(1),
   in_or_out: z.enum(['in', 'out']),
@@ -168,7 +169,7 @@ export const invoiceSchema = z.object({
 
 export const createInvoiceSchema = z.object({
   firm_id: z.string().uuid(),
-  client_id: z.string().uuid().nullable().optional(),
+  client_id: z.string().uuid(),
   storage_path: z.string().min(1),
   filename: z.string().min(1),
   in_or_out: z.enum(['in', 'out']),
@@ -177,7 +178,8 @@ export const createInvoiceSchema = z.object({
 });
 
 export const updateInvoiceSchema = z.object({
-  client_id: z.string().uuid().nullable().optional(),
+  // optional (partial update) but not nullable — can't unset client_id.
+  client_id: z.string().uuid().optional(),
   in_or_out: z.enum(['in', 'out']).optional(),
   year_month: z.string().length(5, "所屬年月格式錯誤 (YYYMM)").optional(),
   tax_filing_period_id: z.string().uuid().nullable().optional(),
@@ -240,7 +242,8 @@ export const extractedAllowanceDataSchema = z.object({
 export const allowanceSchema = z.object({
   id: z.string().uuid(),
   firm_id: z.string().uuid(),
-  client_id: z.string().uuid().nullable().optional(),
+  // Phase 6b Work C: DB-enforced NOT NULL. Every allowance belongs to a client.
+  client_id: z.string().uuid(),
   tax_filing_period_id: z.string().uuid().nullable().optional(),
   allowance_serial_code: z.string().nullable().optional(),
   original_invoice_serial_code: z.string().nullable().optional(),
@@ -256,7 +259,7 @@ export const allowanceSchema = z.object({
 
 export const createAllowanceSchema = z.object({
   firm_id: z.string().uuid(),
-  client_id: z.string().uuid().nullable().optional(),
+  client_id: z.string().uuid(),
   tax_filing_period_id: z.string().uuid().optional(),
   allowance_serial_code: z.string().nullable().optional(),
   original_invoice_serial_code: z.string().nullable().optional(),
@@ -266,7 +269,8 @@ export const createAllowanceSchema = z.object({
 });
 
 export const updateAllowanceSchema = z.object({
-  client_id: z.string().uuid().nullable().optional(),
+  // optional (partial update) but not nullable — can't unset client_id.
+  client_id: z.string().uuid().optional(),
   tax_filing_period_id: z.string().uuid().nullable().optional(),
   original_invoice_serial_code: z.string().nullable().optional(),
   original_invoice_id: z.string().uuid().nullable().optional(),

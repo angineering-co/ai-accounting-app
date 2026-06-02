@@ -50,21 +50,18 @@ export async function createAllowance(
   // doc_date / amount / ocr_status here are placeholders: the DB trigger
   // `sync_documents_cache_from_allowances` overwrites them once the child row
   // gets real `extracted_data` (OCR completion or review edit).
-  let documentId: string | null = null;
-  if (validated.client_id) {
-    documentId = await createDocument(
-      {
-        firm_id: validated.firm_id,
-        client_id: validated.client_id,
-        doc_date: todayInTaipeiISO(),
-        type: 'VAT',
-        doc_type: 'allowance',
-        file_url: validated.storage_path ?? null,
-        ocr_status: 'pending',
-      },
-      { supabaseClient: supabase, userId },
-    );
-  }
+  const documentId = await createDocument(
+    {
+      firm_id: validated.firm_id,
+      client_id: validated.client_id,
+      doc_date: todayInTaipeiISO(),
+      type: 'VAT',
+      doc_type: 'allowance',
+      file_url: validated.storage_path ?? null,
+      ocr_status: 'pending',
+    },
+    { supabaseClient: supabase, userId },
+  );
 
   const { data: allowance, error } = await supabase
     .from('allowances')
@@ -78,14 +75,12 @@ export async function createAllowance(
     .single();
 
   if (error) {
-    if (documentId) {
-      const { error: cleanupError } = await supabase
-        .from('documents')
-        .delete()
-        .eq('id', documentId);
-      if (cleanupError) {
-        console.error(`Failed to clean up orphan document ${documentId}:`, cleanupError);
-      }
+    const { error: cleanupError } = await supabase
+      .from('documents')
+      .delete()
+      .eq('id', documentId);
+    if (cleanupError) {
+      console.error(`Failed to clean up orphan document ${documentId}:`, cleanupError);
     }
     throw error;
   }

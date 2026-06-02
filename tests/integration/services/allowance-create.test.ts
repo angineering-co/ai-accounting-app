@@ -9,7 +9,9 @@ import {
 
 const hasDbEnv = Boolean(
   process.env.NEXT_PUBLIC_SUPABASE_URL &&
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  process.env.SUPABASE_SERVICE_ROLE_KEY &&
+  // createAllowance now writes through Drizzle, which needs DATABASE_URL.
+  process.env.DATABASE_URL,
 );
 
 describe.skipIf(!hasDbEnv)("createAllowance — documents-first", () => {
@@ -66,7 +68,7 @@ describe.skipIf(!hasDbEnv)("createAllowance — documents-first", () => {
     expect(doc.client_id).toBe(fixture.clientId);
   });
 
-  it("cleans up the orphan document when the allowance insert fails", async () => {
+  it("rolls back the document insert when the allowance insert fails", async () => {
     const { count: before } = await supabase
       .from("documents")
       .select("*", { count: "exact", head: true })
@@ -81,7 +83,7 @@ describe.skipIf(!hasDbEnv)("createAllowance — documents-first", () => {
           storage_path: `${fixture.firmId}/11505/${fixture.clientId}/bad.pdf`,
           filename: "bad.pdf",
           // Bogus FK — passes Zod (valid UUID) but fails the allowances insert,
-          // which must trigger best-effort cleanup of the just-created document.
+          // which must roll back the just-inserted document in the same transaction.
           tax_filing_period_id: crypto.randomUUID(),
         },
         { supabaseClient: supabase, userId: fixture.userId },

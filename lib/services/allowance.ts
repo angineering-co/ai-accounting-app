@@ -16,7 +16,9 @@ import { getImportFileMimeType } from "@/lib/utils/mime-type";
 import { enrichExtractedParties } from "@/lib/services/business-lookup";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ensurePeriodEditable } from "@/lib/services/tax-period";
-import { createDocument } from "@/lib/services/document";
+import { db } from "@/lib/db/drizzle";
+import { assertCallerCanAccessClient } from "@/lib/db/rls";
+import { documents as documentsTable, allowances as allowancesTable } from "@/lib/db/schema";
 import { toDocumentsKey } from "@/lib/storage/documents-key";
 import { todayInTaipeiISO } from "@/lib/utils";
 
@@ -44,47 +46,43 @@ export async function createAllowance(
 
   const validated = createAllowanceSchema.parse(data);
 
-  // Documents-first: create the CTI parent row, then the allowance child row.
-  // There is no DB transaction, so a failed allowance insert below triggers a
-  // best-effort cleanup of the orphan document.
+  // Documents-first: insert the CTI parent row and the allowance child row in a
+  // single transaction. If the allowance insert fails, the document insert rolls
+  // back with it — no orphan row, so no cleanup needed.
   // doc_date / amount / ocr_status here are placeholders: the DB trigger
   // `sync_documents_cache_from_allowances` overwrites them once the child row
   // gets real `extracted_data` (OCR completion or review edit).
-  const documentId = await createDocument(
-    {
-      firm_id: validated.firm_id,
-      client_id: validated.client_id,
-      doc_date: todayInTaipeiISO(),
-      type: 'VAT',
-      doc_type: 'allowance',
-      file_url: validated.storage_path ?? null,
-      ocr_status: 'pending',
-    },
-    { supabaseClient: supabase, userId },
-  );
+  return db.transaction(async (tx) => {
+    // Drizzle bypasses RLS, so authorize the caller at the app layer.
+    await assertCallerCanAccessClient(tx, userId, validated.client_id);
 
-  const { data: allowance, error } = await supabase
-    .from('allowances')
-    .insert({
-      ...validated,
-      document_id: documentId,
-      uploaded_by: userId,
-      status: 'uploaded',
-    })
-    .select()
-    .single();
+    const [document] = await tx
+      .insert(documentsTable)
+      .values({
+        firm_id: validated.firm_id,
+        client_id: validated.client_id,
+        doc_date: todayInTaipeiISO(),
+        type: 'VAT',
+        doc_type: 'allowance',
+        file_url: validated.storage_path ?? null,
+        ocr_status: 'pending',
+        created_by: userId,
+        status: 'active',
+      })
+      .returning({ id: documentsTable.id });
 
-  if (error) {
-    const { error: cleanupError } = await supabase
-      .from('documents')
-      .delete()
-      .eq('id', documentId);
-    if (cleanupError) {
-      console.error(`Failed to clean up orphan document ${documentId}:`, cleanupError);
-    }
-    throw error;
-  }
-  return allowance;
+    const [allowance] = await tx
+      .insert(allowancesTable)
+      .values({
+        ...validated,
+        document_id: document.id,
+        uploaded_by: userId,
+        status: 'uploaded',
+      })
+      .returning();
+
+    return allowance;
+  });
 }
 
 /**

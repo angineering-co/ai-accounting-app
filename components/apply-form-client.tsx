@@ -20,7 +20,7 @@ import {
   type ApplyFormData,
   type ApplyFormPath,
 } from "@/lib/actions/apply";
-import { trackApplySubmit } from "@/lib/analytics";
+import { trackApplySubmit, trackLineJoinClick } from "@/lib/analytics";
 import { REGISTRATION_PRICING_NOTE, PRICES, LINE_URL } from "@/lib/pricing";
 import { Turnstile } from "@/components/turnstile";
 
@@ -212,6 +212,7 @@ export function ApplyFormClient() {
             href={LINE_URL}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => trackLineJoinClick("apply_success")}
             className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#06C755] px-8 py-4 text-lg font-bold text-white shadow-lg shadow-green-600/20 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-green-600/30"
           >
             <svg viewBox="0 0 24 24" className="h-6 w-6 fill-white" aria-hidden="true">
@@ -412,6 +413,7 @@ export function ApplyFormClient() {
                 href={LINE_URL}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={() => trackLineJoinClick("apply_faq")}
                 className="inline-flex items-center gap-0.5 underline underline-offset-2 hover:text-slate-700"
               >
                 官方 LINE 帳號

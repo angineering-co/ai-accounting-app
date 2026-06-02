@@ -1,4 +1,4 @@
-import { LINE_URL } from "@/lib/pricing";
+import { LineJoinLink } from "@/components/line-join-link";
 
 interface BlogCtaProps {
   title: string;
@@ -14,14 +14,12 @@ export function BlogCta({ title, children }: BlogCtaProps) {
       </div>
       <p className="mt-4 text-lg leading-relaxed text-emerald-700">
         想聊聊你的記帳需求？直接加我們的{" "}
-        <a
-          href={LINE_URL}
-          target="_blank"
-          rel="noopener noreferrer"
+        <LineJoinLink
+          location="blog_cta"
           className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1 font-semibold text-white hover:bg-emerald-700"
         >
           Line
-        </a>
+        </LineJoinLink>
         ，或{" "}
         <a
           href="/apply"

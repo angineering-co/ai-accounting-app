@@ -9,6 +9,7 @@ import {
   trackCouponCopy,
   trackCouponGeneration,
   trackCouponLineClick,
+  trackLineJoinClick,
 } from "@/lib/analytics";
 import { Button } from "@/components/ui/button";
 import {
@@ -71,6 +72,7 @@ export function CouponDialog({
 
   function handleLineClick() {
     trackCouponLineClick(location, code);
+    trackLineJoinClick("coupon");
   }
 
   return (

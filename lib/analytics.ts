@@ -14,6 +14,16 @@ export function trackCtaClick(location: string) {
   });
 }
 
+// Fired whenever a visitor clicks through to join our LINE OA, from any entry
+// point (floating button, post-apply CTA, blog, coupon dialog). This is the
+// attributable, browser-side signal Google Ads optimizes toward: the click
+// carries the gclid, whereas the downstream LINE follow/first-message does not.
+export function trackLineJoinClick(location: string) {
+  sendGAEvent("event", "line_join_click", {
+    line_location: location,
+  });
+}
+
 export function trackPricingInteraction(action: string, detail?: string) {
   sendGAEvent("event", "pricing_interaction", {
     action,

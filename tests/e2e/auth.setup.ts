@@ -391,9 +391,33 @@ setup("create test data and authenticate", async ({ page }) => {
     },
   ];
 
+  // Phase 6b Work C: every invoice needs a `documents` parent
+  // (invoices.document_id is NOT NULL). Mint one document per invoice with
+  // matching doc_date, then attach the resulting ids to the invoice rows.
+  // Teardown doesn't touch documents explicitly — the firm/client cascade
+  // deletes them when the test run wraps up.
+  const documentIds = invoices.map(() => crypto.randomUUID());
+  const documents = invoices.map((inv, i) => ({
+    id: documentIds[i],
+    firm_id: firm.id,
+    client_id: client.id,
+    doc_date: inv.extracted_data.date.replace(/\//g, "-"),
+    type: "VAT" as const,
+    doc_type: "invoice" as const,
+    status: "active" as const,
+    created_by: userId,
+  }));
+  const { error: docError } = await supabase.from("documents").insert(documents);
+  if (docError) throw docError;
+
+  const invoicesWithDocs = invoices.map((inv, i) => ({
+    ...inv,
+    document_id: documentIds[i],
+  }));
+
   const { data: insertedInvoices, error: invoiceError } = await supabase
     .from("invoices")
-    .insert(invoices)
+    .insert(invoicesWithDocs)
     .select("id, invoice_serial_code");
   if (invoiceError) throw invoiceError;
 

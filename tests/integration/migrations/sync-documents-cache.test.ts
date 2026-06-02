@@ -174,34 +174,6 @@ describe.skipIf(!hasDbEnv)("documents cache sync — invoices", () => {
     expect((await readDoc(invoice.document_id!)).amount).toBeNull();
   });
 
-  it("invoice with document_id NULL — trigger is a no-op", async () => {
-    // Simulates a Phase 6b-era bulk-import row that hasn't been linked yet.
-    const { data: inv, error } = await supabase
-      .from("invoices")
-      .insert({
-        firm_id: fixture.firmId,
-        client_id: fixture.clientId,
-        storage_path: `${fixture.firmId}/orphan/${crypto.randomUUID()}.pdf`,
-        filename: "orphan.pdf",
-        in_or_out: "in",
-        uploaded_by: fixture.userId,
-        document_id: null,
-        status: "uploaded",
-      })
-      .select("id")
-      .single();
-    if (error || !inv) throw error ?? new Error("insert failed");
-
-    const { error: updErr } = await supabase
-      .from("invoices")
-      .update({
-        extracted_data: { date: "2026/05/20", totalAmount: 5000 },
-        status: "processed",
-      })
-      .eq("id", inv.id);
-    expect(updErr).toBeNull();
-  });
-
   it("INSERT path syncs documents on the same statement", async () => {
     // Mirrors a future Phase 6b documents-first bulk import: documents row
     // exists, then INSERT invoices with extracted_data already populated.

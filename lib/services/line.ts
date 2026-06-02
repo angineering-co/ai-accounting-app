@@ -18,9 +18,19 @@ type LineEvent = {
   timestamp: number;
 };
 
+type QuickReplyItem = {
+  type: "action";
+  action: { type: "message"; label: string; text: string };
+};
+
+type QuickReply = {
+  items: QuickReplyItem[];
+};
+
 type LineTextMessage = {
   type: "text";
   text: string;
+  quickReply?: QuickReply;
 };
 
 type LineFlexMessage = {
@@ -43,6 +53,32 @@ const LEAD_CODE_RE = /^SB-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}$/;
 const BINDING_CODE_RE = /^LB-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}$/;
 const UNBIND_COMMAND = "解除綁定";
 const BINDING_EXPIRY_HOURS = 48;
+
+// Welcome-message quick replies. Tapping one posts the label as the user's own
+// message, which both starts the conversation (so we may message them back) and
+// tells us what they need, replacing the old "paste your code" instruction.
+// The text values are intended to double as recognized intents in
+// handleTextMessage (wired up separately).
+const INTENT_REGISTRATION = "我要公司設立";
+const INTENT_BOOKKEEPING = "我要記帳服務";
+const INTENT_CONSULT = "我想先諮詢";
+
+const WELCOME_QUICK_REPLY: QuickReply = {
+  items: [
+    {
+      type: "action",
+      action: { type: "message", label: INTENT_REGISTRATION, text: INTENT_REGISTRATION },
+    },
+    {
+      type: "action",
+      action: { type: "message", label: INTENT_BOOKKEEPING, text: INTENT_BOOKKEEPING },
+    },
+    {
+      type: "action",
+      action: { type: "message", label: INTENT_CONSULT, text: INTENT_CONSULT },
+    },
+  ],
+};
 
 // ---------------------------------------------------------------------------
 // Signature verification
@@ -348,7 +384,8 @@ async function handleFollow(
     await replyToLine(replyToken, [
       {
         type: "text",
-        text: "歡迎加入 SnapBooks 記帳事務所！\n\n如果您有諮詢編號（SB-XXXX-XXXX），請直接傳送給我們。",
+        text: "歡迎加入 SnapBooks 記帳事務所！\n\n請問需要哪一項服務呢？點選下方按鈕，專員會盡快與您聯繫。\n\n若您已有諮詢編號（SB-XXXX-XXXX），也可以直接傳送給我們。",
+        quickReply: WELCOME_QUICK_REPLY,
       },
     ]);
   }

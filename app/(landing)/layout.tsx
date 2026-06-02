@@ -117,7 +117,7 @@ export default function LandingLayout({
       {/* Floating Line "Add Friend" button */}
       <LineJoinLink
         location="floating"
-        ariaLabel="加入 Line 好友"
+        aria-label="加入 Line 好友"
         className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#06C755] shadow-lg shadow-black/15 transition-transform hover:scale-110"
       >
         <svg viewBox="0 0 24 24" className="h-8 w-8 fill-white" aria-hidden="true">

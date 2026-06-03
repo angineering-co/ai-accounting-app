@@ -3,7 +3,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { CtaLink } from "@/components/cta-link";
-import { CouponDialog } from "@/components/coupon-dialog";
+// 暫時下架：設立登記折扣優惠（恢復時取消此 import 註解）
+// import { CouponDialog } from "@/components/coupon-dialog";
 import { PRICES } from "@/lib/pricing";
 import {
   Accordion,
@@ -23,7 +24,6 @@ import {
   Eye,
   Calculator,
   GitBranch,
-  TicketPercent,
 } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -246,6 +246,7 @@ export default function Home() {
                   <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
                 </CtaLink>
               </Button>
+              {/* 暫時下架：設立登記 NT$1,000 折扣（恢復時取消此註解與上方 import）
               <CouponDialog
                 location="hero_promo"
                 trigger={
@@ -255,6 +256,7 @@ export default function Home() {
                   </button>
                 }
               />
+              */}
             </div>
           </div>
         </section>

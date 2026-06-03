@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, TicketPercent } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { CouponDialog } from "@/components/coupon-dialog";
+// 暫時下架：設立登記折扣優惠（恢復時取消此 import 註解）
+// import { CouponDialog } from "@/components/coupon-dialog";
 import { CtaLink } from "@/components/cta-link";
 import { PricingSection } from "@/components/pricing-comparison-table";
 import { REGISTRATION_PRICING_NOTE } from "@/lib/pricing";
@@ -87,6 +88,7 @@ export default function PricingPage() {
               <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
             </CtaLink>
           </Button>
+          {/* 暫時下架：設立登記 NT$1,000 折扣（恢復時取消此註解與上方 import）
           <CouponDialog
             location="pricing_cta"
             trigger={
@@ -96,6 +98,7 @@ export default function PricingPage() {
               </button>
             }
           />
+          */}
         </div>
       </section>
     </main>

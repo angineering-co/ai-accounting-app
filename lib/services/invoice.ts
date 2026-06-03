@@ -25,6 +25,7 @@ import { documents as documentsTable, invoices as invoicesTable } from "@/lib/db
 import { todayInTaipeiISO } from "@/lib/utils";
 import { getImportFileMimeType } from "@/lib/utils/mime-type";
 import { enrichExtractedParties } from "@/lib/services/business-lookup";
+import { confirmInvoiceEntry } from "@/lib/services/journal-entry";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 // `documents.{amount, doc_date, ocr_status}` are kept in sync via the DB trigger
@@ -241,6 +242,19 @@ export async function updateInvoice(invoiceId: string, data: UpdateInvoiceInput)
       }
     }
     throw error;
+  }
+
+  // Phase 7: confirming an invoice generates its draft journal entry. Idempotent
+  // (re-confirm / edit-while-confirmed replaces the draft's lines); a no-op for
+  // 作廢 / 彙加 / 銷項 零稅率·免稅 and for non-confirmed saves.
+  if (invoice?.status === "confirmed") {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await confirmInvoiceEntry(invoiceId, {
+        supabaseClient: supabase,
+        userId: user.id,
+      });
+    }
   }
 
   return { success: true as const, invoice };

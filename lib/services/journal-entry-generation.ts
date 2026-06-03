@@ -7,6 +7,7 @@ import type { Allowance, Invoice } from "@/lib/domain/models";
 export const ACCT_INPUT_TAX = "1144"; // 進項稅額
 export const ACCT_OUTPUT_TAX = "2134"; // 銷項稅額
 export const ACCT_REVENUE = "4101"; // 營業收入
+export const ACCT_OTHER_INCOME = "7044"; // 其他收入
 export const ACCT_CASH = "1111"; // 現金
 export const ACCT_BANK = "1112"; // 銀行存款
 
@@ -286,6 +287,71 @@ function extractOutputInvoiceRoles(originalEntry: ComputedEntry): OutputInvoiceR
     revenueAccount: revenueLine.account_code,
     settlementAccount: drLines[0].account_code,
   };
+}
+
+// Fallback for an allowance with **no original_invoice_id to mirror**. Per the
+// Phase 7 write-path decision, we do NOT prompt staff for accounts; we apply a
+// fixed default rule instead:
+//   進項折讓 → Cr 7044 其他收入   銷項折讓 → Dr 4101 營業收入
+// The tax line appears only when taxAmount > 0; the balancing settlement leg
+// follows the §5.1 threshold (≤ 10,000 現金 / 否則 銀行存款), matching the invoice
+// templates. This is reached only when original_invoice_id IS NULL — a
+// set-but-unresolvable link fails loud in the caller (confirmAllowanceEntry).
+export function computeDefaultEntryFromAllowance(allowance: Allowance): ComputedEntry {
+  const data = allowance.extracted_data ?? {};
+  const amount = data.amount ?? 0;
+  const taxAmount = data.taxAmount ?? 0;
+  const total = amount + taxAmount;
+  const settlement = pickSettlementAccount(total);
+  const entry_date = resolveEntryDate(data.date, allowance.created_at);
+
+  if (allowance.in_or_out === "in") {
+    // 進項折讓: Dr 結算 / Cr 7044 其他收入 / Cr 1144 進項稅額 (tax line only if > 0)
+    const lines: ComputedEntryLine[] = [
+      { account_code: settlement, debit: total, credit: 0, description: null },
+      { account_code: ACCT_OTHER_INCOME, debit: 0, credit: amount, description: null },
+    ];
+    if (taxAmount > 0) {
+      lines.push({ account_code: ACCT_INPUT_TAX, debit: 0, credit: taxAmount, description: null });
+    }
+    return {
+      voucher_type: "收入",
+      entry_date,
+      description: buildAllowanceDescription(allowance, "進項折讓"),
+      lines,
+    };
+  }
+
+  // 銷項折讓: Dr 4101 營業收入 / Dr 2134 銷項稅額 (tax line only if > 0) / Cr 結算
+  const lines: ComputedEntryLine[] = [
+    { account_code: ACCT_REVENUE, debit: amount, credit: 0, description: null },
+  ];
+  if (taxAmount > 0) {
+    lines.push({ account_code: ACCT_OUTPUT_TAX, debit: taxAmount, credit: 0, description: null });
+  }
+  lines.push({ account_code: settlement, debit: 0, credit: total, description: null });
+  return {
+    voucher_type: "支出",
+    entry_date,
+    description: buildAllowanceDescription(allowance, "銷項折讓"),
+    lines,
+  };
+}
+
+// Whether confirming this invoice should generate a journal entry. 作廢 (voided)
+// and 彙加 (TET_U synthetic row), plus 銷項 零稅率/免稅, are valid filing states
+// that produce NO entry — the confirm path must skip them rather than error.
+// KEEP IN SYNC with the throw guards at the top of computeEntryFromInvoice.
+export function invoiceProducesEntry(invoice: Invoice): boolean {
+  const data = invoice.extracted_data ?? {};
+  if (data.taxType === "作廢" || data.taxType === "彙加") return false;
+  if (
+    invoice.in_or_out === "out" &&
+    (data.taxType === "零稅率" || data.taxType === "免稅")
+  ) {
+    return false;
+  }
+  return true;
 }
 
 function buildAllowanceDescription(

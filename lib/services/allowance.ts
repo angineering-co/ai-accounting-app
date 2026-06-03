@@ -11,6 +11,7 @@ import {
 } from "@/lib/domain/models";
 import { type Json, type TablesUpdate, type Database } from "@/supabase/database.types";
 import { tryLinkOriginalInvoice } from "@/lib/services/invoice-import";
+import { confirmAllowanceEntry } from "@/lib/services/journal-entry";
 import { extractAllowanceData, type ClientInfo } from "@/lib/services/gemini";
 import { getImportFileMimeType } from "@/lib/utils/mime-type";
 import { enrichExtractedParties } from "@/lib/services/business-lookup";
@@ -145,6 +146,20 @@ export async function updateAllowance(allowanceId: string, data: UpdateAllowance
       newSerialCode,
       supabase
     );
+  }
+
+  // Phase 7: confirming an allowance generates its draft journal entry. Runs
+  // after the re-link so confirmAllowanceEntry sees a fresh original_invoice_id.
+  // Idempotent; mirrors the original invoice's entry, or applies the default
+  // rule when original_invoice_id is NULL.
+  if (allowance?.status === "confirmed") {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await confirmAllowanceEntry(allowanceId, {
+        supabaseClient: supabase,
+        userId: user.id,
+      });
+    }
   }
 
   return allowance;

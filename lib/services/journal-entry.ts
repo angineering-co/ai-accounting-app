@@ -8,14 +8,15 @@ import {
   invoices as invoicesTable,
   allowances as allowancesTable,
 } from "@/lib/db/schema";
-import { extractAccountCode } from "@/lib/data/accounts";
 import type { VoucherType } from "@/lib/domain/journal-entry";
 import type { Allowance, Invoice } from "@/lib/domain/models";
 import {
   computeEntryFromInvoice,
   computeEntryFromAllowance,
+  pickSettlementAccount,
   ACCT_INPUT_TAX,
   ACCT_OUTPUT_TAX,
+  ACCT_REVENUE,
   type ComputedEntry,
 } from "@/lib/services/journal-entry-generation";
 
@@ -33,20 +34,13 @@ import {
 
 export type SyncEntryResult = { status: "ok" | "skipped" };
 
-export type SyncAllowanceEntryResult =
-  | { status: "ok" | "skipped" }
-  | { status: "needs_manual_account"; direction: "in" | "out" };
-
-/**
- * Accounts a staff member picks in the review dialog when an allowance can't be
- * mirrored automatically (no original invoice entry). `account` is the expense
- * (進項折讓) or revenue (銷項折讓) account; `settlementAccount` is the cash/bank
- * channel. Both are the full "code label" strings from `ACCOUNT_LIST`.
- */
-export type ManualOriginalAccount = {
-  account: string;
-  settlementAccount: string;
-};
+// Fallback accounts when an allowance has no resolvable original invoice entry
+// (§5.2.2). Per accountant guidance the draft is generated with a default account
+// rather than prompting staff: 進項折讓 books the credit to 7044 其他收入, 銷項折讓
+// books the debit to 4101 營業收入. The settlement channel follows the §5.1
+// threshold on the allowance total. Staff can adjust the draft before posting.
+const FALLBACK_INPUT_ACCOUNT = "7044"; // 其他收入
+const FALLBACK_OUTPUT_ACCOUNT = ACCT_REVENUE; // 4101 營業收入
 
 // 作廢 / 彙加 never post entries; 銷項 零稅率 / 免稅 are unsupported in v1 (the
 // pure function throws on all of these). Pre-filter so a legitimately-skipped
@@ -124,45 +118,46 @@ function reconstructComputedEntry(entry: EntryRow, lines: LineRow[]): ComputedEn
   };
 }
 
-// When no original entry exists, synthesize a minimal one carrying just the
-// staff-chosen account codes in the right roles. The mirror reads only account
+// When no original entry exists (§5.2.2), synthesize a minimal one carrying the
+// default fallback account in the right role so the mirror
+// (`computeEntryFromAllowance`) can reverse it. The mirror reads only account
 // codes + line structure (Dr/Cr counts), so amounts/date/voucher_type here are
-// placeholders. A separate tax line is included only when the allowance itself
-// carries tax (i.e. the original was deductible).
-function synthesizeOriginalEntry(
-  allowance: Allowance,
-  manual: ManualOriginalAccount,
-): ComputedEntry {
-  const accountCode = extractAccountCode(manual.account);
-  const settlementCode = extractAccountCode(manual.settlementAccount);
-  const taxAmount = allowance.extracted_data?.taxAmount ?? 0;
+// placeholders; the settlement channel follows the §5.1 threshold on the
+// allowance total. A separate tax line is included only when the allowance
+// carries tax (a deductible original would have had one).
+function synthesizeOriginalEntry(allowance: Allowance): ComputedEntry {
+  const data = allowance.extracted_data ?? {};
+  const taxAmount = data.taxAmount ?? 0;
+  const settlementCode = pickSettlementAccount((data.amount ?? 0) + taxAmount);
 
   if (allowance.in_or_out === "in") {
     const lines =
       taxAmount > 0
         ? [
-            { account_code: accountCode, debit: 1, credit: 0, description: null },
+            { account_code: FALLBACK_INPUT_ACCOUNT, debit: 1, credit: 0, description: null },
             { account_code: ACCT_INPUT_TAX, debit: 1, credit: 0, description: null },
             { account_code: settlementCode, debit: 0, credit: 1, description: null },
           ]
         : [
-            { account_code: accountCode, debit: 1, credit: 0, description: null },
+            { account_code: FALLBACK_INPUT_ACCOUNT, debit: 1, credit: 0, description: null },
             { account_code: settlementCode, debit: 0, credit: 1, description: null },
           ];
     return { voucher_type: "支出", entry_date: "1970-01-01", description: null, lines };
   }
 
   // 銷項: extractOutputInvoiceRoles wants exactly 1 Dr (settlement) line.
-  return {
-    voucher_type: "收入",
-    entry_date: "1970-01-01",
-    description: null,
-    lines: [
-      { account_code: settlementCode, debit: 1, credit: 0, description: null },
-      { account_code: accountCode, debit: 0, credit: 1, description: null },
-      { account_code: ACCT_OUTPUT_TAX, debit: 0, credit: 1, description: null },
-    ],
-  };
+  const lines =
+    taxAmount > 0
+      ? [
+          { account_code: settlementCode, debit: 1, credit: 0, description: null },
+          { account_code: FALLBACK_OUTPUT_ACCOUNT, debit: 0, credit: 1, description: null },
+          { account_code: ACCT_OUTPUT_TAX, debit: 0, credit: 1, description: null },
+        ]
+      : [
+          { account_code: settlementCode, debit: 1, credit: 0, description: null },
+          { account_code: FALLBACK_OUTPUT_ACCOUNT, debit: 0, credit: 1, description: null },
+        ];
+  return { voucher_type: "收入", entry_date: "1970-01-01", description: null, lines };
 }
 
 // Create-or-replace a draft entry keyed on document_id (UNIQUE). Idempotent:
@@ -293,16 +288,16 @@ export async function writeInvoiceEntryInTx(
 /**
  * Generate (or regenerate) the draft entry for a confirmed allowance row by
  * mirroring the original invoice's entry (Decision #13), inside the caller's
- * transaction. Returns `needs_manual_account` when the original entry can't be
- * resolved and no `manual` accounts were supplied; with `manual` it synthesizes
- * a minimal original. Throws if the existing entry is already posted.
+ * transaction. When the original entry can't be resolved (no link, or the
+ * original has no entry yet), it falls back to a synthesized original carrying
+ * the default fallback account (§5.2.2) so confirm always produces a draft.
+ * Throws if the existing entry is already posted.
  */
 export async function writeAllowanceEntryInTx(
   tx: Tx,
   row: AllowanceRow,
   userId: string,
-  manual?: ManualOriginalAccount,
-): Promise<SyncAllowanceEntryResult> {
+): Promise<SyncEntryResult> {
   if (!row.client_id) {
     throw new Error(`writeAllowanceEntryInTx: allowance ${row.id} has no client_id`);
   }
@@ -340,10 +335,7 @@ export async function writeAllowanceEntryInTx(
   }
 
   if (!originalComputed) {
-    if (!manual) {
-      return { status: "needs_manual_account", direction: allowance.in_or_out };
-    }
-    originalComputed = synthesizeOriginalEntry(allowance, manual);
+    originalComputed = synthesizeOriginalEntry(allowance);
   }
 
   const computed = computeEntryFromAllowance(allowance, originalComputed);
@@ -389,8 +381,7 @@ export async function syncInvoiceJournalEntry(
 export async function syncAllowanceJournalEntry(
   allowanceId: string,
   userId: string,
-  manual?: ManualOriginalAccount,
-): Promise<SyncAllowanceEntryResult> {
+): Promise<SyncEntryResult> {
   return db.transaction(async (tx) => {
     const [row] = await tx
       .select()
@@ -403,6 +394,6 @@ export async function syncAllowanceJournalEntry(
       throw new Error(`syncAllowanceJournalEntry: allowance ${allowanceId} has no client_id`);
     }
     await assertCallerCanAccessClient(tx, userId, row.client_id);
-    return writeAllowanceEntryInTx(tx, row, userId, manual);
+    return writeAllowanceEntryInTx(tx, row, userId);
   });
 }

@@ -353,30 +353,72 @@ describe.skipIf(!hasDbEnv)("journal-entry write-path (Phase 7)", () => {
     });
   });
 
-  describe("manual-account fallback", () => {
-    it("signals needs_manual_account when no original entry, then succeeds with manual accounts", async () => {
+  describe("default-account fallback (no original entry)", () => {
+    it("進項折讓 with tax → 3-line draft (7044 其他收入 + 1144 + derived settlement)", async () => {
       const { allowanceId, documentId } = await seedAllowance({
         in_or_out: "in",
         original_invoice_id: null,
         extracted_data: { amount: 1000, taxAmount: 50 },
       });
 
-      const first = await syncAllowanceJournalEntry(allowanceId, fixture.userId);
-      expect(first).toEqual({ status: "needs_manual_account", direction: "in" });
-      expect(await getEntry(documentId)).toBeNull();
-
-      const second = await syncAllowanceJournalEntry(allowanceId, fixture.userId, {
-        account: "6113 旅費",
-        settlementAccount: "1112 銀行存款",
-      });
-      expect(second.status).toBe("ok");
+      const result = await syncAllowanceJournalEntry(allowanceId, fixture.userId);
+      expect(result.status).toBe("ok");
 
       const got = await getEntry(documentId);
-      // taxAmount > 0 → synthesized original has a separate tax line → 3-line mirror
+      // total 1050 <= 10,000 → settlement 1111; taxAmount > 0 → separate 1144 line
       expect(lineTuples(got!.lines)).toEqual([
-        ["1112", 1050, 0],
-        ["6113", 0, 1000],
+        ["1111", 1050, 0],
+        ["7044", 0, 1000],
         ["1144", 0, 50],
+      ]);
+    });
+
+    it("進項折讓 with no tax → 2-line draft (no 進項稅額 line)", async () => {
+      const { allowanceId, documentId } = await seedAllowance({
+        in_or_out: "in",
+        original_invoice_id: null,
+        extracted_data: { amount: 1000, taxAmount: 0 },
+      });
+
+      await syncAllowanceJournalEntry(allowanceId, fixture.userId);
+      const got = await getEntry(documentId);
+      expect(lineTuples(got!.lines)).toEqual([
+        ["1111", 1000, 0],
+        ["7044", 0, 1000],
+      ]);
+    });
+
+    it("銷項折讓 with tax → 3-line draft (4101 營業收入 + 2134 + derived settlement)", async () => {
+      const { allowanceId, documentId } = await seedAllowance({
+        in_or_out: "out",
+        original_invoice_id: null,
+        extracted_data: { amount: 1000, taxAmount: 50 },
+      });
+
+      await syncAllowanceJournalEntry(allowanceId, fixture.userId);
+      const got = await getEntry(documentId);
+      expect(lineTuples(got!.lines)).toEqual([
+        ["4101", 1000, 0],
+        ["2134", 50, 0],
+        ["1111", 0, 1050],
+      ]);
+    });
+
+    it("銷項折讓 with no tax → 2-line draft (debit_credit_xor-safe, no 銷項稅額 line)", async () => {
+      // Regression: a zero-tax output allowance must NOT emit a 0/0 2134 line,
+      // which would violate the debit_credit_xor CHECK and abort the confirm.
+      const { allowanceId, documentId } = await seedAllowance({
+        in_or_out: "out",
+        original_invoice_id: null,
+        extracted_data: { amount: 1000, taxAmount: 0 },
+      });
+
+      const result = await syncAllowanceJournalEntry(allowanceId, fixture.userId);
+      expect(result.status).toBe("ok");
+      const got = await getEntry(documentId);
+      expect(lineTuples(got!.lines)).toEqual([
+        ["4101", 1000, 0],
+        ["1111", 0, 1000],
       ]);
     });
   });
@@ -609,7 +651,7 @@ describe.skipIf(!hasDbEnv)("journal-entry write-path (Phase 7)", () => {
       expect(bRow!.invoice_serial_code).toBe(b.serial);
     });
 
-    it("updateAllowance reverts to 'processed' when manual accounts are needed, then confirms with them", async () => {
+    it("updateAllowance confirm with no original entry writes a default-account draft in one transaction", async () => {
       const { allowanceId, documentId } = await seedAllowance({
         in_or_out: "in",
         status: "processed",
@@ -617,29 +659,18 @@ describe.skipIf(!hasDbEnv)("journal-entry write-path (Phase 7)", () => {
         extracted_data: { amount: 1000, taxAmount: 50 },
       });
 
-      const r1 = await updateAllowance(
+      const updated = await updateAllowance(
         allowanceId,
         { status: "confirmed" },
-        undefined,
         { userId: fixture.userId },
       );
-      expect(r1.needsManualAccount).toEqual({ direction: "in" });
-      // Invariant: never a confirmed allowance without an entry.
-      expect(await allowanceStatus(allowanceId)).toBe("processed");
-      expect(await getEntry(documentId)).toBeNull();
-
-      const r2 = await updateAllowance(
-        allowanceId,
-        { status: "confirmed" },
-        { account: "6113 旅費", settlementAccount: "1112 銀行存款" },
-        { userId: fixture.userId },
-      );
-      expect(r2.needsManualAccount).toBeUndefined();
+      expect(updated.status).toBe("confirmed");
       expect(await allowanceStatus(allowanceId)).toBe("confirmed");
       const got = await getEntry(documentId);
+      // total 1050 <= 10,000 → settlement 1111; default 進項折讓 account 7044
       expect(lineTuples(got!.lines)).toEqual([
-        ["1112", 1050, 0],
-        ["6113", 0, 1000],
+        ["1111", 1050, 0],
+        ["7044", 0, 1000],
         ["1144", 0, 50],
       ]);
     });

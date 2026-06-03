@@ -13,7 +13,7 @@
 > - ✅ Phase 6b 完成（電子發票匯入改 documents-first 交易式 `commitInvoiceRowsAtomically`/`commitAllowanceRowsAtomically`，PR #204；document_id 收緊為 NOT NULL UNIQUE，PR #206；createInvoice/createAllowance 亦改 `db.transaction()`，PR #207）
 > - 🔧 Phase 7 進行中（confirm/regenerate 寫入路徑：本階段只做 write-path）
 >
-> **注意：Phase 5 schema/migrations 已落地（documents / journal_entries / … 皆存在），但 Phase 5 的「讀取 service + UI 從 demo store 切到真實 DB」尚未實作（`lib/services/journal-entry.ts` 讀取 helper、`useVoucherStore` 不存在，傳票 / 報表頁仍讀 `useVoucherDemoStore`）。因此 Phase 7 限縮為 write-path：confirm/regenerate 交易 + service wiring + 折讓手動指定科目 UI，以整合測試與 DB 檢視驗證；UI 切換另開後續 PR。**
+> **注意：Phase 5 schema/migrations 已落地（documents / journal_entries / … 皆存在），但 Phase 5 的「讀取 service + UI 從 demo store 切到真實 DB」尚未實作（`lib/services/journal-entry.ts` 讀取 helper、`useVoucherStore` 不存在，傳票 / 報表頁仍讀 `useVoucherDemoStore`）。因此 Phase 7 限縮為 write-path：confirm/regenerate 交易 + service wiring + 折讓預設科目 fallback，以整合測試與 DB 檢視驗證；UI 切換另開後續 PR。**
 >
 > **配套文件**：[`VOUCHER_JOURNAL_ENTRY_PLAN.md`](./VOUCHER_JOURNAL_ENTRY_PLAN.md) — 已收斂的設計提案（Decisions #1–#12）。本文件中所有 §x.y 章節編號皆指向設計提案。
 
@@ -384,9 +384,9 @@
 
 > **與原計畫的差異**：Phase 5.5 起 documents 已在上傳當下建立、Phase 6 之後既有資料也都有對應 documents row,所以 confirm RPC **不再需要 `upsert documents`**,只負責「取 invoice/allowance → 建立 entry → replace lines」。RPC 邏輯更簡單、語意更清楚。
 
-> **實作紀錄（write-path only，已完成）**：依 Phase 6.5 方向,confirm/regenerate 以 **Drizzle `db.transaction()`**（非 PL/pgSQL RPC）實作。`updateInvoice` / `updateAllowance` **整段改走 Drizzle**,讓 status 翻 confirmed 與分錄產生在**同一交易**:confirmed-and-eligible 的 invoice/allowance 不可能少了分錄,任一步失敗整筆 rollback(整合測試以「進項缺 account → 分錄計算 throw → status 不翻、無分錄」驗證原子性)。`updateInvoice` 一併保留 serial-conflict 友善回傳(改以攔截 Drizzle 拋出的 23505 對應)。折讓**無法解析原分錄**時不留 confirmed-without-entry,而是把 status **退回 `processed`** 並回傳 `needsManualAccount`,由 review dialog 收科目後重送(`confirmed` 永遠 ⇒ 有分錄;invoice 的 ineligible 作廢/彙加 skip 屬合理無分錄,語意不同故不退回)。`updateInvoice` / `updateAllowance` 新增 optional `options.userId`(沿用 createInvoice 注入式 pattern,供整合測試直接驅動真實路徑)。
+> **實作紀錄（write-path only，已完成）**：依 Phase 6.5 方向,confirm/regenerate 以 **Drizzle `db.transaction()`**（非 PL/pgSQL RPC）實作。`updateInvoice` / `updateAllowance` **整段改走 Drizzle**,讓 status 翻 confirmed 與分錄產生在**同一交易**:confirmed-and-eligible 的 invoice/allowance 不可能少了分錄,任一步失敗整筆 rollback(整合測試以「進項缺 account → 分錄計算 throw → status 不翻、無分錄」驗證原子性)。`updateInvoice` 一併保留 serial-conflict 友善回傳(改以攔截 Drizzle 拋出的 23505 對應)。折讓**無法解析原分錄**時不阻擋 confirm,而是以**預設科目**合成 minimal original 後鏡像產生草稿(§5.2.2):進項折讓記入 `7044 其他收入`、銷項折讓記入 `4101 營業收入`,結算科目依 §5.1 門檻由折讓金額推導,稅額為 0 時不產生稅額行(避免 `debit_credit_xor` 違反)。員工可於記帳前調整草稿,故不需於 confirm 當下要求選科目(`confirmed` 永遠 ⇒ 有分錄;此預設科目方案經會計師確認)。同理鏡像純函式 `computeEntryFromAllowance` 之銷項/進項分支也改為「稅額 > 0 才產生稅額行」,修掉 taxAmount=0 會撞 `debit_credit_xor` 的 confirm crash。`updateInvoice` / `updateAllowance` 新增 optional `options.userId`(沿用 createInvoice 注入式 pattern,供整合測試直接驅動真實路徑)。
 >
-> **檔案**：`lib/services/journal-entry.ts`(`writeInvoiceEntryInTx` / `writeAllowanceEntryInTx` tx-scoped core + `syncInvoiceJournalEntry` / `syncAllowanceJournalEntry` standalone wrapper)、`lib/services/invoice.ts`(updateInvoice 改 Drizzle 原子 confirm)、`lib/services/allowance.ts`(updateAllowance 同款 + 內嵌 re-link)、`components/allowance-review-dialog.tsx`(手動指定科目 fallback UI)、`tests/integration/services/journal-entry.test.ts`(18 測試:樣板矩陣 + 鏡像 + 手動 fallback + 原子性 + serial-conflict + 授權 rollback)。**app-level / Drizzle / Supabase 三層 model 暫共存於 service,薄持久化/轉換層延後到 Phase 8**(post/edit/reverse 進場、第二三個 caller 出現時再抽)。
+> **檔案**：`lib/services/journal-entry.ts`(`writeInvoiceEntryInTx` / `writeAllowanceEntryInTx` tx-scoped core + `syncInvoiceJournalEntry` / `syncAllowanceJournalEntry` standalone wrapper)、`lib/services/invoice.ts`(updateInvoice 改 Drizzle 原子 confirm)、`lib/services/allowance.ts`(updateAllowance 同款 + 內嵌 re-link)、`components/allowance-review-dialog.tsx`(未連結原發票時顯示提示:confirm 後以預設科目產生草稿、可於記帳時調整;不再有手動指定科目流程)、`lib/services/journal-entry-generation.ts`(銷項/進項鏡像分支稅額行改為條件式)、`tests/integration/services/journal-entry.test.ts`(樣板矩陣 + 鏡像 + 預設科目 fallback + 原子性 + serial-conflict + 授權 rollback)。**app-level / Drizzle / Supabase 三層 model 暫共存於 service,薄持久化/轉換層延後到 Phase 8**(post/edit/reverse 進場、第二三個 caller 出現時再抽)。
 
 **改動**：
 - Migration `<ts>_create_confirm_invoice_rpc.sql`：PL/pgSQL — 取 invoice → upsert journal_entry（status=draft、voucher_no=NULL、`document_id = invoice.document_id`）→ replace lines。Idempotent。若 `invoice.document_id` 為 NULL（理論上不會發生,Phase 6 之後有 `NOT NULL` 約束保護）→ RAISE EXCEPTION fail loud。
@@ -401,13 +401,13 @@
   1. 嘗試解析 `original_invoice_id` → original entry
   2. 找到 → 直接呼叫 RPC（RPC 內部自行 lookup 並組鏡像）
   3. 找不到 → 觸發 UI「請指定費用 / 收入科目」對話框,員工指定後合成 minimal originalEntry 傳給 service 再夾帶進 RPC
-- `components/allowance-review-dialog.tsx`：當 `original_invoice_id` 解析失敗時,顯示「請手動指定科目」區塊（費用/收入科目 dropdown + 結算科目 dropdown）;此區塊僅在 `original_invoice_id` 對應 entry 不存在時出現,正常 path 不增 friction
+- `components/allowance-review-dialog.tsx`：當 `original_invoice_id` 解析失敗時顯示提示（confirm 後以預設科目 7044/4101 產生草稿、可於記帳時調整）;不要求員工手動指定科目,正常 path 不增 friction
 
 **驗證**：
 - Integration tests `tests/integration/services/journal-entry-generation.test.ts`：
   - 確認新 invoice → draft entry + lines 正確（3 種樣板：進項可扣抵 / 不可扣抵 / 銷項）
   - **確認新 allowance → draft entry 鏡像原 entry 正確**（4 cases：原可扣抵 → 折讓 3 行 / 原不可扣抵 → 折讓 2 行 / 銷項折讓 3 行 / 原 entry 之科目曾被 staff 編輯 → 折讓追隨該編輯）
-  - **`original_invoice_id` 找不到對應 entry → service 引導 UI 補科目;補完後 confirm 走 minimal originalEntry 路徑成功**
+  - **`original_invoice_id` 找不到對應 entry → confirm 以預設科目（進項 7044 / 銷項 4101）合成 minimal originalEntry 直接產生草稿;含 taxAmount=0 不產生稅額行之 case**
   - 編輯已 confirmed invoice（draft 已存在）→ entry.id 保留、lines 整批替換
   - 編輯已 confirmed allowance（draft 已存在）→ 同上,且**會 re-lookup 原 entry**（測試：原 entry 在折讓 confirm 後被 staff 改科目 → regenerate 折讓 → 折讓追隨新科目）
   - 編輯已 confirmed invoice / allowance 但 entry 已 posted → regenerate 拒絕

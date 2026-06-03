@@ -193,16 +193,21 @@ export function computeEntryFromAllowance(
   if (allowance.in_or_out === "in") {
     const roles = extractInputInvoiceRoles(originalEntry);
     if (roles.hasSeparateTaxLine) {
-      // Mirror deductible input: Dr 結算 / Cr 費用 / Cr 進項稅額
+      // Mirror deductible input: Dr 結算 / Cr 費用 (+ Cr 進項稅額 when the allowance
+      // itself carries tax). A zero-tax allowance drops the 進項稅額 line — a 0/0
+      // line would violate the debit_credit_xor CHECK.
+      const lines: ComputedEntryLine[] = [
+        { account_code: roles.settlementAccount, debit: total, credit: 0, description: null },
+        { account_code: roles.expenseAccount, debit: 0, credit: amount, description: null },
+      ];
+      if (taxAmount > 0) {
+        lines.push({ account_code: ACCT_INPUT_TAX, debit: 0, credit: taxAmount, description: null });
+      }
       return {
         voucher_type: "收入",
         entry_date,
         description: buildAllowanceDescription(allowance, "進項折讓"),
-        lines: [
-          { account_code: roles.settlementAccount, debit: total, credit: 0, description: null },
-          { account_code: roles.expenseAccount, debit: 0, credit: amount, description: null },
-          { account_code: ACCT_INPUT_TAX, debit: 0, credit: taxAmount, description: null },
-        ],
+        lines,
       };
     }
     // Mirror non-deductible input: 2 lines, tax merged into expense reversal.
@@ -217,17 +222,22 @@ export function computeEntryFromAllowance(
     };
   }
 
-  // 銷項折讓: mirror Dr 結算 / Cr 4101 / Cr 2134
+  // 銷項折讓: mirror Dr 4101 / Cr 結算 (+ Dr 2134 when the allowance carries tax).
+  // A zero-tax 銷項折讓 (免稅 / 零稅率) drops the 銷項稅額 line — a 0/0 line would
+  // violate the debit_credit_xor CHECK.
   const roles = extractOutputInvoiceRoles(originalEntry);
+  const lines: ComputedEntryLine[] = [
+    { account_code: roles.revenueAccount, debit: amount, credit: 0, description: null },
+  ];
+  if (taxAmount > 0) {
+    lines.push({ account_code: ACCT_OUTPUT_TAX, debit: taxAmount, credit: 0, description: null });
+  }
+  lines.push({ account_code: roles.settlementAccount, debit: 0, credit: total, description: null });
   return {
     voucher_type: "支出",
     entry_date,
     description: buildAllowanceDescription(allowance, "銷項折讓"),
-    lines: [
-      { account_code: roles.revenueAccount, debit: amount, credit: 0, description: null },
-      { account_code: ACCT_OUTPUT_TAX, debit: taxAmount, credit: 0, description: null },
-      { account_code: roles.settlementAccount, debit: 0, credit: total, description: null },
-    ],
+    lines,
   };
 }
 

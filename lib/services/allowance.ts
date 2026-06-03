@@ -10,10 +10,7 @@ import {
   type ExtractedAllowanceData,
 } from "@/lib/domain/models";
 import { type Json, type Tables, type Database } from "@/supabase/database.types";
-import {
-  writeAllowanceEntryInTx,
-  type ManualOriginalAccount,
-} from "@/lib/services/journal-entry";
+import { writeAllowanceEntryInTx } from "@/lib/services/journal-entry";
 import { extractAllowanceData, type ClientInfo } from "@/lib/services/gemini";
 import { getImportFileMimeType } from "@/lib/utils/mime-type";
 import { enrichExtractedParties } from "@/lib/services/business-lookup";
@@ -94,26 +91,14 @@ export async function createAllowance(
 }
 
 /**
- * Result of {@link updateAllowance}. `needsManualAccount` is set only when a
- * confirm couldn't auto-generate the draft journal entry because the original
- * invoice's entry couldn't be resolved — the review dialog then asks staff to
- * pick accounts and resubmits with `manualOriginalAccount`.
- */
-export type UpdateAllowanceResult = {
-  allowance: Tables<"allowances">;
-  needsManualAccount?: { direction: "in" | "out" };
-};
-
-/**
  * Update an allowance record. Runs entirely on Drizzle so that — when the update
  * confirms the allowance — the re-link, status flip, and draft journal-entry
  * generation (Decision #13 mirror) all share one transaction.
  *
- * Invariant: a `confirmed` allowance always has its draft entry. If the original
- * invoice's entry can't be resolved and no manual accounts are supplied, the
- * status is reverted to `processed` (saved, awaiting input) and
- * `needsManualAccount` is returned so the dialog can collect accounts and
- * resubmit — rather than leaving a `confirmed` row silently without an entry.
+ * Invariant: a `confirmed` allowance always has its draft entry. When the
+ * original invoice's entry can't be resolved, the mirror falls back to a
+ * default-account draft (§5.2.2) rather than blocking confirm, so the status
+ * flip and entry write always commit together.
  *
  * Updates to `extracted_data` / `status` are mirrored onto the parent
  * `documents` row by the DB trigger `sync_documents_cache_from_allowances`
@@ -122,9 +107,8 @@ export type UpdateAllowanceResult = {
 export async function updateAllowance(
   allowanceId: string,
   data: UpdateAllowanceInput,
-  manualOriginalAccount?: ManualOriginalAccount,
   options?: AllowanceServiceOptions,
-): Promise<UpdateAllowanceResult> {
+): Promise<Tables<"allowances">> {
   const validated = updateAllowanceSchema.parse(data);
 
   // Drizzle bypasses RLS, so authorize at the app layer (inside the tx). Resolve
@@ -171,7 +155,6 @@ export async function updateAllowance(
   const oldSerialCode = existingAllowance.original_invoice_serial_code;
   const shouldRelink = Boolean(newSerialCode && newSerialCode !== oldSerialCode);
 
-  let needsManualAccount: UpdateAllowanceResult["needsManualAccount"];
   const allowance = await db.transaction(async (tx) => {
     await assertCallerCanAccessClient(tx, callerId, clientId);
 
@@ -200,34 +183,16 @@ export async function updateAllowance(
 
     if (!updated) throw new Error("Allowance not found");
 
-    if (updated.status !== "confirmed") return updated;
-
-    const result = await writeAllowanceEntryInTx(
-      tx,
-      updated,
-      callerId,
-      manualOriginalAccount,
-    );
-
-    if (result.status === "needs_manual_account") {
-      needsManualAccount = { direction: result.direction };
-      // Don't commit a confirmed allowance with no entry: revert to 'processed'
-      // (saved, awaiting the manual accounts). 'confirmed' stays ⇒ entry exists.
-      const [reverted] = await tx
-        .update(allowancesTable)
-        .set({ status: "processed" })
-        .where(eq(allowancesTable.id, allowanceId))
-        .returning();
-      return reverted;
+    // Confirming generates the draft entry in the same transaction (mirror, or
+    // default-account fallback when no original resolves). 'confirmed' ⇒ entry.
+    if (updated.status === "confirmed") {
+      await writeAllowanceEntryInTx(tx, updated, callerId);
     }
 
     return updated;
   });
 
-  return {
-    allowance: allowance as unknown as Tables<"allowances">,
-    needsManualAccount,
-  };
+  return allowance as unknown as Tables<"allowances">;
 }
 
 /**
@@ -340,7 +305,7 @@ export async function extractAllowanceCore(
 
     const fallbackInOrOut = allowance.in_or_out === "in" ? "in" : "out";
 
-    const { allowance: updated } = await updateAllowance(allowanceId, {
+    const updated = await updateAllowance(allowanceId, {
       extracted_data: enrichedData,
       status: "processed",
       original_invoice_serial_code:

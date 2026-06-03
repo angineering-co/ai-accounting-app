@@ -493,6 +493,62 @@ describe("computeEntryFromAllowance — 銷項折讓 (mirrors original output en
   });
 });
 
+describe("computeEntryFromAllowance — 銷項折讓 zero-tax (no 銷項稅額 line)", () => {
+  // Original taxed 銷項 (3-line) but the allowance itself carries no tax — the
+  // mirror must drop the 2134 line rather than emit a 0/0 line (debit_credit_xor).
+  const originalEntry = computeEntryFromInvoice(
+    makeInvoice({
+      in_or_out: "out",
+      extracted_data: { totalSales: 20_000, tax: 1_000, totalAmount: 21_000 },
+    }),
+  );
+
+  const allowance = makeAllowance({
+    in_or_out: "out",
+    extracted_data: { amount: 2_000, taxAmount: 0 },
+  });
+
+  it("emits 2 balanced lines (Dr 4101 / Cr 結算), no 2134", () => {
+    const { lines } = computeEntryFromAllowance(allowance, originalEntry);
+    expect(lines).toEqual([
+      { account_code: ACCT_REVENUE, debit: 2_000, credit: 0, description: null },
+      { account_code: ACCT_BANK, debit: 0, credit: 2_000, description: null },
+    ]);
+    expect(sumBalance(lines)).toEqual({ debit: 2_000, credit: 2_000 });
+  });
+});
+
+describe("computeEntryFromAllowance — 進項折讓 zero-tax against deductible original", () => {
+  // Deductible original (separate tax line) but the allowance carries no tax —
+  // the mirror must drop the 1144 line rather than emit a 0/0 line.
+  const originalEntry = computeEntryFromInvoice(
+    makeInvoice({
+      in_or_out: "in",
+      extracted_data: {
+        totalSales: 10_000,
+        tax: 500,
+        totalAmount: 10_500,
+        deductible: true,
+        account: "6113 旅費",
+      },
+    }),
+  );
+
+  const allowance = makeAllowance({
+    in_or_out: "in",
+    extracted_data: { amount: 1_000, taxAmount: 0 },
+  });
+
+  it("emits 2 balanced lines (Dr 結算 / Cr 費用), no 1144", () => {
+    const { lines } = computeEntryFromAllowance(allowance, originalEntry);
+    expect(lines).toEqual([
+      { account_code: ACCT_BANK, debit: 1_000, credit: 0, description: null },
+      { account_code: "6113", debit: 0, credit: 1_000, description: null },
+    ]);
+    expect(sumBalance(lines)).toEqual({ debit: 1_000, credit: 1_000 });
+  });
+});
+
 describe("computeEntryFromAllowance — malformed original entry", () => {
   it("throws when input original has wrong number of Cr lines", () => {
     const malformed: ComputedEntry = {

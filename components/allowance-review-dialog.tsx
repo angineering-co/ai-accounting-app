@@ -39,7 +39,6 @@ import {
   CalendarIcon,
 } from "lucide-react";
 import { type Allowance } from "@/lib/domain/models";
-import { ACCOUNT_LIST } from "@/lib/data/accounts";
 import { useFormTaxIdLookup } from "@/hooks/use-tax-id-lookup";
 import { updateAllowance } from "@/lib/services/allowance";
 import { toast } from "sonner";
@@ -156,13 +155,6 @@ export function AllowanceReviewDialog({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [previewLoading, setPreviewLoading] = useState(false);
-  // Shown only when a confirm couldn't auto-mirror the original invoice's entry
-  // (no resolvable original). Staff picks accounts here and re-confirms.
-  const [manualAccountPrompt, setManualAccountPrompt] = useState<
-    { direction: "in" | "out" } | null
-  >(null);
-  const [manualAccount, setManualAccount] = useState("");
-  const [manualSettlementAccount, setManualSettlementAccount] = useState("");
   const supabase = createClient();
 
   const form = useForm<AllowanceReviewFormValues>({
@@ -204,13 +196,6 @@ export function AllowanceReviewDialog({
       allowance?.original_invoice_serial_code && !allowance?.original_invoice_id
     );
   }, [allowance]);
-
-  // Clear any manual-account prompt when switching to a different allowance.
-  useEffect(() => {
-    setManualAccountPrompt(null);
-    setManualAccount("");
-    setManualSettlementAccount("");
-  }, [allowance?.id]);
 
   const isConfirmDisabled = useMemo(() => {
     return allowance?.status === "confirmed" || !form.formState.isValid;
@@ -345,34 +330,13 @@ export function AllowanceReviewDialog({
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { confidence, ...dataToSave } = data;
 
-        // Pass the staff-picked accounts only when confirming and both are set;
-        // the service synthesizes the original entry from them.
-        const manualPayload =
-          status === "confirmed" && manualAccount && manualSettlementAccount
-            ? { account: manualAccount, settlementAccount: manualSettlementAccount }
-            : undefined;
+        await updateAllowance(allowance.id, {
+          extracted_data: dataToSave,
+          status: status,
+          original_invoice_serial_code:
+            dataToSave.originalInvoiceSerialCode || null,
+        });
 
-        const { needsManualAccount } = await updateAllowance(
-          allowance.id,
-          {
-            extracted_data: dataToSave,
-            status: status,
-            original_invoice_serial_code:
-              dataToSave.originalInvoiceSerialCode || null,
-          },
-          manualPayload,
-        );
-
-        // The allowance is saved, but its draft entry couldn't be auto-mirrored.
-        // Reveal the manual-account block and keep the dialog open so staff can
-        // pick accounts and re-confirm.
-        if (needsManualAccount) {
-          setManualAccountPrompt(needsManualAccount);
-          toast.warning("找不到原始發票對應的分錄，請手動指定折讓科目後再次確認");
-          return;
-        }
-
-        setManualAccountPrompt(null);
         toast.success(status === "confirmed" ? "折讓已確認" : "變更已儲存");
 
         if (shouldClose) {
@@ -385,7 +349,7 @@ export function AllowanceReviewDialog({
         toast.error("更新失敗");
       }
     },
-    [allowance, onOpenChange, onSuccess, manualAccount, manualSettlementAccount],
+    [allowance, onOpenChange, onSuccess],
   );
 
   useEffect(() => {
@@ -607,7 +571,9 @@ export function AllowanceReviewDialog({
           {/* Form Section */}
           <Form {...form}>
             <form className="space-y-4">
-              {/* Unlinked warning */}
+              {/* Unlinked warning: the allowance references an invoice serial we
+                  can't link to. Confirm still works — the draft entry falls back
+                  to a default account that staff can adjust at 記帳 time. */}
               {hasUnlinkedWarning && (
                 <Alert
                   variant="destructive"
@@ -616,69 +582,9 @@ export function AllowanceReviewDialog({
                   <AlertTriangle className="h-4 w-4 text-amber-600" />
                   <AlertDescription className="text-amber-800">
                     找不到原始發票 {allowance?.original_invoice_serial_code}
+                    ，確認後將以預設科目產生草稿分錄，可於記帳時調整。
                   </AlertDescription>
                 </Alert>
-              )}
-
-              {/* Manual account fallback: shown only when a confirm couldn't
-                  auto-mirror the original invoice's entry. */}
-              {manualAccountPrompt && (
-                <div className="space-y-3 rounded-md border border-amber-200 bg-amber-50 p-3">
-                  <p className="text-base font-medium text-amber-900">
-                    找不到原始發票對應的分錄
-                  </p>
-                  <p className="text-sm text-amber-800">
-                    此折讓無法自動沿用原發票的科目，請手動指定後再次按「確認並儲存」。
-                  </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-base font-medium">
-                        {manualAccountPrompt.direction === "in"
-                          ? "費用科目"
-                          : "收入科目"}
-                      </label>
-                      <Select
-                        value={manualAccount}
-                        onValueChange={setManualAccount}
-                      >
-                        <SelectTrigger>
-                          <SelectValue
-                            placeholder={
-                              manualAccountPrompt.direction === "in"
-                                ? "選擇費用科目"
-                                : "選擇收入科目"
-                            }
-                          />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[200px]">
-                          {ACCOUNT_LIST.map((account) => (
-                            <SelectItem key={account} value={account}>
-                              {account}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-base font-medium">結算科目</label>
-                      <Select
-                        value={manualSettlementAccount}
-                        onValueChange={setManualSettlementAccount}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="選擇結算科目" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[200px]">
-                          {ACCOUNT_LIST.map((account) => (
-                            <SelectItem key={account} value={account}>
-                              {account}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
               )}
 
               <div className="grid grid-cols-2 gap-4">

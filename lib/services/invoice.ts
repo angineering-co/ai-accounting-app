@@ -19,9 +19,11 @@ import { type Json, type TablesUpdate, type Database } from "@/supabase/database
 import { type ExtractedInvoiceData } from "@/lib/domain/models";
 import { ensurePeriodEditable } from "@/lib/services/tax-period";
 import { toDocumentsKey } from "@/lib/storage/documents-key";
+import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/lib/db/drizzle";
 import { assertCallerCanAccessClient } from "@/lib/db/rls";
 import { documents as documentsTable, invoices as invoicesTable } from "@/lib/db/schema";
+import { writeInvoiceEntryInTx } from "@/lib/services/journal-entry";
 import { todayInTaipeiISO } from "@/lib/utils";
 import { getImportFileMimeType } from "@/lib/utils/mime-type";
 import { enrichExtractedParties } from "@/lib/services/business-lookup";
@@ -159,91 +161,144 @@ export type UpdateInvoiceResult =
       conflictingClientId: string;
     };
 
-export async function updateInvoice(invoiceId: string, data: UpdateInvoiceInput): Promise<UpdateInvoiceResult> {
-  const supabase = await createClient();
-  
+// Detect a Postgres unique-violation (SQLSTATE 23505) thrown through Drizzle /
+// postgres-js. The driver surfaces it as an error carrying `code`; some layers
+// nest the original under `.cause`, so walk the chain.
+function isUniqueViolation(error: unknown): boolean {
+  let current: unknown = error;
+  for (let i = 0; i < 5 && current; i++) {
+    if (
+      typeof current === "object" &&
+      current !== null &&
+      "code" in current &&
+      (current as { code?: unknown }).code === "23505"
+    ) {
+      return true;
+    }
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
+/**
+ * Update an invoice. Runs entirely on Drizzle so that — when the update confirms
+ * the invoice — the status flip and the draft journal-entry generation share one
+ * transaction. A confirmed-and-eligible invoice therefore can never be left
+ * without its entry (and on any failure the whole thing rolls back).
+ *
+ * `options.userId` may be injected (tests / server-internal callers); otherwise
+ * it's resolved from the cookie session.
+ */
+export async function updateInvoice(
+  invoiceId: string,
+  data: UpdateInvoiceInput,
+  options?: InvoiceServiceOptions,
+): Promise<UpdateInvoiceResult> {
   const validated = updateInvoiceSchema.parse(data);
 
-  // Fetch the existing invoice to check period lock status
-  const { data: existingInvoice, error: fetchError } = await supabase
-    .from('invoices')
-    .select('client_id, year_month')
-    .eq('id', invoiceId)
-    .single();
+  // Drizzle bypasses RLS, so the caller must be authorized at the app layer
+  // (assertCallerCanAccessClient, inside the tx below). Resolve the user once.
+  let userId = options?.userId;
+  if (!userId) {
+    const supabase = options?.supabaseClient ?? (await createClient());
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
+    userId = user.id;
+  }
+  const callerId: string = userId;
 
-  if (fetchError) throw fetchError;
-  if (!existingInvoice) throw new Error('Invoice not found');
+  // Period-lock pre-checks (reads that throw), kept outside the write tx as
+  // before. Drizzle read so no Supabase client is needed when userId is injected.
+  const [existingInvoice] = await db
+    .select({
+      client_id: invoicesTable.client_id,
+      year_month: invoicesTable.year_month,
+    })
+    .from(invoicesTable)
+    .where(eq(invoicesTable.id, invoiceId))
+    .limit(1);
 
-  // Check if current period is locked
+  if (!existingInvoice) throw new Error("Invoice not found");
+
   if (existingInvoice.year_month && existingInvoice.client_id) {
     await ensurePeriodEditable(existingInvoice.client_id, existingInvoice.year_month);
   }
-
-  // If moving to a new period, check if the new period is also editable
   if (validated.year_month && validated.year_month !== existingInvoice.year_month) {
-    const clientId = validated.client_id || existingInvoice.client_id;
-    if (clientId) {
-      await ensurePeriodEditable(clientId, validated.year_month);
+    const movingClientId = validated.client_id || existingInvoice.client_id;
+    if (movingClientId) {
+      await ensurePeriodEditable(movingClientId, validated.year_month);
     }
   }
 
+  const clientId = validated.client_id ?? existingInvoice.client_id;
+  if (!clientId) throw new Error("Invoice has no client");
+
+  // Build the Drizzle update set (field names mirror the columns 1:1).
   const { extracted_data: extractedData, ...rest } = validated;
-
-  // Prepare update payload
-  const updatePayload: TablesUpdate<"invoices"> = {
-    ...rest,
-  };
-
+  const updateSet: Partial<typeof invoicesTable.$inferInsert> = { ...rest };
   if (extractedData !== undefined && extractedData !== null) {
-    updatePayload.extracted_data = JSON.parse(
-      JSON.stringify(extractedData)
-    ) as Json;
+    updateSet.extracted_data = JSON.parse(JSON.stringify(extractedData)) as Json;
   }
-
-  // If extracted_data is provided, sync invoice_serial_code
   if (extractedData?.invoiceSerialCode) {
-    updatePayload.invoice_serial_code = extractedData.invoiceSerialCode;
+    updateSet.invoice_serial_code = extractedData.invoiceSerialCode;
   }
 
-  const { data: invoice, error } = await supabase
-    .from('invoices')
-    .update(updatePayload)
-    .eq('id', invoiceId)
-    .select()
-    .single();
+  try {
+    const invoice = await db.transaction(async (tx) => {
+      await assertCallerCanAccessClient(tx, callerId, clientId);
 
-  if (error) {
-    // Handle duplicate invoice_serial_code (unique constraint violation)
-    if (error.code === "23505" && updatePayload.invoice_serial_code) {
-      const serialCode = updatePayload.invoice_serial_code;
-      const clientId = existingInvoice.client_id;
+      const [updated] = await tx
+        .update(invoicesTable)
+        .set(updateSet)
+        .where(eq(invoicesTable.id, invoiceId))
+        .returning();
 
-      if (clientId) {
-        // Find the conflicting invoice
-        const { data: conflicting } = await supabase
-          .from("invoices")
-          .select("id, year_month, client_id")
-          .eq("client_id", clientId)
-          .eq("invoice_serial_code", serialCode)
-          .neq("id", invoiceId)
-          .single();
+      if (!updated) throw new Error("Invoice not found");
 
-        if (conflicting) {
-          return {
-            success: false,
-            error: "serial_conflict",
-            serialCode,
-            conflictingInvoiceId: conflicting.id,
-            conflictingYearMonth: conflicting.year_month ?? "",
-            conflictingClientId: conflicting.client_id ?? clientId,
-          };
-        }
+      // Atomic with the status flip; ineligible taxTypes are skipped inside.
+      if (updated.status === "confirmed") {
+        await writeInvoiceEntryInTx(tx, updated, callerId);
+      }
+      return updated;
+    });
+
+    return { success: true as const, invoice };
+  } catch (error) {
+    // A unique violation on (client_id, invoice_serial_code) rolls the whole
+    // transaction back (no partial entry); map it to the friendly result.
+    if (isUniqueViolation(error) && updateSet.invoice_serial_code) {
+      const serialCode = updateSet.invoice_serial_code;
+      const [conflicting] = await db
+        .select({
+          id: invoicesTable.id,
+          year_month: invoicesTable.year_month,
+          client_id: invoicesTable.client_id,
+        })
+        .from(invoicesTable)
+        .where(
+          and(
+            eq(invoicesTable.client_id, clientId),
+            eq(invoicesTable.invoice_serial_code, serialCode),
+            ne(invoicesTable.id, invoiceId),
+          ),
+        )
+        .limit(1);
+
+      if (conflicting) {
+        return {
+          success: false,
+          error: "serial_conflict",
+          serialCode,
+          conflictingInvoiceId: conflicting.id,
+          conflictingYearMonth: conflicting.year_month ?? "",
+          conflictingClientId: conflicting.client_id ?? clientId,
+        };
       }
     }
     throw error;
   }
-
-  return { success: true as const, invoice };
 }
 
 export async function deleteInvoice(invoiceId: string, options?: InvoiceServiceOptions) {

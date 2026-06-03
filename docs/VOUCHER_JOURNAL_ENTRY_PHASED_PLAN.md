@@ -8,9 +8,12 @@
 > - ✅ Phase 5.5 完成（documents-first row 建立：createInvoice / createAllowance 先建 documents 父表 row，子表以 document_id FK 連結；180/180 測試綠）
 > - ✅ Phase 5.6 完成（storage 清理：documents bucket、檔案搬遷、路徑重排；PR #190）
 > - ✅ Phase 6a 完成（既有 invoice / allowance 的 document_id backfill 腳本；191/191 測試綠）
-> - 📋 Phase 6a.1：documents 維持子表 amount / doc_date 的 denormalized cache（修補 forward write flow；既有少量分歧 row 人工修正）
+> - ✅ Phase 6a.1 完成（documents 維持子表 amount / doc_date 的 denormalized cache；改採 DB trigger `sync_documents_cache_from_subtables`）
 > - ✅ Phase 6.5 完成（Drizzle ORM + 交易層基礎建設：postgres-js + Proxy lazy init、rls.ts 雙重 firm/client guard、drizzle-kit pull codegen、auth.users via drizzle-orm/supabase；PR #201）
-> - 📋 Phase 6b：電子發票匯入改 documents-first（交易式）+ document_id 收緊為 NOT NULL UNIQUE（Phase 6 拆分後段，需 Phase 6.5 的交易層）
+> - ✅ Phase 6b 完成（電子發票匯入改 documents-first 交易式 `commitInvoiceRowsAtomically`/`commitAllowanceRowsAtomically`，PR #204；document_id 收緊為 NOT NULL UNIQUE，PR #206；createInvoice/createAllowance 亦改 `db.transaction()`，PR #207）
+> - 🔧 Phase 7 進行中（confirm/regenerate 寫入路徑：本階段只做 write-path）
+>
+> **注意：Phase 5 schema/migrations 已落地（documents / journal_entries / … 皆存在），但 Phase 5 的「讀取 service + UI 從 demo store 切到真實 DB」尚未實作（`lib/services/journal-entry.ts` 讀取 helper、`useVoucherStore` 不存在，傳票 / 報表頁仍讀 `useVoucherDemoStore`）。因此 Phase 7 限縮為 write-path：confirm/regenerate 交易 + service wiring + 折讓手動指定科目 UI，以整合測試與 DB 檢視驗證；UI 切換另開後續 PR。**
 >
 > **配套文件**：[`VOUCHER_JOURNAL_ENTRY_PLAN.md`](./VOUCHER_JOURNAL_ENTRY_PLAN.md) — 已收斂的設計提案（Decisions #1–#12）。本文件中所有 §x.y 章節編號皆指向設計提案。
 
@@ -380,6 +383,10 @@
 **目標**：把 phase 4 的純邏輯接上 DB，原子地產生 draft entries。Phase 2 的傳票 UI 此刻開始顯示真實 draft entries。**Invoice 與 allowance 兩條 confirm 路徑都要處理**。
 
 > **與原計畫的差異**：Phase 5.5 起 documents 已在上傳當下建立、Phase 6 之後既有資料也都有對應 documents row,所以 confirm RPC **不再需要 `upsert documents`**,只負責「取 invoice/allowance → 建立 entry → replace lines」。RPC 邏輯更簡單、語意更清楚。
+
+> **實作紀錄（write-path only，已完成）**：依 Phase 6.5 方向,confirm/regenerate 以 **Drizzle `db.transaction()`**（非 PL/pgSQL RPC）實作。`updateInvoice` / `updateAllowance` **整段改走 Drizzle**,讓 status 翻 confirmed 與分錄產生在**同一交易**:confirmed-and-eligible 的 invoice/allowance 不可能少了分錄,任一步失敗整筆 rollback(整合測試以「進項缺 account → 分錄計算 throw → status 不翻、無分錄」驗證原子性)。`updateInvoice` 一併保留 serial-conflict 友善回傳(改以攔截 Drizzle 拋出的 23505 對應)。折讓**無法解析原分錄**時不留 confirmed-without-entry,而是把 status **退回 `processed`** 並回傳 `needsManualAccount`,由 review dialog 收科目後重送(`confirmed` 永遠 ⇒ 有分錄;invoice 的 ineligible 作廢/彙加 skip 屬合理無分錄,語意不同故不退回)。`updateInvoice` / `updateAllowance` 新增 optional `options.userId`(沿用 createInvoice 注入式 pattern,供整合測試直接驅動真實路徑)。
+>
+> **檔案**：`lib/services/journal-entry.ts`(`writeInvoiceEntryInTx` / `writeAllowanceEntryInTx` tx-scoped core + `syncInvoiceJournalEntry` / `syncAllowanceJournalEntry` standalone wrapper)、`lib/services/invoice.ts`(updateInvoice 改 Drizzle 原子 confirm)、`lib/services/allowance.ts`(updateAllowance 同款 + 內嵌 re-link)、`components/allowance-review-dialog.tsx`(手動指定科目 fallback UI)、`tests/integration/services/journal-entry.test.ts`(18 測試:樣板矩陣 + 鏡像 + 手動 fallback + 原子性 + serial-conflict + 授權 rollback)。**app-level / Drizzle / Supabase 三層 model 暫共存於 service,薄持久化/轉換層延後到 Phase 8**(post/edit/reverse 進場、第二三個 caller 出現時再抽)。
 
 **改動**：
 - Migration `<ts>_create_confirm_invoice_rpc.sql`：PL/pgSQL — 取 invoice → upsert journal_entry（status=draft、voucher_no=NULL、`document_id = invoice.document_id`）→ replace lines。Idempotent。若 `invoice.document_id` 為 NULL（理論上不會發生,Phase 6 之後有 `NOT NULL` 約束保護）→ RAISE EXCEPTION fail loud。

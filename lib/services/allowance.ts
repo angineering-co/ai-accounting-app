@@ -9,16 +9,24 @@ import {
   type UpdateAllowanceInput,
   type ExtractedAllowanceData,
 } from "@/lib/domain/models";
-import { type Json, type TablesUpdate, type Database } from "@/supabase/database.types";
-import { tryLinkOriginalInvoice } from "@/lib/services/invoice-import";
+import { type Json, type Tables, type Database } from "@/supabase/database.types";
+import {
+  writeAllowanceEntryInTx,
+  type ManualOriginalAccount,
+} from "@/lib/services/journal-entry";
 import { extractAllowanceData, type ClientInfo } from "@/lib/services/gemini";
 import { getImportFileMimeType } from "@/lib/utils/mime-type";
 import { enrichExtractedParties } from "@/lib/services/business-lookup";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ensurePeriodEditable } from "@/lib/services/tax-period";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db/drizzle";
 import { assertCallerCanAccessClient } from "@/lib/db/rls";
-import { documents as documentsTable, allowances as allowancesTable } from "@/lib/db/schema";
+import {
+  documents as documentsTable,
+  allowances as allowancesTable,
+  invoices as invoicesTable,
+} from "@/lib/db/schema";
 import { toDocumentsKey } from "@/lib/storage/documents-key";
 import { todayInTaipeiISO } from "@/lib/utils";
 
@@ -86,68 +94,140 @@ export async function createAllowance(
 }
 
 /**
- * Update an allowance record.
+ * Result of {@link updateAllowance}. `needsManualAccount` is set only when a
+ * confirm couldn't auto-generate the draft journal entry because the original
+ * invoice's entry couldn't be resolved — the review dialog then asks staff to
+ * pick accounts and resubmits with `manualOriginalAccount`.
+ */
+export type UpdateAllowanceResult = {
+  allowance: Tables<"allowances">;
+  needsManualAccount?: { direction: "in" | "out" };
+};
+
+/**
+ * Update an allowance record. Runs entirely on Drizzle so that — when the update
+ * confirms the allowance — the re-link, status flip, and draft journal-entry
+ * generation (Decision #13 mirror) all share one transaction.
+ *
+ * Invariant: a `confirmed` allowance always has its draft entry. If the original
+ * invoice's entry can't be resolved and no manual accounts are supplied, the
+ * status is reverted to `processed` (saved, awaiting input) and
+ * `needsManualAccount` is returned so the dialog can collect accounts and
+ * resubmit — rather than leaving a `confirmed` row silently without an entry.
  *
  * Updates to `extracted_data` / `status` are mirrored onto the parent
  * `documents` row by the DB trigger `sync_documents_cache_from_allowances`
  * (see `supabase/migrations/20260526000000_sync_documents_cache_from_subtables.sql`).
  */
-export async function updateAllowance(allowanceId: string, data: UpdateAllowanceInput) {
-  const supabase = await createClient();
-
+export async function updateAllowance(
+  allowanceId: string,
+  data: UpdateAllowanceInput,
+  manualOriginalAccount?: ManualOriginalAccount,
+  options?: AllowanceServiceOptions,
+): Promise<UpdateAllowanceResult> {
   const validated = updateAllowanceSchema.parse(data);
 
-  // Fetch the existing allowance to get client_id for re-linking
-  const { data: existingAllowance, error: fetchError } = await supabase
-    .from('allowances')
-    .select('client_id, original_invoice_serial_code')
-    .eq('id', allowanceId)
-    .single();
+  // Drizzle bypasses RLS, so authorize at the app layer (inside the tx). Resolve
+  // the caller once: injected (tests / server-internal) or from the cookie session.
+  let userId = options?.userId;
+  if (!userId) {
+    const supabase = options?.supabaseClient ?? (await createClient());
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
+    userId = user.id;
+  }
+  const callerId: string = userId;
 
-  if (fetchError) throw fetchError;
-  if (!existingAllowance) throw new Error('Allowance not found');
+  const [existingAllowance] = await db
+    .select({
+      client_id: allowancesTable.client_id,
+      original_invoice_serial_code: allowancesTable.original_invoice_serial_code,
+    })
+    .from(allowancesTable)
+    .where(eq(allowancesTable.id, allowanceId))
+    .limit(1);
 
+  if (!existingAllowance) throw new Error("Allowance not found");
+
+  const clientId = validated.client_id ?? existingAllowance.client_id;
+  if (!clientId) throw new Error("Allowance has no client");
+
+  // Build the Drizzle update set (field names mirror the columns 1:1).
   const { extracted_data: extractedData, ...rest } = validated;
-
-  // Prepare update payload
-  const updatePayload: TablesUpdate<"allowances"> = {
-    ...rest,
-  };
-
+  const updateSet: Partial<typeof allowancesTable.$inferInsert> = { ...rest };
   if (extractedData !== undefined && extractedData !== null) {
-    updatePayload.extracted_data = JSON.parse(
-      JSON.stringify(extractedData)
-    ) as Json;
+    updateSet.extracted_data = JSON.parse(JSON.stringify(extractedData)) as Json;
   }
-
-  // Sync original_invoice_serial_code from extracted_data if provided
   if (extractedData?.originalInvoiceSerialCode !== undefined) {
-    updatePayload.original_invoice_serial_code = extractedData.originalInvoiceSerialCode || null;
+    updateSet.original_invoice_serial_code =
+      extractedData.originalInvoiceSerialCode || null;
   }
 
-  const { data: allowance, error } = await supabase
-    .from('allowances')
-    .update(updatePayload)
-    .eq('id', allowanceId)
-    .select()
-    .single();
-
-  if (error) throw error;
-
-  // If original_invoice_serial_code changed, attempt to re-link
-  const newSerialCode = extractedData?.originalInvoiceSerialCode || validated.original_invoice_serial_code;
+  const newSerialCode =
+    extractedData?.originalInvoiceSerialCode ||
+    validated.original_invoice_serial_code;
   const oldSerialCode = existingAllowance.original_invoice_serial_code;
+  const shouldRelink = Boolean(newSerialCode && newSerialCode !== oldSerialCode);
 
-  if (newSerialCode && newSerialCode !== oldSerialCode && existingAllowance.client_id) {
-    await tryLinkOriginalInvoice(
-      existingAllowance.client_id,
-      allowanceId,
-      newSerialCode,
-      supabase
+  let needsManualAccount: UpdateAllowanceResult["needsManualAccount"];
+  const allowance = await db.transaction(async (tx) => {
+    await assertCallerCanAccessClient(tx, callerId, clientId);
+
+    // Re-link in the same transaction: derive original_invoice_id from the
+    // changed serial. Mirrors tryLinkOriginalInvoice — set only when a match is
+    // found; leave the existing FK untouched otherwise.
+    if (shouldRelink && newSerialCode) {
+      const [origInvoice] = await tx
+        .select({ id: invoicesTable.id })
+        .from(invoicesTable)
+        .where(
+          and(
+            eq(invoicesTable.client_id, clientId),
+            eq(invoicesTable.invoice_serial_code, newSerialCode),
+          ),
+        )
+        .limit(1);
+      if (origInvoice) updateSet.original_invoice_id = origInvoice.id;
+    }
+
+    const [updated] = await tx
+      .update(allowancesTable)
+      .set(updateSet)
+      .where(eq(allowancesTable.id, allowanceId))
+      .returning();
+
+    if (!updated) throw new Error("Allowance not found");
+
+    if (updated.status !== "confirmed") return updated;
+
+    const result = await writeAllowanceEntryInTx(
+      tx,
+      updated,
+      callerId,
+      manualOriginalAccount,
     );
-  }
 
-  return allowance;
+    if (result.status === "needs_manual_account") {
+      needsManualAccount = { direction: result.direction };
+      // Don't commit a confirmed allowance with no entry: revert to 'processed'
+      // (saved, awaiting the manual accounts). 'confirmed' stays ⇒ entry exists.
+      const [reverted] = await tx
+        .update(allowancesTable)
+        .set({ status: "processed" })
+        .where(eq(allowancesTable.id, allowanceId))
+        .returning();
+      return reverted;
+    }
+
+    return updated;
+  });
+
+  return {
+    allowance: allowance as unknown as Tables<"allowances">,
+    needsManualAccount,
+  };
 }
 
 /**
@@ -260,13 +340,14 @@ export async function extractAllowanceCore(
 
     const fallbackInOrOut = allowance.in_or_out === "in" ? "in" : "out";
 
-    return await updateAllowance(allowanceId, {
+    const { allowance: updated } = await updateAllowance(allowanceId, {
       extracted_data: enrichedData,
       status: "processed",
       original_invoice_serial_code:
         enrichedData.originalInvoiceSerialCode || null,
       in_or_out: derivedInOrOut ?? fallbackInOrOut,
     });
+    return updated;
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error occurred";

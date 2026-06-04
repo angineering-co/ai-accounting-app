@@ -245,42 +245,41 @@ export async function confirmInvoiceEntry(
 }
 
 /**
- * Resolve the original invoice's journal entry (its computed shape) so an
- * allowance can mirror it (Decision #13). Throws if the link can't be resolved
- * — the default-rule fallback is only taken when `original_invoice_id` is NULL,
- * not when it's set but dangling.
+ * Load an invoice's journal entry, reconstructed as a `ComputedEntry` (e.g. so an
+ * allowance can mirror it, Decision #13). Get-or-throw: throws if the invoice,
+ * its document, its entry, or its lines can't be found. Callers wanting a softer
+ * "missing is fine" contract should branch before calling — the allowance
+ * default-rule fallback, for instance, only runs when `original_invoice_id` is
+ * NULL, never for a set-but-dangling link.
  */
-async function resolveOriginalEntry(
+async function getComputedEntryForInvoice(
   supabase: SupabaseClient<Database>,
-  originalInvoiceId: string,
+  invoiceId: string,
 ): Promise<ComputedEntry> {
-  const { data: original, error: invError } = await supabase
+  const { data: invoice, error: invError } = await supabase
     .from("invoices")
     .select("document_id")
-    .eq("id", originalInvoiceId)
+    .eq("id", invoiceId)
     .maybeSingle();
   if (invError) throw invError;
-  if (!original) {
-    throw new Error(
-      `confirmAllowanceEntry: original invoice ${originalInvoiceId} not found`,
-    );
+  if (!invoice) {
+    throw new Error(`getComputedEntryForInvoice: invoice ${invoiceId} not found`);
   }
-  if (!original.document_id) {
+  if (!invoice.document_id) {
     throw new Error(
-      `confirmAllowanceEntry: original invoice ${originalInvoiceId} has no document_id`,
+      `getComputedEntryForInvoice: invoice ${invoiceId} has no document_id`,
     );
   }
 
   const { data: entry, error: entryError } = await supabase
     .from("journal_entries")
     .select("id, voucher_type, entry_date, description")
-    .eq("document_id", original.document_id)
+    .eq("document_id", invoice.document_id)
     .maybeSingle();
   if (entryError) throw entryError;
   if (!entry) {
     throw new Error(
-      `confirmAllowanceEntry: original invoice ${originalInvoiceId} has no journal entry yet ` +
-        `(confirm the original invoice first)`,
+      `getComputedEntryForInvoice: invoice ${invoiceId} has no journal entry`,
     );
   }
 
@@ -292,7 +291,7 @@ async function resolveOriginalEntry(
   if (linesError) throw linesError;
   if (!lines || lines.length === 0) {
     throw new Error(
-      `confirmAllowanceEntry: original entry ${entry.id} has no lines`,
+      `getComputedEntryForInvoice: entry ${entry.id} has no lines`,
     );
   }
 
@@ -341,7 +340,7 @@ export async function confirmAllowanceEntry(
       ? computeDefaultEntryFromAllowance(allowance)
       : computeEntryFromAllowance(
           allowance,
-          await resolveOriginalEntry(supabase, allowance.original_invoice_id),
+          await getComputedEntryForInvoice(supabase, allowance.original_invoice_id),
         );
 
   return db.transaction(async (tx) => {

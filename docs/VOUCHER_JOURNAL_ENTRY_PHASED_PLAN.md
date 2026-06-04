@@ -8,9 +8,12 @@
 > - ✅ Phase 5.5 完成（documents-first row 建立：createInvoice / createAllowance 先建 documents 父表 row，子表以 document_id FK 連結；180/180 測試綠）
 > - ✅ Phase 5.6 完成（storage 清理：documents bucket、檔案搬遷、路徑重排；PR #190）
 > - ✅ Phase 6a 完成（既有 invoice / allowance 的 document_id backfill 腳本；191/191 測試綠）
-> - 📋 Phase 6a.1：documents 維持子表 amount / doc_date 的 denormalized cache（修補 forward write flow；既有少量分歧 row 人工修正）
+> - ✅ Phase 6a.1 完成（documents 維持子表 amount / doc_date 的 denormalized cache；改採 DB trigger `sync_documents_cache_from_subtables`）
 > - ✅ Phase 6.5 完成（Drizzle ORM + 交易層基礎建設：postgres-js + Proxy lazy init、rls.ts 雙重 firm/client guard、drizzle-kit pull codegen、auth.users via drizzle-orm/supabase；PR #201）
-> - 📋 Phase 6b：電子發票匯入改 documents-first（交易式）+ document_id 收緊為 NOT NULL UNIQUE（Phase 6 拆分後段，需 Phase 6.5 的交易層）
+> - ✅ Phase 6b 完成（電子發票匯入改 documents-first 交易式，PR #204；document_id 收緊為 NOT NULL UNIQUE，PR #206；createInvoice / createAllowance 亦改 `db.transaction()`，PR #207）
+> - 🔧 Phase 7 進行中（confirm 寫入路徑：本階段只做 write-path）
+>
+> **注意：Phase 5 schema / migrations 已落地（documents / journal_entries / … 皆存在），但 Phase 5 的「讀取 service + UI 從 demo store 切到真實 DB」尚未實作（傳票 / 報表頁仍讀 `useVoucherDemoStore`）。因此 Phase 7 限縮為 write-path：confirm 交易 + service wiring + 折讓預設科目 fallback，以整合測試與 DB 檢視驗證；UI 切換另開後續 PR。**
 >
 > **配套文件**：[`VOUCHER_JOURNAL_ENTRY_PLAN.md`](./VOUCHER_JOURNAL_ENTRY_PLAN.md) — 已收斂的設計提案（Decisions #1–#12）。本文件中所有 §x.y 章節編號皆指向設計提案。
 
@@ -381,6 +384,12 @@
 
 > **與原計畫的差異**：Phase 5.5 起 documents 已在上傳當下建立、Phase 6 之後既有資料也都有對應 documents row,所以 confirm RPC **不再需要 `upsert documents`**,只負責「取 invoice/allowance → 建立 entry → replace lines」。RPC 邏輯更簡單、語意更清楚。
 
+> **實作紀錄（write-path only，已完成）**：依 Phase 6.5 方向，confirm 以 **Drizzle `db.transaction()`**（非 PL/pgSQL RPC）實作。新增 `lib/services/journal-entry.ts`（內部模組，刻意**不**標 `'use server'`，避免把帶注入式 userId 的函式暴露為公開端點而繞過 RLS）：`confirmInvoiceEntry` / `confirmAllowanceEntry` 以 `document_id`（UNIQUE）為鍵 idempotent upsert draft 分錄（`FOR UPDATE` 鎖、借貸平衡斷言、僅 draft 可重生）。`updateInvoice` / `updateAllowance` 維持既有 Supabase 寫入路徑，僅在 status 翻 `confirmed` 後**追加 confirm 派發**（折讓在 re-link 之後才派發，確保 `original_invoice_id` 為最新）。折讓鏡像原發票分錄（Decision #13）；**僅當 `original_invoice_id IS NULL` 才走預設科目**（進項折讓 `7044 其他收入`、銷項折讓 `4101 營業收入`，結算依 §5.1 門檻，稅額為 0 不產生稅額行；經會計師確認，員工可於記帳前調整），`original_invoice_id` 有值但解析不到則 **fail loud**（引導先確認原發票）。`computeEntryFromAllowance` 鏡像時原 entry 必為應稅（銷項 entry 僅 應稅 才產生、進項可扣抵帶獨立進項稅），故零稅折讓鏡像幾乎必為髒資料：進項可扣抵與銷項兩支皆 **fail loud**（拒絕產生避免靜默錯帳，也避開 `debit_credit_xor`）。真正的零稅折讓（免稅 / 零稅率銷售）原發票不產生 entry，會走 `computeDefaultEntryFromAllowance` 預設規則（仍丟稅額行、不報錯）；進項不可扣抵 2 行分支稅額併入總額，不受影響。`update*` 新增 optional `options`（注入式 client / userId，供整合測試端對端驅動派發）。
+>
+> **已知限制（延後至 Phase 8）**：confirm 派發與 status flip 為兩個獨立交易，`update*` 整體**非原子**（confirm 失敗會留下「已確認卻無分錄」，可由 re-confirm 自我修復；目前 read-path 尚未切換、無 UI 消費這些分錄，故可接受）。把 flip + 分錄收進同一交易，待 Phase 8 持久層重構（post / edit / reverse 進場）時一併處理。
+>
+> **檔案**：`lib/services/journal-entry.ts`（新）、`journal-entry-generation.ts`（`computeDefaultEntryFromAllowance` / `shouldCreateEntry` + 鏡像稅額行條件化）、`lib/services/invoice.ts` / `allowance.ts`（confirm 派發 + options）、`tests/integration/services/journal-entry.test.ts`、`journal-entry-generation.test.ts`。
+
 **改動**：
 - Migration `<ts>_create_confirm_invoice_rpc.sql`：PL/pgSQL — 取 invoice → upsert journal_entry（status=draft、voucher_no=NULL、`document_id = invoice.document_id`）→ replace lines。Idempotent。若 `invoice.document_id` 為 NULL（理論上不會發生,Phase 6 之後有 `NOT NULL` 約束保護）→ RAISE EXCEPTION fail loud。
 - Migration `<ts>_create_confirm_allowance_rpc.sql`：**處理折讓 + Decision #13 鏡像邏輯**。流程：
@@ -413,6 +422,8 @@
 ## Phase 8 — `post_journal_entries` RPC（接 phase 2 的批次過帳）
 
 **目標**：phase 2 已建好的「批次過帳」按鈕從 in-memory mutation 切到真實 RPC。
+
+> **Phase 7 帶入的 deferred 項（confirm 原子化）**：Phase 7 write-path（PR #211）中，`updateInvoice` / `updateAllowance` 的 status flip 與分錄產生為**兩個獨立交易**，整體非原子（confirm 失敗會留下「已確認卻無分錄」，靠 idempotent re-confirm 自我修復；Phase 7 時 read-path 尚未切換、無 UI 消費這些分錄，故可接受）。本階段引入 post / edit / reverse 的多表原子寫入時，順勢抽一層薄持久化 / 交易 helper，讓 `update*` 的「flip + 產生分錄」收進同一 `db.transaction()`，消除該 window。屆時若仍有殘留的 confirmed-無分錄 row，可用 idempotent 的 `confirmInvoiceEntry` / `confirmAllowanceEntry` 寫一次性 reconcile 補齊。
 
 **改動**：
 - Migration `<ts>_create_post_journal_entries_rpc.sql`：完整實作 §5.4

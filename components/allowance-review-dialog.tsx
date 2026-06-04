@@ -570,7 +570,9 @@ export function AllowanceReviewDialog({
           {/* Form Section */}
           <Form {...form}>
             <form className="space-y-4">
-              {/* Unlinked warning */}
+              {/* Unlinked warning: the allowance references an invoice serial we
+                  can't link to. Confirm still works; the draft entry falls back to
+                  a default account (§5.2.2) that staff can adjust at 記帳 time. */}
               {hasUnlinkedWarning && (
                 <Alert
                   variant="destructive"
@@ -579,6 +581,7 @@ export function AllowanceReviewDialog({
                   <AlertTriangle className="h-4 w-4 text-amber-600" />
                   <AlertDescription className="text-amber-800">
                     找不到原始發票 {allowance?.original_invoice_serial_code}
+                    ，確認後將以預設科目產生草稿分錄，可於記帳時調整。
                   </AlertDescription>
                 </Alert>
               )}

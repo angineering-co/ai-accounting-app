@@ -4,12 +4,15 @@ import {
   ACCT_BANK,
   ACCT_CASH,
   ACCT_INPUT_TAX,
+  ACCT_OTHER_INCOME,
   ACCT_OUTPUT_TAX,
   ACCT_REVENUE,
   CASH_THRESHOLD,
   type ComputedEntry,
+  computeDefaultEntryFromAllowance,
   computeEntryFromAllowance,
   computeEntryFromInvoice,
+  shouldCreateEntry,
   pickSettlementAccount,
 } from "./journal-entry-generation";
 
@@ -493,6 +496,60 @@ describe("computeEntryFromAllowance — 銷項折讓 (mirrors original output en
   });
 });
 
+describe("computeEntryFromAllowance — 銷項折讓 zero-tax against taxed original", () => {
+  // Symmetric with the deductible-input case: a taxed 銷項 original mirrored by a
+  // zero-tax allowance is not a valid filing combination (a real 免稅 / 零稅率
+  // 銷項折讓 has no original entry and routes through the default rule). taxAmount=0
+  // here means dirty data, so fail loud.
+  const originalEntry = computeEntryFromInvoice(
+    makeInvoice({
+      in_or_out: "out",
+      extracted_data: { totalSales: 20_000, tax: 1_000, totalAmount: 21_000 },
+    }),
+  );
+
+  const allowance = makeAllowance({
+    in_or_out: "out",
+    extracted_data: { amount: 2_000, taxAmount: 0 },
+  });
+
+  it("throws (a taxed original requires the allowance to carry tax)", () => {
+    expect(() => computeEntryFromAllowance(allowance, originalEntry)).toThrow(
+      /taxAmount=0/,
+    );
+  });
+});
+
+describe("computeEntryFromAllowance — 進項折讓 zero-tax against deductible original", () => {
+  // A deductible (taxed) original mirrored by a zero-tax allowance is not a valid
+  // filing combination — taxAmount=0 here would only come from dirty OCR / data
+  // entry. Fail loud so staff fix the 折讓稅額, rather than silently booking a
+  // wrong (or debit_credit_xor-violating) entry.
+  const originalEntry = computeEntryFromInvoice(
+    makeInvoice({
+      in_or_out: "in",
+      extracted_data: {
+        totalSales: 10_000,
+        tax: 500,
+        totalAmount: 10_500,
+        deductible: true,
+        account: "6113 旅費",
+      },
+    }),
+  );
+
+  const allowance = makeAllowance({
+    in_or_out: "in",
+    extracted_data: { amount: 1_000, taxAmount: 0 },
+  });
+
+  it("throws (a deductible original requires the allowance to carry tax)", () => {
+    expect(() => computeEntryFromAllowance(allowance, originalEntry)).toThrow(
+      /taxAmount=0/,
+    );
+  });
+});
+
 describe("computeEntryFromAllowance — malformed original entry", () => {
   it("throws when input original has wrong number of Cr lines", () => {
     const malformed: ComputedEntry = {
@@ -547,5 +604,117 @@ describe("computeEntryFromAllowance — entry_date fallback", () => {
       extracted_data: { amount: 100, taxAmount: 5 },
     });
     expect(computeEntryFromAllowance(allowance, originalEntry).entry_date).toBe("2026-08-01");
+  });
+});
+
+describe("computeDefaultEntryFromAllowance — 進項折讓 (no original invoice)", () => {
+  it("with tax: Dr 結算 / Cr 7044 其他收入 / Cr 1144 進項稅額 (cash ≤ 10,000)", () => {
+    const allowance = makeAllowance({
+      in_or_out: "in",
+      extracted_data: { date: "2026/06/10", amount: 1_000, taxAmount: 50 },
+    });
+    const computed = computeDefaultEntryFromAllowance(allowance);
+    expect(computed.voucher_type).toBe("收入");
+    expect(computed.entry_date).toBe("2026-06-10");
+    expect(computed.lines).toEqual([
+      { account_code: ACCT_CASH, debit: 1_050, credit: 0, description: null },
+      { account_code: ACCT_OTHER_INCOME, debit: 0, credit: 1_000, description: null },
+      { account_code: ACCT_INPUT_TAX, debit: 0, credit: 50, description: null },
+    ]);
+    expect(sumBalance(computed.lines)).toEqual({ debit: 1_050, credit: 1_050 });
+  });
+
+  it("without tax (taxAmount=0): no 進項稅額 line", () => {
+    const allowance = makeAllowance({
+      in_or_out: "in",
+      extracted_data: { amount: 800, taxAmount: 0 },
+    });
+    const computed = computeDefaultEntryFromAllowance(allowance);
+    expect(computed.lines).toEqual([
+      { account_code: ACCT_CASH, debit: 800, credit: 0, description: null },
+      { account_code: ACCT_OTHER_INCOME, debit: 0, credit: 800, description: null },
+    ]);
+    expect(sumBalance(computed.lines)).toEqual({ debit: 800, credit: 800 });
+  });
+
+  it("uses bank settlement when total > 10,000", () => {
+    const allowance = makeAllowance({
+      in_or_out: "in",
+      extracted_data: { amount: 20_000, taxAmount: 1_000 },
+    });
+    const computed = computeDefaultEntryFromAllowance(allowance);
+    expect(computed.lines[0]?.account_code).toBe(ACCT_BANK);
+    expect(computed.lines[0]?.debit).toBe(21_000);
+  });
+});
+
+describe("computeDefaultEntryFromAllowance — 銷項折讓 (no original invoice)", () => {
+  it("with tax: Dr 4101 營業收入 / Dr 2134 銷項稅額 / Cr 結算", () => {
+    const allowance = makeAllowance({
+      in_or_out: "out",
+      extracted_data: { date: "2026/07/15", amount: 2_000, taxAmount: 100 },
+    });
+    const computed = computeDefaultEntryFromAllowance(allowance);
+    expect(computed.voucher_type).toBe("支出");
+    expect(computed.entry_date).toBe("2026-07-15");
+    expect(computed.lines).toEqual([
+      { account_code: ACCT_REVENUE, debit: 2_000, credit: 0, description: null },
+      { account_code: ACCT_OUTPUT_TAX, debit: 100, credit: 0, description: null },
+      { account_code: ACCT_CASH, debit: 0, credit: 2_100, description: null },
+    ]);
+    expect(sumBalance(computed.lines)).toEqual({ debit: 2_100, credit: 2_100 });
+  });
+
+  it("without tax (taxAmount=0): no 銷項稅額 line", () => {
+    const allowance = makeAllowance({
+      in_or_out: "out",
+      extracted_data: { amount: 500, taxAmount: 0 },
+    });
+    const computed = computeDefaultEntryFromAllowance(allowance);
+    expect(computed.lines).toEqual([
+      { account_code: ACCT_REVENUE, debit: 500, credit: 0, description: null },
+      { account_code: ACCT_CASH, debit: 0, credit: 500, description: null },
+    ]);
+    expect(sumBalance(computed.lines)).toEqual({ debit: 500, credit: 500 });
+  });
+});
+
+describe("shouldCreateEntry — skip predicate", () => {
+  it("returns false for 作廢 / 彙加 regardless of direction", () => {
+    for (const taxType of ["作廢", "彙加"] as const) {
+      for (const direction of ["in", "out"] as const) {
+        expect(
+          shouldCreateEntry(
+            makeInvoice({ in_or_out: direction, extracted_data: { taxType } }),
+          ),
+        ).toBe(false);
+      }
+    }
+  });
+
+  it("returns false for 銷項 零稅率 / 免稅", () => {
+    for (const taxType of ["零稅率", "免稅"] as const) {
+      expect(
+        shouldCreateEntry(
+          makeInvoice({ in_or_out: "out", extracted_data: { taxType } }),
+        ),
+      ).toBe(false);
+    }
+  });
+
+  it("returns true for 進項 零稅率 / 免稅 (posts as 2-line NON_VAT shape)", () => {
+    for (const taxType of ["零稅率", "免稅"] as const) {
+      expect(
+        shouldCreateEntry(
+          makeInvoice({ in_or_out: "in", extracted_data: { taxType } }),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it("returns true for 應稅 / omitted taxType in both directions", () => {
+    expect(shouldCreateEntry(makeInvoice({ in_or_out: "in", extracted_data: { taxType: "應稅" } }))).toBe(true);
+    expect(shouldCreateEntry(makeInvoice({ in_or_out: "out", extracted_data: {} }))).toBe(true);
+    expect(shouldCreateEntry(makeInvoice({ in_or_out: "in", extracted_data: null }))).toBe(true);
   });
 });

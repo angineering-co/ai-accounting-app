@@ -11,6 +11,7 @@ import {
 } from "@/lib/domain/models";
 import { type Json, type TablesUpdate, type Database } from "@/supabase/database.types";
 import { tryLinkOriginalInvoice } from "@/lib/services/invoice-import";
+import { confirmAllowanceEntry } from "@/lib/services/journal-entry";
 import { extractAllowanceData, type ClientInfo } from "@/lib/services/gemini";
 import { getImportFileMimeType } from "@/lib/utils/mime-type";
 import { enrichExtractedParties } from "@/lib/services/business-lookup";
@@ -92,8 +93,12 @@ export async function createAllowance(
  * `documents` row by the DB trigger `sync_documents_cache_from_allowances`
  * (see `supabase/migrations/20260526000000_sync_documents_cache_from_subtables.sql`).
  */
-export async function updateAllowance(allowanceId: string, data: UpdateAllowanceInput) {
-  const supabase = await createClient();
+export async function updateAllowance(
+  allowanceId: string,
+  data: UpdateAllowanceInput,
+  options?: AllowanceServiceOptions,
+) {
+  const supabase = options?.supabaseClient ?? (await createClient());
 
   const validated = updateAllowanceSchema.parse(data);
 
@@ -145,6 +150,25 @@ export async function updateAllowance(allowanceId: string, data: UpdateAllowance
       newSerialCode,
       supabase
     );
+  }
+
+  // Phase 7: confirming an allowance generates its draft journal entry. Runs
+  // after the re-link so confirmAllowanceEntry sees a fresh original_invoice_id.
+  // Idempotent; mirrors the original invoice's entry, or applies the default
+  // rule when original_invoice_id is NULL. confirmAllowanceEntry resolves and
+  // asserts the authenticated user itself (throws if absent), so we don't guard
+  // on user here — silently skipping would leave a confirmed allowance without
+  // its entry.
+  // NOTE: this runs in a separate transaction from the status flip / re-link
+  // above, so the overall updateAllowance is not atomic (a failure here leaves
+  // the allowance confirmed without an entry; re-confirming heals it). Making the
+  // flip + entry one transaction is deferred to the Phase 8 persistence-layer
+  // refactor.
+  if (allowance?.status === "confirmed") {
+    await confirmAllowanceEntry(allowanceId, {
+      supabaseClient: supabase,
+      userId: options?.userId,
+    });
   }
 
   return allowance;

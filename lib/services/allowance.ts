@@ -151,15 +151,17 @@ export async function updateAllowance(allowanceId: string, data: UpdateAllowance
   // Phase 7: confirming an allowance generates its draft journal entry. Runs
   // after the re-link so confirmAllowanceEntry sees a fresh original_invoice_id.
   // Idempotent; mirrors the original invoice's entry, or applies the default
-  // rule when original_invoice_id is NULL.
+  // rule when original_invoice_id is NULL. confirmAllowanceEntry resolves and
+  // asserts the authenticated user itself (throws if absent), so we don't guard
+  // on user here — silently skipping would leave a confirmed allowance without
+  // its entry.
+  // NOTE: this runs in a separate transaction from the status flip / re-link
+  // above, so the overall updateAllowance is not atomic (a failure here leaves
+  // the allowance confirmed without an entry; re-confirming heals it). Making the
+  // flip + entry one transaction is deferred to the Phase 8 persistence-layer
+  // refactor.
   if (allowance?.status === "confirmed") {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await confirmAllowanceEntry(allowanceId, {
-        supabaseClient: supabase,
-        userId: user.id,
-      });
-    }
+    await confirmAllowanceEntry(allowanceId, { supabaseClient: supabase });
   }
 
   return allowance;

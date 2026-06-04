@@ -342,7 +342,7 @@ export function computeDefaultEntryFromAllowance(allowance: Allowance): Computed
 // and 彙加 (TET_U synthetic row), plus 銷項 零稅率/免稅, are valid filing states
 // that produce NO entry — the confirm path must skip them rather than error.
 // KEEP IN SYNC with the throw guards at the top of computeEntryFromInvoice.
-export function invoiceProducesEntry(invoice: Invoice): boolean {
+export function shouldCreateEntry(invoice: Invoice): boolean {
   const data = invoice.extracted_data ?? {};
   if (data.taxType === "作廢" || data.taxType === "彙加") return false;
   if (

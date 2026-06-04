@@ -246,15 +246,16 @@ export async function updateInvoice(invoiceId: string, data: UpdateInvoiceInput)
 
   // Phase 7: confirming an invoice generates its draft journal entry. Idempotent
   // (re-confirm / edit-while-confirmed replaces the draft's lines); a no-op for
-  // 作廢 / 彙加 / 銷項 零稅率·免稅 and for non-confirmed saves.
+  // 作廢 / 彙加 / 銷項 零稅率·免稅 and for non-confirmed saves. confirmInvoiceEntry
+  // resolves and asserts the authenticated user itself (throws if absent), so we
+  // don't guard on user here — silently skipping would leave a confirmed invoice
+  // without its entry.
+  // NOTE: this runs in a separate transaction from the status flip above, so the
+  // overall updateInvoice is not atomic (a failure here leaves the invoice
+  // confirmed without an entry; re-confirming heals it). Making the flip + entry
+  // one transaction is deferred to the Phase 8 persistence-layer refactor.
   if (invoice?.status === "confirmed") {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await confirmInvoiceEntry(invoiceId, {
-        supabaseClient: supabase,
-        userId: user.id,
-      });
-    }
+    await confirmInvoiceEntry(invoiceId, { supabaseClient: supabase });
   }
 
   return { success: true as const, invoice };

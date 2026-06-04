@@ -12,7 +12,7 @@ import {
   computeDefaultEntryFromAllowance,
   computeEntryFromAllowance,
   computeEntryFromInvoice,
-  invoiceProducesEntry,
+  shouldCreateEntry,
   pickSettlementAccount,
 } from "./journal-entry-generation";
 
@@ -625,12 +625,12 @@ describe("computeDefaultEntryFromAllowance — 銷項折讓 (no original invoice
   });
 });
 
-describe("invoiceProducesEntry — skip predicate", () => {
+describe("shouldCreateEntry — skip predicate", () => {
   it("returns false for 作廢 / 彙加 regardless of direction", () => {
     for (const taxType of ["作廢", "彙加"] as const) {
       for (const direction of ["in", "out"] as const) {
         expect(
-          invoiceProducesEntry(
+          shouldCreateEntry(
             makeInvoice({ in_or_out: direction, extracted_data: { taxType } }),
           ),
         ).toBe(false);
@@ -641,7 +641,7 @@ describe("invoiceProducesEntry — skip predicate", () => {
   it("returns false for 銷項 零稅率 / 免稅", () => {
     for (const taxType of ["零稅率", "免稅"] as const) {
       expect(
-        invoiceProducesEntry(
+        shouldCreateEntry(
           makeInvoice({ in_or_out: "out", extracted_data: { taxType } }),
         ),
       ).toBe(false);
@@ -651,7 +651,7 @@ describe("invoiceProducesEntry — skip predicate", () => {
   it("returns true for 進項 零稅率 / 免稅 (posts as 2-line NON_VAT shape)", () => {
     for (const taxType of ["零稅率", "免稅"] as const) {
       expect(
-        invoiceProducesEntry(
+        shouldCreateEntry(
           makeInvoice({ in_or_out: "in", extracted_data: { taxType } }),
         ),
       ).toBe(true);
@@ -659,8 +659,8 @@ describe("invoiceProducesEntry — skip predicate", () => {
   });
 
   it("returns true for 應稅 / omitted taxType in both directions", () => {
-    expect(invoiceProducesEntry(makeInvoice({ in_or_out: "in", extracted_data: { taxType: "應稅" } }))).toBe(true);
-    expect(invoiceProducesEntry(makeInvoice({ in_or_out: "out", extracted_data: {} }))).toBe(true);
-    expect(invoiceProducesEntry(makeInvoice({ in_or_out: "in", extracted_data: null }))).toBe(true);
+    expect(shouldCreateEntry(makeInvoice({ in_or_out: "in", extracted_data: { taxType: "應稅" } }))).toBe(true);
+    expect(shouldCreateEntry(makeInvoice({ in_or_out: "out", extracted_data: {} }))).toBe(true);
+    expect(shouldCreateEntry(makeInvoice({ in_or_out: "in", extracted_data: null }))).toBe(true);
   });
 });

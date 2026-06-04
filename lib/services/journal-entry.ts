@@ -1,4 +1,8 @@
-'use server';
+// NOT a Server Action module (intentionally no 'use server'). confirmInvoiceEntry /
+// confirmAllowanceEntry are internal helpers, called only by updateInvoice /
+// updateAllowance on the server. Marking this 'use server' would expose them as
+// public endpoints; since they accept an injected userId, a client could then
+// pass an arbitrary id and bypass the assertCallerCanAccessClient RLS check.
 
 import { eq, sql } from "drizzle-orm";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -25,7 +29,7 @@ import {
   computeDefaultEntryFromAllowance,
   computeEntryFromAllowance,
   computeEntryFromInvoice,
-  invoiceProducesEntry,
+  shouldCreateEntry,
 } from "@/lib/services/journal-entry-generation";
 
 type JournalEntryServiceOptions = {
@@ -55,7 +59,7 @@ type AllowanceRow = Database["public"]["Tables"]["allowances"]["Row"];
 // computation only needs the raw fields, so a stale value must not break a save.
 function rowToInvoice(row: InvoiceRow): Invoice {
   if (!row.client_id) {
-    throw new Error(`confirmInvoiceEntry: invoice ${row.id} has no client_id`);
+    throw new Error(`rowToInvoice: invoice ${row.id} has no client_id`);
   }
   const parsed = extractedInvoiceDataSchema.safeParse(row.extracted_data ?? undefined);
   return {
@@ -79,7 +83,7 @@ function rowToInvoice(row: InvoiceRow): Invoice {
 
 function rowToAllowance(row: AllowanceRow): Allowance {
   if (!row.client_id) {
-    throw new Error(`confirmAllowanceEntry: allowance ${row.id} has no client_id`);
+    throw new Error(`rowToAllowance: allowance ${row.id} has no client_id`);
   }
   const parsed = extractedAllowanceDataSchema.safeParse(row.extracted_data ?? undefined);
   return {
@@ -224,7 +228,7 @@ export async function confirmInvoiceEntry(
   }
 
   const invoice = rowToInvoice(row);
-  if (!invoiceProducesEntry(invoice)) return null;
+  if (!shouldCreateEntry(invoice)) return null;
 
   const computed = computeEntryFromInvoice(invoice);
 

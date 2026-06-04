@@ -93,8 +93,12 @@ export async function createAllowance(
  * `documents` row by the DB trigger `sync_documents_cache_from_allowances`
  * (see `supabase/migrations/20260526000000_sync_documents_cache_from_subtables.sql`).
  */
-export async function updateAllowance(allowanceId: string, data: UpdateAllowanceInput) {
-  const supabase = await createClient();
+export async function updateAllowance(
+  allowanceId: string,
+  data: UpdateAllowanceInput,
+  options?: AllowanceServiceOptions,
+) {
+  const supabase = options?.supabaseClient ?? (await createClient());
 
   const validated = updateAllowanceSchema.parse(data);
 
@@ -161,7 +165,10 @@ export async function updateAllowance(allowanceId: string, data: UpdateAllowance
   // flip + entry one transaction is deferred to the Phase 8 persistence-layer
   // refactor.
   if (allowance?.status === "confirmed") {
-    await confirmAllowanceEntry(allowanceId, { supabaseClient: supabase });
+    await confirmAllowanceEntry(allowanceId, {
+      supabaseClient: supabase,
+      userId: options?.userId,
+    });
   }
 
   return allowance;

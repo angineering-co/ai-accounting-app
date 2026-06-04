@@ -160,8 +160,12 @@ export type UpdateInvoiceResult =
       conflictingClientId: string;
     };
 
-export async function updateInvoice(invoiceId: string, data: UpdateInvoiceInput): Promise<UpdateInvoiceResult> {
-  const supabase = await createClient();
+export async function updateInvoice(
+  invoiceId: string,
+  data: UpdateInvoiceInput,
+  options?: InvoiceServiceOptions,
+): Promise<UpdateInvoiceResult> {
+  const supabase = options?.supabaseClient ?? (await createClient());
   
   const validated = updateInvoiceSchema.parse(data);
 
@@ -255,7 +259,10 @@ export async function updateInvoice(invoiceId: string, data: UpdateInvoiceInput)
   // confirmed without an entry; re-confirming heals it). Making the flip + entry
   // one transaction is deferred to the Phase 8 persistence-layer refactor.
   if (invoice?.status === "confirmed") {
-    await confirmInvoiceEntry(invoiceId, { supabaseClient: supabase });
+    await confirmInvoiceEntry(invoiceId, {
+      supabaseClient: supabase,
+      userId: options?.userId,
+    });
   }
 
   return { success: true as const, invoice };

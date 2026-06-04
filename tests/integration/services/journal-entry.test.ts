@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { createInvoice } from "@/lib/services/invoice";
-import { createAllowance } from "@/lib/services/allowance";
+import { createInvoice, updateInvoice } from "@/lib/services/invoice";
+import { createAllowance, updateAllowance } from "@/lib/services/allowance";
 import {
   confirmInvoiceEntry,
   confirmAllowanceEntry,
@@ -32,11 +32,10 @@ const hasDbEnv = Boolean(
     process.env.DATABASE_URL,
 );
 
-// We exercise confirmInvoiceEntry / confirmAllowanceEntry directly (they take an
-// injected service client + userId). updateInvoice / updateAllowance are not
-// integration-testable without a cookie session — they build their own
-// user-scoped client — so their thin confirm dispatch is covered by type-check +
-// manual smoke instead.
+// We exercise confirmInvoiceEntry / confirmAllowanceEntry directly (injected
+// service client + userId), and also drive updateInvoice / updateAllowance
+// end-to-end through the same injected-options pattern — so the confirm dispatch
+// (status flip → entry generation) is covered, not just the inner functions.
 describe.skipIf(!hasDbEnv)("Phase 7 — confirm → draft journal entry", () => {
   let supabase: ReturnType<typeof getServiceClient>;
   let fixture: TestFixture;
@@ -384,5 +383,82 @@ describe.skipIf(!hasDbEnv)("Phase 7 — confirm → draft journal entry", () => 
     });
     expect(entryId).toBeNull();
     expect(await getEntryWithLines(invoice.document_id!)).toBeNull();
+  });
+
+  // ---------- confirm dispatch via updateInvoice / updateAllowance ----------
+  // Drives the real server-action entry points end-to-end (status flip → confirm
+  // dispatch → entry), not just the inner confirm functions. Note: the flip and
+  // the entry write are separate transactions (see the NOTE in updateInvoice);
+  // atomicity is deferred to the Phase 8 persistence-layer refactor.
+
+  it("updateInvoice → confirmed flips status and writes the draft entry", async () => {
+    const invoice = await createInvoice(
+      {
+        firm_id: fixture.firmId,
+        client_id: fixture.clientId,
+        storage_path: `${fixture.firmId}/11505/${fixture.clientId}/${crypto.randomUUID()}.pdf`,
+        filename: "inv.pdf",
+        in_or_out: "in",
+      },
+      { supabaseClient: supabase, userId: fixture.userId },
+    );
+
+    const result = await updateInvoice(
+      invoice.id,
+      {
+        status: "confirmed",
+        extracted_data: {
+          date: "2026/01/15",
+          totalSales: 10_000,
+          tax: 500,
+          totalAmount: 10_500,
+          deductible: true,
+          account: "6113 旅費",
+        },
+      },
+      { supabaseClient: supabase, userId: fixture.userId },
+    );
+    expect(result.success).toBe(true);
+
+    const got = await getEntryWithLines(invoice.document_id!);
+    expect(got).not.toBeNull();
+    expect(got!.entry.status).toBe("draft");
+    expect(simplify(got!.lines)).toEqual([
+      { account_code: "6113", debit: 10_000, credit: 0 },
+      { account_code: ACCT_INPUT_TAX, debit: 500, credit: 0 },
+      { account_code: ACCT_BANK, debit: 0, credit: 10_500 },
+    ]);
+  });
+
+  it("updateAllowance → confirmed writes a default-rule draft entry (no original)", async () => {
+    const allowance = await createAllowance(
+      {
+        firm_id: fixture.firmId,
+        client_id: fixture.clientId,
+        storage_path: `${fixture.firmId}/11505/${fixture.clientId}/${crypto.randomUUID()}.pdf`,
+        filename: "all.pdf",
+        in_or_out: "in",
+      },
+      { supabaseClient: supabase, userId: fixture.userId },
+    );
+
+    await updateAllowance(
+      allowance.id,
+      {
+        status: "confirmed",
+        extracted_data: { amount: 1_000, taxAmount: 50 },
+      },
+      { supabaseClient: supabase, userId: fixture.userId },
+    );
+
+    const got = await getEntryWithLines(allowance.document_id!);
+    expect(got).not.toBeNull();
+    expect(got!.entry.voucher_type).toBe("收入");
+    // total 1,050 ≤ 10,000 → settlement 1111; default 進項折讓 → 7044
+    expect(simplify(got!.lines)).toEqual([
+      { account_code: ACCT_CASH, debit: 1_050, credit: 0 },
+      { account_code: ACCT_OTHER_INCOME, debit: 0, credit: 1_000 },
+      { account_code: ACCT_INPUT_TAX, debit: 0, credit: 50 },
+    ]);
   });
 });

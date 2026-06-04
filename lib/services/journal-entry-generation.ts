@@ -194,21 +194,27 @@ export function computeEntryFromAllowance(
   if (allowance.in_or_out === "in") {
     const roles = extractInputInvoiceRoles(originalEntry);
     if (roles.hasSeparateTaxLine) {
-      // Mirror deductible input: Dr 結算 / Cr 費用 (+ Cr 進項稅額 when the allowance
-      // itself carries tax). A zero-tax allowance drops the 進項稅額 line — a 0/0
-      // line would violate the debit_credit_xor CHECK.
-      const lines: ComputedEntryLine[] = [
-        { account_code: roles.settlementAccount, debit: total, credit: 0, description: null },
-        { account_code: roles.expenseAccount, debit: 0, credit: amount, description: null },
-      ];
-      if (taxAmount > 0) {
-        lines.push({ account_code: ACCT_INPUT_TAX, debit: 0, credit: taxAmount, description: null });
+      // Mirror deductible input: Dr 結算 / Cr 費用 / Cr 進項稅額. The original was a
+      // taxable, deductible purchase (it carries a separate 進項稅額 line), so a
+      // mirroring allowance must carry tax too. taxAmount=0 here is almost
+      // certainly bad data (e.g. OCR dropped 折讓稅額); fail loud so staff fix it,
+      // rather than booking a silently-wrong entry (a 0/0 tax line would also
+      // break the debit_credit_xor CHECK).
+      if (taxAmount <= 0) {
+        throw new Error(
+          `computeEntryFromAllowance: allowance ${allowance.id} mirrors a deductible ` +
+            `(taxed) original but has taxAmount=0; refusing to generate. Check 折讓稅額.`,
+        );
       }
       return {
         voucher_type: "收入",
         entry_date,
         description: buildAllowanceDescription(allowance, "進項折讓"),
-        lines,
+        lines: [
+          { account_code: roles.settlementAccount, debit: total, credit: 0, description: null },
+          { account_code: roles.expenseAccount, debit: 0, credit: amount, description: null },
+          { account_code: ACCT_INPUT_TAX, debit: 0, credit: taxAmount, description: null },
+        ],
       };
     }
     // Mirror non-deductible input: 2 lines, tax merged into expense reversal.

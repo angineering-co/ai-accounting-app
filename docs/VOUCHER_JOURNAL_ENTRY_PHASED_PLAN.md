@@ -423,6 +423,8 @@
 
 **目標**：phase 2 已建好的「批次過帳」按鈕從 in-memory mutation 切到真實 RPC。
 
+> **Phase 7 帶入的 deferred 項（confirm 原子化）**：Phase 7 write-path（PR #211）中，`updateInvoice` / `updateAllowance` 的 status flip 與分錄產生為**兩個獨立交易**，整體非原子（confirm 失敗會留下「已確認卻無分錄」，靠 idempotent re-confirm 自我修復；Phase 7 時 read-path 尚未切換、無 UI 消費這些分錄，故可接受）。本階段引入 post / edit / reverse 的多表原子寫入時，順勢抽一層薄持久化 / 交易 helper，讓 `update*` 的「flip + 產生分錄」收進同一 `db.transaction()`，消除該 window。屆時若仍有殘留的 confirmed-無分錄 row，可用 idempotent 的 `confirmInvoiceEntry` / `confirmAllowanceEntry` 寫一次性 reconcile 補齊。
+
 **改動**：
 - Migration `<ts>_create_post_journal_entries_rpc.sql`：完整實作 §5.4
   - FOR UPDATE 排序、status check、balance check、**fiscal_year_closes guard**、atomic seq UPSERT（`voucher_sequences`）、status flip

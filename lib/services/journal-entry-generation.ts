@@ -229,22 +229,30 @@ export function computeEntryFromAllowance(
     };
   }
 
-  // 銷項折讓: mirror Dr 4101 / Cr 結算 (+ Dr 2134 when the allowance carries tax).
-  // A zero-tax 銷項折讓 (免稅 / 零稅率) drops the 銷項稅額 line — a 0/0 line would
-  // violate the debit_credit_xor CHECK.
+  // 銷項折讓: mirror Dr 4101 / Dr 2134 / Cr 結算. The original was a taxable 銷項
+  // (銷項 entries are only created for 應稅 — 零稅率 / 免稅 produce none), so a
+  // mirroring allowance must carry tax too. taxAmount=0 here is almost certainly
+  // bad data; fail loud (symmetric with the deductible-input branch above) rather
+  // than book a silently-wrong entry (a 0/0 tax line would also break
+  // debit_credit_xor). A genuinely zero-tax 銷項折讓 (免稅 / 零稅率 sales) never
+  // reaches the mirror — its original has no entry, so it routes through
+  // computeDefaultEntryFromAllowance instead.
   const roles = extractOutputInvoiceRoles(originalEntry);
-  const lines: ComputedEntryLine[] = [
-    { account_code: roles.revenueAccount, debit: amount, credit: 0, description: null },
-  ];
-  if (taxAmount > 0) {
-    lines.push({ account_code: ACCT_OUTPUT_TAX, debit: taxAmount, credit: 0, description: null });
+  if (taxAmount <= 0) {
+    throw new Error(
+      `computeEntryFromAllowance: allowance ${allowance.id} mirrors a taxed 銷項 ` +
+        `original but has taxAmount=0; refusing to generate. Check 折讓稅額.`,
+    );
   }
-  lines.push({ account_code: roles.settlementAccount, debit: 0, credit: total, description: null });
   return {
     voucher_type: "支出",
     entry_date,
     description: buildAllowanceDescription(allowance, "銷項折讓"),
-    lines,
+    lines: [
+      { account_code: roles.revenueAccount, debit: amount, credit: 0, description: null },
+      { account_code: ACCT_OUTPUT_TAX, debit: taxAmount, credit: 0, description: null },
+      { account_code: roles.settlementAccount, debit: 0, credit: total, description: null },
+    ],
   };
 }
 

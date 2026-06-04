@@ -496,9 +496,11 @@ describe("computeEntryFromAllowance — 銷項折讓 (mirrors original output en
   });
 });
 
-describe("computeEntryFromAllowance — 銷項折讓 zero-tax (no 銷項稅額 line)", () => {
-  // Original taxed 銷項 (3-line) but the allowance itself carries no tax — the
-  // mirror must drop the 2134 line rather than emit a 0/0 line (debit_credit_xor).
+describe("computeEntryFromAllowance — 銷項折讓 zero-tax against taxed original", () => {
+  // Symmetric with the deductible-input case: a taxed 銷項 original mirrored by a
+  // zero-tax allowance is not a valid filing combination (a real 免稅 / 零稅率
+  // 銷項折讓 has no original entry and routes through the default rule). taxAmount=0
+  // here means dirty data, so fail loud.
   const originalEntry = computeEntryFromInvoice(
     makeInvoice({
       in_or_out: "out",
@@ -511,13 +513,10 @@ describe("computeEntryFromAllowance — 銷項折讓 zero-tax (no 銷項稅額 l
     extracted_data: { amount: 2_000, taxAmount: 0 },
   });
 
-  it("emits 2 balanced lines (Dr 4101 / Cr 結算), no 2134", () => {
-    const { lines } = computeEntryFromAllowance(allowance, originalEntry);
-    expect(lines).toEqual([
-      { account_code: ACCT_REVENUE, debit: 2_000, credit: 0, description: null },
-      { account_code: ACCT_BANK, debit: 0, credit: 2_000, description: null },
-    ]);
-    expect(sumBalance(lines)).toEqual({ debit: 2_000, credit: 2_000 });
+  it("throws (a taxed original requires the allowance to carry tax)", () => {
+    expect(() => computeEntryFromAllowance(allowance, originalEntry)).toThrow(
+      /taxAmount=0/,
+    );
   });
 });
 

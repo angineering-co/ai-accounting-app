@@ -1,6 +1,14 @@
 "use server";
 
+import { cookies, headers } from "next/headers";
+import { after } from "next/server";
+
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  parseGaClientId,
+  trackLeadServerSide,
+  type ServerLeadInput,
+} from "@/lib/services/server-conversions";
 
 export type ApplyFormPath = "registration" | "bookkeeping";
 
@@ -125,6 +133,8 @@ export async function submitApplyForm(
 
   try {
     const supabase = createAdminClient();
+    let successCode = leadCode;
+
     const { error } = await supabase.from("leads").insert({
       lead_code: leadCode,
       path: formData.path,
@@ -144,16 +154,48 @@ export async function submitApplyForm(
           console.error("Lead insert retry failed:", retryError);
           return { success: false, error: "送出失敗，請稍後再試" };
         }
-        return { success: true, leadCode: retryCode };
+        successCode = retryCode;
+      } else {
+        console.error("Lead insert failed:", error);
+        return { success: false, error: "送出失敗，請稍後再試" };
       }
-
-      console.error("Lead insert failed:", error);
-      return { success: false, error: "送出失敗，請稍後再試" };
     }
 
-    return { success: true, leadCode };
+    // Capture request context now (headers/cookies must be read in scope),
+    // then defer the outbound HTTP calls until after the response is sent.
+    const trackingInput = await buildTrackingInput(formData, successCode);
+    after(async () => {
+      try {
+        await trackLeadServerSide(trackingInput);
+      } catch (err) {
+        console.error("[track-lead] failed", err);
+      }
+    });
+
+    return { success: true, leadCode: successCode };
   } catch (err) {
     console.error("Unexpected error in submitApplyForm:", err);
     return { success: false, error: "送出失敗，請稍後再試" };
   }
+}
+
+async function buildTrackingInput(
+  formData: ApplyFormData,
+  leadCode: string,
+): Promise<ServerLeadInput> {
+  const reqHeaders = await headers();
+  const reqCookies = await cookies();
+  const host = reqHeaders.get("host");
+  return {
+    path: formData.path,
+    leadCode,
+    email: formData.email,
+    phone: formData.phone,
+    clientIp: reqHeaders.get("x-forwarded-for")?.split(",")[0]?.trim(),
+    userAgent: reqHeaders.get("user-agent") ?? undefined,
+    gaClientId: parseGaClientId(reqCookies.get("_ga")?.value),
+    fbp: reqCookies.get("_fbp")?.value,
+    fbc: reqCookies.get("_fbc")?.value,
+    eventSourceUrl: host ? `https://${host}/apply` : "https://snapbooks.ai/apply",
+  };
 }

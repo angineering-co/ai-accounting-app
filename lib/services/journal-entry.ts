@@ -1,8 +1,15 @@
-// NOT a Server Action module (intentionally no 'use server'). confirmInvoiceEntry /
-// confirmAllowanceEntry are internal helpers, called only by updateInvoice /
-// updateAllowance on the server. Marking this 'use server' would expose them as
-// public endpoints; since they accept an injected userId, a client could then
-// pass an arbitrary id and bypass the assertCallerCanAccessClient RLS check.
+// NOT a Server Action module (intentionally no 'use server'). The exports here
+// accept an injected userId (for tests / internal composition); marking this
+// 'use server' would expose them as public endpoints where a client could pass
+// an arbitrary userId and bypass the assertCallerCanAccessClient RLS check. The
+// UI reaches the period-batch helpers (getPeriodEntryStatus /
+// generateDraftEntriesByPeriod) through the thin 'use server' wrappers in
+// lib/services/voucher-generation.ts.
+//
+// confirmInvoiceEntry / confirmAllowanceEntry are the per-document generators
+// (compute + upsertDraftEntry); they are exercised by the journal-entry test
+// suite and earmarked for the edit path (Phase 9). The period batch shares their
+// compute/upsert layer rather than calling them directly.
 
 import { and, eq, lt, or, sql } from "drizzle-orm";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -557,6 +564,10 @@ async function loadConfirmedRows<T>(
   periodId: string,
 ): Promise<T[]> {
   const out: T[] = [];
+  // Offset-paginate until a short (incl. empty) page. Guaranteed to terminate:
+  // `from` advances by CONFIRMED_PAGE each iteration, the period's confirmed set
+  // is fixed during the run (mutex held; the batch writes only journal_entries),
+  // and a finite table always yields a non-full page once `from` passes the end.
   for (let from = 0; ; from += CONFIRMED_PAGE) {
     const { data, error } = await (supabase.from(table) as ReturnType<SupabaseClient<Database>["from"]>)
       .select("*")
@@ -781,7 +792,7 @@ async function processAllowances(
  *   idempotent and resumable (only the missing + stale set is touched).
  * - Per-document failures are non-fatal and returned for display.
  */
-export async function generatePeriodDraftEntries(
+export async function generateDraftEntriesByPeriod(
   periodId: string,
   options?: JournalEntryServiceOptions,
 ): Promise<GeneratePeriodResult> {
@@ -797,7 +808,7 @@ export async function generatePeriodDraftEntries(
   if (periodErr) throw periodErr;
   if (!period) {
     throw new Error(
-      `generatePeriodDraftEntries: period ${periodId} not found or not accessible`,
+      `generateDraftEntriesByPeriod: period ${periodId} not found or not accessible`,
     );
   }
 

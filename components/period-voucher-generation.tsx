@@ -12,22 +12,15 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import { cn, formatIsoDateTimeZhTW } from "@/lib/utils";
 import {
-  generatePeriodDraftEntriesAction,
+  generateDraftEntriesByPeriodAction,
   getPeriodEntryStatusAction,
 } from "@/lib/services/voucher-generation";
 import type { GeneratePeriodResult } from "@/lib/services/journal-entry";
 
 interface PeriodVoucherGenerationProps {
   periodId: string;
-}
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export function PeriodVoucherGeneration({ periodId }: PeriodVoucherGenerationProps) {
@@ -51,7 +44,7 @@ export function PeriodVoucherGeneration({ periodId }: PeriodVoucherGenerationPro
   const handleGenerate = async () => {
     setIsGenerating(true);
     try {
-      const result = await generatePeriodDraftEntriesAction(periodId);
+      const result = await generateDraftEntriesByPeriodAction(periodId);
       setLastResult(result);
       if (result.failures.length === 0) {
         toast.success(
@@ -174,7 +167,7 @@ function FreshnessBadge({
       )}
     >
       <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-      {lastGenerated ? `已是最新 · ${formatDateTime(lastGenerated)}` : "尚未產生"}
+      {lastGenerated ? `已是最新 · ${formatIsoDateTimeZhTW(lastGenerated)}` : "尚未產生"}
     </span>
   );
 }

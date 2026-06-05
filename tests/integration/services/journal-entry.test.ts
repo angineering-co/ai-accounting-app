@@ -21,6 +21,7 @@ import type { Json } from "@/supabase/database.types";
 import {
   cleanupTestFixture,
   createTestFixture,
+  getEntryWithLines,
   getServiceClient,
   type TestFixture,
 } from "@/tests/utils/supabase";
@@ -33,9 +34,9 @@ const hasDbEnv = Boolean(
 );
 
 // We exercise confirmInvoiceEntry / confirmAllowanceEntry directly (injected
-// service client + userId). These are the per-document generators that the
-// period-level batch (generatePeriodDraftEntries) reuses for regeneration;
-// the batch itself is covered in its own suite.
+// service client + userId). These are the per-document generators (compute +
+// upsertDraftEntry); the period-level batch shares their compute/upsert layer
+// rather than calling them, and is covered in its own suite.
 describe.skipIf(!hasDbEnv)("Phase 7 — draft journal entry generators", () => {
   let supabase: ReturnType<typeof getServiceClient>;
   let fixture: TestFixture;
@@ -101,21 +102,6 @@ describe.skipIf(!hasDbEnv)("Phase 7 — draft journal entry generators", () => {
     return { id: allowance.id, document_id: allowance.document_id! };
   }
 
-  async function getEntryWithLines(documentId: string) {
-    const { data: entry } = await supabase
-      .from("journal_entries")
-      .select("*")
-      .eq("document_id", documentId)
-      .maybeSingle();
-    if (!entry) return null;
-    const { data: lines } = await supabase
-      .from("journal_entry_lines")
-      .select("*")
-      .eq("journal_entry_id", entry.id)
-      .order("line_number", { ascending: true });
-    return { entry, lines: lines ?? [] };
-  }
-
   const simplify = (lines: { account_code: string; debit: number; credit: number }[]) =>
     lines.map((l) => ({ account_code: l.account_code, debit: l.debit, credit: l.credit }));
 
@@ -137,7 +123,7 @@ describe.skipIf(!hasDbEnv)("Phase 7 — draft journal entry generators", () => {
     });
     expect(entryId).toBeTruthy();
 
-    const result = await getEntryWithLines(inv.document_id);
+    const result = await getEntryWithLines(supabase, inv.document_id);
     expect(result).not.toBeNull();
     expect(result!.entry.status).toBe("draft");
     expect(result!.entry.voucher_no).toBeNull();
@@ -161,7 +147,7 @@ describe.skipIf(!hasDbEnv)("Phase 7 — draft journal entry generators", () => {
     });
     await confirmInvoiceEntry(inv.id, { supabaseClient: supabase, userId: fixture.userId });
 
-    const result = await getEntryWithLines(inv.document_id);
+    const result = await getEntryWithLines(supabase, inv.document_id);
     expect(simplify(result!.lines)).toEqual([
       { account_code: "6120", debit: 210, credit: 0 },
       { account_code: ACCT_CASH, debit: 0, credit: 210 },
@@ -176,7 +162,7 @@ describe.skipIf(!hasDbEnv)("Phase 7 — draft journal entry generators", () => {
     });
     await confirmInvoiceEntry(inv.id, { supabaseClient: supabase, userId: fixture.userId });
 
-    const result = await getEntryWithLines(inv.document_id);
+    const result = await getEntryWithLines(supabase, inv.document_id);
     expect(result!.entry.voucher_type).toBe("收入");
     expect(simplify(result!.lines)).toEqual([
       { account_code: ACCT_BANK, debit: 21_000, credit: 0 },
@@ -204,7 +190,7 @@ describe.skipIf(!hasDbEnv)("Phase 7 — draft journal entry generators", () => {
     );
     await confirmAllowanceEntry(allowance.id, { supabaseClient: supabase, userId: fixture.userId });
 
-    const result = await getEntryWithLines(allowance.document_id);
+    const result = await getEntryWithLines(supabase, allowance.document_id);
     expect(result!.entry.voucher_type).toBe("收入");
     expect(simplify(result!.lines)).toEqual([
       { account_code: ACCT_BANK, debit: 1_050, credit: 0 },
@@ -228,7 +214,7 @@ describe.skipIf(!hasDbEnv)("Phase 7 — draft journal entry generators", () => {
     );
     await confirmAllowanceEntry(allowance.id, { supabaseClient: supabase, userId: fixture.userId });
 
-    const result = await getEntryWithLines(allowance.document_id);
+    const result = await getEntryWithLines(supabase, allowance.document_id);
     expect(result!.entry.voucher_type).toBe("支出");
     expect(simplify(result!.lines)).toEqual([
       { account_code: ACCT_REVENUE, debit: 2_000, credit: 0 },
@@ -247,7 +233,7 @@ describe.skipIf(!hasDbEnv)("Phase 7 — draft journal entry generators", () => {
     );
     await confirmAllowanceEntry(allowance.id, { supabaseClient: supabase, userId: fixture.userId });
 
-    const result = await getEntryWithLines(allowance.document_id);
+    const result = await getEntryWithLines(supabase, allowance.document_id);
     expect(result!.entry.voucher_type).toBe("收入");
     expect(simplify(result!.lines)).toEqual([
       { account_code: ACCT_CASH, debit: 1_050, credit: 0 },
@@ -264,7 +250,7 @@ describe.skipIf(!hasDbEnv)("Phase 7 — draft journal entry generators", () => {
     );
     await confirmAllowanceEntry(allowance.id, { supabaseClient: supabase, userId: fixture.userId });
 
-    const result = await getEntryWithLines(allowance.document_id);
+    const result = await getEntryWithLines(supabase, allowance.document_id);
     expect(result!.entry.voucher_type).toBe("支出");
     expect(simplify(result!.lines)).toEqual([
       { account_code: ACCT_REVENUE, debit: 500, credit: 0 },
@@ -295,7 +281,7 @@ describe.skipIf(!hasDbEnv)("Phase 7 — draft journal entry generators", () => {
       }),
     ).rejects.toThrow(/has no journal entry/);
 
-    expect(await getEntryWithLines(allowance.document_id)).toBeNull();
+    expect(await getEntryWithLines(supabase, allowance.document_id)).toBeNull();
   });
 
   // ---------- idempotency / regenerate ----------
@@ -339,7 +325,7 @@ describe.skipIf(!hasDbEnv)("Phase 7 — draft journal entry generators", () => {
       .eq("document_id", inv.document_id);
     expect(count).toBe(1);
 
-    const result = await getEntryWithLines(inv.document_id);
+    const result = await getEntryWithLines(supabase, inv.document_id);
     expect(simplify(result!.lines)).toEqual([
       { account_code: "6120", debit: 8_000, credit: 0 },
       { account_code: ACCT_INPUT_TAX, debit: 400, credit: 0 },
@@ -362,7 +348,7 @@ describe.skipIf(!hasDbEnv)("Phase 7 — draft journal entry generators", () => {
       userId: fixture.userId,
     });
     expect(entryId).toBeNull();
-    expect(await getEntryWithLines(inv.document_id)).toBeNull();
+    expect(await getEntryWithLines(supabase, inv.document_id)).toBeNull();
   });
 
   it("non-confirmed invoice → no entry", async () => {
@@ -382,7 +368,7 @@ describe.skipIf(!hasDbEnv)("Phase 7 — draft journal entry generators", () => {
       userId: fixture.userId,
     });
     expect(entryId).toBeNull();
-    expect(await getEntryWithLines(invoice.document_id!)).toBeNull();
+    expect(await getEntryWithLines(supabase, invoice.document_id!)).toBeNull();
   });
 
 });

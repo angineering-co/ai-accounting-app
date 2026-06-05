@@ -3,7 +3,7 @@ import { createInvoice } from "@/lib/services/invoice";
 import { createAllowance } from "@/lib/services/allowance";
 import {
   confirmInvoiceEntry,
-  generatePeriodDraftEntries,
+  generateDraftEntriesByPeriod,
   getPeriodEntryStatus,
 } from "@/lib/services/journal-entry";
 import {
@@ -24,6 +24,7 @@ import type { Json } from "@/supabase/database.types";
 import {
   cleanupTestFixture,
   createTestFixture,
+  getEntryWithLines,
   getServiceClient,
   type TestFixture,
 } from "@/tests/utils/supabase";
@@ -125,41 +126,20 @@ describe.skipIf(!hasDbEnv)("Period draft entries — freshness + batch generatio
     return { id: allowance.id, document_id: allowance.document_id! };
   }
 
-  // The voucher_generation_status column isn't in the generated Supabase types
-  // yet (regenerated after the migration is applied), so write it via a cast.
+  // Directly set the run-state flag to simulate a held / crashed run.
   async function setGenerationFlag(
     periodId: string,
     status: "idle" | "running",
     startedAt: string,
   ): Promise<void> {
-    const { error } = await (
-      supabase.from("tax_filing_periods") as unknown as {
-        update: (v: Record<string, unknown>) => {
-          eq: (c: string, v: string) => Promise<{ error: unknown }>;
-        };
-      }
-    )
+    const { error } = await supabase
+      .from("tax_filing_periods")
       .update({
         voucher_generation_status: status,
         voucher_generation_started_at: startedAt,
       })
       .eq("id", periodId);
     if (error) throw error;
-  }
-
-  async function getEntryWithLines(documentId: string) {
-    const { data: entry } = await supabase
-      .from("journal_entries")
-      .select("*")
-      .eq("document_id", documentId)
-      .maybeSingle();
-    if (!entry) return null;
-    const { data: lines } = await supabase
-      .from("journal_entry_lines")
-      .select("*")
-      .eq("journal_entry_id", entry.id)
-      .order("line_number", { ascending: true });
-    return { entry, lines: lines ?? [] };
   }
 
   const simplify = (
@@ -238,7 +218,8 @@ describe.skipIf(!hasDbEnv)("Period draft entries — freshness + batch generatio
 
     expect((await getPeriodEntryStatus(periodId, opts())).missing).toBe(1);
 
-    // Generate the entry via the per-document path (the batch reuses this).
+    // Seed one entry via the per-document generator, so the freshness check is
+    // shown to react to an entry regardless of which path created it.
     await confirmInvoiceEntry(inv.id, opts());
 
     const afterGen = await getPeriodEntryStatus(periodId, opts());
@@ -274,7 +255,7 @@ describe.skipIf(!hasDbEnv)("Period draft entries — freshness + batch generatio
     expect(status.generationStatus).toBe("idle");
   });
 
-  // ---------- generatePeriodDraftEntries (batch) ----------
+  // ---------- generateDraftEntriesByPeriod (batch) ----------
 
   it("generates draft entries for confirmed invoices (in + out)", async () => {
     const periodId = await createPeriod();
@@ -292,17 +273,17 @@ describe.skipIf(!hasDbEnv)("Period draft entries — freshness + batch generatio
       totalAmount: 21_000,
     });
 
-    const res = await generatePeriodDraftEntries(periodId, opts());
+    const res = await generateDraftEntriesByPeriod(periodId, opts());
     expect(res.generated).toBe(2);
     expect(res.regenerated).toBe(0);
     expect(res.failures).toEqual([]);
 
-    expect(simplify((await getEntryWithLines(inInv.document_id))!.lines)).toEqual([
+    expect(simplify((await getEntryWithLines(supabase, inInv.document_id))!.lines)).toEqual([
       { account_code: "6113", debit: 10_000, credit: 0 },
       { account_code: ACCT_INPUT_TAX, debit: 500, credit: 0 },
       { account_code: ACCT_BANK, debit: 0, credit: 10_500 },
     ]);
-    const out = await getEntryWithLines(outInv.document_id);
+    const out = await getEntryWithLines(supabase, outInv.document_id);
     expect(out!.entry.voucher_type).toBe("收入");
     expect(simplify(out!.lines)).toEqual([
       { account_code: ACCT_BANK, debit: 21_000, credit: 0 },
@@ -329,11 +310,11 @@ describe.skipIf(!hasDbEnv)("Period draft entries — freshness + batch generatio
       original.id,
     );
 
-    const res = await generatePeriodDraftEntries(periodId, opts());
+    const res = await generateDraftEntriesByPeriod(periodId, opts());
     expect(res.generated).toBe(2);
     expect(res.failures).toEqual([]);
 
-    const got = await getEntryWithLines(allowance.document_id);
+    const got = await getEntryWithLines(supabase, allowance.document_id);
     expect(got!.entry.voucher_type).toBe("支出");
     expect(simplify(got!.lines)).toEqual([
       { account_code: ACCT_REVENUE, debit: 2_000, credit: 0 },
@@ -351,10 +332,10 @@ describe.skipIf(!hasDbEnv)("Period draft entries — freshness + batch generatio
       null,
     );
 
-    const res = await generatePeriodDraftEntries(periodId, opts());
+    const res = await generateDraftEntriesByPeriod(periodId, opts());
     expect(res.generated).toBe(1);
 
-    const got = await getEntryWithLines(allowance.document_id);
+    const got = await getEntryWithLines(supabase, allowance.document_id);
     expect(got!.entry.voucher_type).toBe("收入");
     expect(simplify(got!.lines)).toEqual([
       { account_code: ACCT_CASH, debit: 1_050, credit: 0 },
@@ -391,14 +372,14 @@ describe.skipIf(!hasDbEnv)("Period draft entries — freshness + batch generatio
       account: "6113 旅費",
     });
 
-    const res = await generatePeriodDraftEntries(periodId, opts());
+    const res = await generateDraftEntriesByPeriod(periodId, opts());
     expect(res.failures.length).toBe(1);
     expect(res.failures[0]).toMatchObject({
       kind: "allowance",
       documentId: allowance.document_id,
     });
-    expect(await getEntryWithLines(allowance.document_id)).toBeNull();
-    expect(await getEntryWithLines(healthy.document_id)).not.toBeNull();
+    expect(await getEntryWithLines(supabase, allowance.document_id)).toBeNull();
+    expect(await getEntryWithLines(supabase, healthy.document_id)).not.toBeNull();
   });
 
   it("is idempotent: re-running keeps entry ids and reports no work", async () => {
@@ -411,14 +392,14 @@ describe.skipIf(!hasDbEnv)("Period draft entries — freshness + batch generatio
       account: "6113 旅費",
     });
 
-    const first = await generatePeriodDraftEntries(periodId, opts());
+    const first = await generateDraftEntriesByPeriod(periodId, opts());
     expect(first.generated).toBe(1);
-    const firstEntryId = (await getEntryWithLines(inv.document_id))!.entry.id;
+    const firstEntryId = (await getEntryWithLines(supabase, inv.document_id))!.entry.id;
 
-    const second = await generatePeriodDraftEntries(periodId, opts());
+    const second = await generateDraftEntriesByPeriod(periodId, opts());
     expect(second.generated).toBe(0);
     expect(second.regenerated).toBe(0);
-    expect((await getEntryWithLines(inv.document_id))!.entry.id).toBe(firstEntryId);
+    expect((await getEntryWithLines(supabase, inv.document_id))!.entry.id).toBe(firstEntryId);
   });
 
   it("regenerates a stale entry after the doc is edited, keeping entry.id", async () => {
@@ -430,8 +411,8 @@ describe.skipIf(!hasDbEnv)("Period draft entries — freshness + batch generatio
       deductible: true,
       account: "6113 旅費",
     });
-    await generatePeriodDraftEntries(periodId, opts());
-    const entryId = (await getEntryWithLines(inv.document_id))!.entry.id;
+    await generateDraftEntriesByPeriod(periodId, opts());
+    const entryId = (await getEntryWithLines(supabase, inv.document_id))!.entry.id;
 
     // Edit → sync_documents_cache trigger bumps documents.updated_at → stale.
     const { error } = await supabase
@@ -448,11 +429,11 @@ describe.skipIf(!hasDbEnv)("Period draft entries — freshness + batch generatio
       .eq("id", inv.id);
     if (error) throw error;
 
-    const res = await generatePeriodDraftEntries(periodId, opts());
+    const res = await generateDraftEntriesByPeriod(periodId, opts());
     expect(res.generated).toBe(0);
     expect(res.regenerated).toBe(1);
 
-    const got = await getEntryWithLines(inv.document_id);
+    const got = await getEntryWithLines(supabase, inv.document_id);
     expect(got!.entry.id).toBe(entryId);
     expect(simplify(got!.lines)).toEqual([
       { account_code: "6120", debit: 8_000, credit: 0 },
@@ -464,7 +445,7 @@ describe.skipIf(!hasDbEnv)("Period draft entries — freshness + batch generatio
   it("rejects a concurrent run while one holds the period (mutex)", async () => {
     const periodId = await createPeriod();
     await setGenerationFlag(periodId, "running", new Date().toISOString());
-    await expect(generatePeriodDraftEntries(periodId, opts())).rejects.toThrow(/進行中/);
+    await expect(generateDraftEntriesByPeriod(periodId, opts())).rejects.toThrow(/進行中/);
   });
 
   it("reclaims a stale 'running' flag from a crashed run and completes", async () => {
@@ -480,9 +461,9 @@ describe.skipIf(!hasDbEnv)("Period draft entries — freshness + batch generatio
     const stale = new Date(Date.now() - 20 * 60 * 1000).toISOString();
     await setGenerationFlag(periodId, "running", stale);
 
-    const res = await generatePeriodDraftEntries(periodId, opts());
+    const res = await generateDraftEntriesByPeriod(periodId, opts());
     expect(res.generated).toBe(1);
-    expect(await getEntryWithLines(inv.document_id)).not.toBeNull();
+    expect(await getEntryWithLines(supabase, inv.document_id)).not.toBeNull();
     expect((await getPeriodEntryStatus(periodId, opts())).generationStatus).toBe("idle");
   });
 });

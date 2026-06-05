@@ -6,7 +6,7 @@
 // wrappers take only a periodId and let the helper resolve auth from cookies.
 
 import {
-  generatePeriodDraftEntries,
+  generateDraftEntriesByPeriod,
   getPeriodEntryStatus,
   type GeneratePeriodResult,
   type PeriodEntryStatus,
@@ -18,8 +18,8 @@ export async function getPeriodEntryStatusAction(
   return getPeriodEntryStatus(periodId);
 }
 
-export async function generatePeriodDraftEntriesAction(
+export async function generateDraftEntriesByPeriodAction(
   periodId: string,
 ): Promise<GeneratePeriodResult> {
-  return generatePeriodDraftEntries(periodId);
+  return generateDraftEntriesByPeriod(periodId);
 }

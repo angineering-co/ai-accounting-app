@@ -50,6 +50,18 @@ export function formatDateTimeZhTW(date: Date): string {
   return zhTwDateTimeFormatter.format(date);
 }
 
+/**
+ * Format an ISO timestamp string as a zh-TW (Asia/Taipei) date-time. Returns ""
+ * for null/undefined or an unparseable string, so callers never render
+ * "Invalid Date" / NaN.
+ */
+export function formatIsoDateTimeZhTW(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return formatDateTimeZhTW(d);
+}
+
 const taipeiDateFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Taipei",
   year: "numeric",

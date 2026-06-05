@@ -4,7 +4,7 @@
 // public endpoints; since they accept an injected userId, a client could then
 // pass an arbitrary id and bypass the assertCallerCanAccessClient RLS check.
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, lt, or, sql } from "drizzle-orm";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
@@ -13,7 +13,9 @@ import { assertCallerCanAccessClient } from "@/lib/db/rls";
 import {
   journal_entries as journalEntriesTable,
   journal_entry_lines as journalEntryLinesTable,
+  tax_filing_periods as taxFilingPeriodsTable,
 } from "@/lib/db/schema";
+import { chunkedIn } from "@/lib/services/invoice-import";
 import type { Database } from "@/supabase/database.types";
 import {
   extractedInvoiceDataSchema,
@@ -485,4 +487,350 @@ export async function getPeriodEntryStatus(
       : null,
     generationStatus: (row?.generation_status ?? "idle") as VoucherGenerationStatus,
   };
+}
+
+export type GeneratePeriodResult = {
+  /** new draft entries created */
+  generated: number;
+  /** existing draft entries whose lines were replaced (doc edited since) */
+  regenerated: number;
+  /** per-document failures (non-fatal; the rest of the batch still runs) */
+  failures: { documentId: string; kind: "invoice" | "allowance"; reason: string }[];
+};
+
+type DraftEntryItem = {
+  firmId: string;
+  clientId: string;
+  documentId: string;
+  computed: ComputedEntry;
+};
+
+type EntryMeta = { id: string; status: string; updated_at: string | null };
+type WorkKind = "new" | "stale" | "skip";
+
+// `now()` minus the stale-run window: a 'running' flag older than this is treated
+// as a crashed/timed-out run and may be reclaimed (the batch is idempotent).
+const STALE_RUN_GUARD = sql`now() - interval '15 minutes'`;
+
+// One transaction per chunk keeps per-entry atomicity (entry + its lines commit
+// together) without holding a 10k-row transaction open. Sized well under
+// Postgres' 65,535 bind-parameter cap.
+const NEW_ENTRY_CHUNK = 400;
+const LINE_INSERT_CHUNK = 1000;
+const CONFIRMED_PAGE = 1000;
+
+function errorReason(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
+function assertBalanced(computed: ComputedEntry, documentId: string): void {
+  const debit = computed.lines.reduce((a, l) => a + l.debit, 0);
+  const credit = computed.lines.reduce((a, l) => a + l.credit, 0);
+  if (debit !== credit) {
+    throw new Error(
+      `unbalanced computed entry for document ${documentId}: debit ${debit} != credit ${credit}`,
+    );
+  }
+}
+
+// Decide whether a document needs work. `new` (no entry) and `stale` (draft
+// entry older than the doc's last edit) get (re)generated; everything else
+// `skip`s — including posted entries, whose edits route through Phase 9.
+function classify(
+  documentId: string,
+  docUpdatedAt: Map<string, string | null>,
+  entryByDoc: Map<string, EntryMeta>,
+): WorkKind {
+  const entry = entryByDoc.get(documentId);
+  if (!entry) return "new";
+  if (entry.status !== "draft") return "skip";
+  const docTs = docUpdatedAt.get(documentId);
+  if (docTs && entry.updated_at && new Date(docTs) > new Date(entry.updated_at)) {
+    return "stale";
+  }
+  return "skip";
+}
+
+async function loadConfirmedRows<T>(
+  supabase: SupabaseClient<Database>,
+  table: "invoices" | "allowances",
+  periodId: string,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += CONFIRMED_PAGE) {
+    const { data, error } = await (supabase.from(table) as ReturnType<SupabaseClient<Database>["from"]>)
+      .select("*")
+      .eq("tax_filing_period_id", periodId)
+      .eq("status", "confirmed")
+      .order("id", { ascending: true })
+      .range(from, from + CONFIRMED_PAGE - 1);
+    if (error) throw error;
+    const batch = (data ?? []) as unknown as T[];
+    out.push(...batch);
+    if (batch.length < CONFIRMED_PAGE) break;
+  }
+  return out;
+}
+
+// For the given document ids, fetch documents.updated_at (the freshness clock)
+// and any existing journal entry's meta. Chunked to stay under PostgREST's
+// URL-length limit for large periods.
+async function loadEntryState(
+  supabase: SupabaseClient<Database>,
+  documentIds: string[],
+): Promise<{ docUpdatedAt: Map<string, string | null>; entryByDoc: Map<string, EntryMeta> }> {
+  const docUpdatedAt = new Map<string, string | null>();
+  const entryByDoc = new Map<string, EntryMeta>();
+  if (documentIds.length === 0) return { docUpdatedAt, entryByDoc };
+
+  const docs = await chunkedIn<{ id: string; updated_at: string | null }>(
+    () => supabase.from("documents"),
+    "id, updated_at",
+    "id",
+    documentIds,
+  );
+  for (const d of docs) docUpdatedAt.set(d.id, d.updated_at);
+
+  const entries = await chunkedIn<{
+    document_id: string;
+    id: string;
+    status: string;
+    updated_at: string | null;
+  }>(
+    () => supabase.from("journal_entries"),
+    "document_id, id, status, updated_at",
+    "document_id",
+    documentIds,
+  );
+  for (const e of entries) {
+    entryByDoc.set(e.document_id, { id: e.id, status: e.status, updated_at: e.updated_at });
+  }
+  return { docUpdatedAt, entryByDoc };
+}
+
+// Bulk-insert brand-new draft entries: insert the entry headers (returning ids
+// keyed by document_id), then their lines. Within the mutex, this batch is the
+// only writer of entries for the period, so document_id is guaranteed free.
+async function bulkInsertNewEntries(items: DraftEntryItem[], userId: string): Promise<number> {
+  let total = 0;
+  for (let i = 0; i < items.length; i += NEW_ENTRY_CHUNK) {
+    const chunk = items.slice(i, i + NEW_ENTRY_CHUNK);
+    await db.transaction(async (tx) => {
+      const inserted = await tx
+        .insert(journalEntriesTable)
+        .values(
+          chunk.map((it) => ({
+            firm_id: it.firmId,
+            client_id: it.clientId,
+            document_id: it.documentId,
+            voucher_type: it.computed.voucher_type,
+            entry_date: it.computed.entry_date,
+            description: it.computed.description,
+            status: "draft" as const,
+            voucher_no: null,
+            created_by: userId,
+          })),
+        )
+        .returning({
+          id: journalEntriesTable.id,
+          document_id: journalEntriesTable.document_id,
+        });
+      // returning order is not guaranteed, so key the line FK by document_id.
+      const idByDoc = new Map(inserted.map((e) => [e.document_id, e.id]));
+      const lines = chunk.flatMap((it) =>
+        it.computed.lines.map((line, idx) => ({
+          journal_entry_id: idByDoc.get(it.documentId)!,
+          line_number: idx + 1,
+          account_code: line.account_code,
+          debit: line.debit,
+          credit: line.credit,
+          description: line.description,
+        })),
+      );
+      for (let j = 0; j < lines.length; j += LINE_INSERT_CHUNK) {
+        await tx.insert(journalEntryLinesTable).values(lines.slice(j, j + LINE_INSERT_CHUNK));
+      }
+      total += chunk.length;
+    });
+  }
+  return total;
+}
+
+// Stale entries already exist (draft) — reuse the per-row upsert that replaces
+// the lines while preserving entry.id. Stale sets are small on re-runs.
+async function regenerateStaleEntries(items: DraftEntryItem[], userId: string): Promise<number> {
+  let total = 0;
+  for (const it of items) {
+    await db.transaction(async (tx) =>
+      upsertDraftEntry(tx, {
+        firmId: it.firmId,
+        clientId: it.clientId,
+        documentId: it.documentId,
+        computed: it.computed,
+        userId,
+      }),
+    );
+    total++;
+  }
+  return total;
+}
+
+async function processInvoices(
+  supabase: SupabaseClient<Database>,
+  periodId: string,
+  userId: string,
+  result: GeneratePeriodResult,
+): Promise<void> {
+  const rows = await loadConfirmedRows<InvoiceRow>(supabase, "invoices", periodId);
+  if (rows.length === 0) return;
+  const documentIds = rows
+    .map((r) => r.document_id)
+    .filter((d): d is string => Boolean(d));
+  const { docUpdatedAt, entryByDoc } = await loadEntryState(supabase, documentIds);
+
+  const newItems: DraftEntryItem[] = [];
+  const staleItems: DraftEntryItem[] = [];
+  for (const row of rows) {
+    const documentId = row.document_id;
+    if (!documentId) continue;
+    const invoice = rowToInvoice(row);
+    if (!shouldCreateEntry(invoice)) continue;
+    const kind = classify(documentId, docUpdatedAt, entryByDoc);
+    if (kind === "skip") continue;
+    let computed: ComputedEntry;
+    try {
+      computed = computeEntryFromInvoice(invoice);
+      assertBalanced(computed, documentId);
+    } catch (e) {
+      result.failures.push({ documentId, kind: "invoice", reason: errorReason(e) });
+      continue;
+    }
+    (kind === "new" ? newItems : staleItems).push({
+      firmId: invoice.firm_id,
+      clientId: invoice.client_id,
+      documentId,
+      computed,
+    });
+  }
+  result.generated += await bulkInsertNewEntries(newItems, userId);
+  result.regenerated += await regenerateStaleEntries(staleItems, userId);
+}
+
+async function processAllowances(
+  supabase: SupabaseClient<Database>,
+  periodId: string,
+  userId: string,
+  result: GeneratePeriodResult,
+): Promise<void> {
+  const rows = await loadConfirmedRows<AllowanceRow>(supabase, "allowances", periodId);
+  if (rows.length === 0) return;
+  const documentIds = rows
+    .map((r) => r.document_id)
+    .filter((d): d is string => Boolean(d));
+  const { docUpdatedAt, entryByDoc } = await loadEntryState(supabase, documentIds);
+
+  const newItems: DraftEntryItem[] = [];
+  const staleItems: DraftEntryItem[] = [];
+  for (const row of rows) {
+    const documentId = row.document_id;
+    if (!documentId) continue;
+    const kind = classify(documentId, docUpdatedAt, entryByDoc);
+    if (kind === "skip") continue;
+    const allowance = rowToAllowance(row);
+    let computed: ComputedEntry;
+    try {
+      // Mirror the original invoice's (now-generated) entry, or apply the
+      // default rule when there is no original. A set-but-unresolvable original
+      // (e.g. an input 折讓 whose original invoice is still uploaded) fails loud
+      // in getComputedEntryForInvoice → recorded as a non-fatal failure.
+      computed =
+        allowance.original_invoice_id == null
+          ? computeDefaultEntryFromAllowance(allowance)
+          : computeEntryFromAllowance(
+              allowance,
+              await getComputedEntryForInvoice(supabase, allowance.original_invoice_id),
+            );
+      assertBalanced(computed, documentId);
+    } catch (e) {
+      result.failures.push({ documentId, kind: "allowance", reason: errorReason(e) });
+      continue;
+    }
+    (kind === "new" ? newItems : staleItems).push({
+      firmId: allowance.firm_id,
+      clientId: allowance.client_id,
+      documentId,
+      computed,
+    });
+  }
+  result.generated += await bulkInsertNewEntries(newItems, userId);
+  result.regenerated += await regenerateStaleEntries(staleItems, userId);
+}
+
+/**
+ * Generate (or regenerate) draft journal entries for every confirmed,
+ * entry-producing document in a period — the period-level batch action. It
+ * doesn't matter how a document reached `confirmed` (manual review or
+ * electronic-invoice import); the batch reads them all.
+ *
+ * - Single-run mutex via `tax_filing_periods.voucher_generation_status` (claimed
+ *   here, released in `finally`); a concurrent run is rejected. Allowed in any
+ *   period status (drafting vouchers is a legitimate post-filing step).
+ * - Invoices first (self-contained), then allowances (mirror the now-existing
+ *   invoice entries / default rule).
+ * - Set-based bulk insert for new entries, per-row regenerate for stale ones;
+ *   idempotent and resumable (only the missing + stale set is touched).
+ * - Per-document failures are non-fatal and returned for display.
+ */
+export async function generatePeriodDraftEntries(
+  periodId: string,
+  options?: JournalEntryServiceOptions,
+): Promise<GeneratePeriodResult> {
+  const { supabase, userId } = await resolveAuth(options);
+
+  // Authorize through the RLS-enforced client (firm-scope boundary; the Drizzle
+  // writes below bypass RLS).
+  const { data: period, error: periodErr } = await supabase
+    .from("tax_filing_periods")
+    .select("id")
+    .eq("id", periodId)
+    .maybeSingle();
+  if (periodErr) throw periodErr;
+  if (!period) {
+    throw new Error(
+      `generatePeriodDraftEntries: period ${periodId} not found or not accessible`,
+    );
+  }
+
+  // Claim the single-run mutex (reclaiming a flag stuck by a crashed run).
+  const claimed = await db
+    .update(taxFilingPeriodsTable)
+    .set({
+      voucher_generation_status: "running",
+      voucher_generation_started_at: sql`now()`,
+    })
+    .where(
+      and(
+        eq(taxFilingPeriodsTable.id, periodId),
+        or(
+          eq(taxFilingPeriodsTable.voucher_generation_status, "idle"),
+          lt(taxFilingPeriodsTable.voucher_generation_started_at, STALE_RUN_GUARD),
+        ),
+      ),
+    )
+    .returning({ id: taxFilingPeriodsTable.id });
+  if (claimed.length === 0) {
+    throw new Error("另一個傳票產生作業正在進行中，請稍候再試。");
+  }
+
+  const result: GeneratePeriodResult = { generated: 0, regenerated: 0, failures: [] };
+  try {
+    await processInvoices(supabase, periodId, userId, result);
+    await processAllowances(supabase, periodId, userId, result);
+  } finally {
+    await db
+      .update(taxFilingPeriodsTable)
+      .set({ voucher_generation_status: "idle" })
+      .where(eq(taxFilingPeriodsTable.id, periodId));
+  }
+  return result;
 }

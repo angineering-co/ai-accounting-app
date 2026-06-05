@@ -829,6 +829,8 @@ export type Database = {
           id: string
           status: string
           updated_at: string
+          voucher_generation_started_at: string | null
+          voucher_generation_status: string
           year_month: string
         }
         Insert: {
@@ -840,6 +842,8 @@ export type Database = {
           id?: string
           status?: string
           updated_at?: string
+          voucher_generation_started_at?: string | null
+          voucher_generation_status?: string
           year_month: string
         }
         Update: {
@@ -851,6 +855,8 @@ export type Database = {
           id?: string
           status?: string
           updated_at?: string
+          voucher_generation_started_at?: string | null
+          voucher_generation_status?: string
           year_month?: string
         }
         Relationships: [

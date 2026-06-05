@@ -186,36 +186,6 @@ export const firms = pgTable("firms", {
 	pgPolicy("Users can view their own firm", { as: "permissive", for: "select", to: ["public"] }),
 ]);
 
-export const tax_filing_periods = pgTable("tax_filing_periods", {
-	id: uuid().defaultRandom().primaryKey().notNull(),
-	firm_id: uuid().notNull(),
-	client_id: uuid().notNull(),
-	year_month: varchar({ length: 5 }).notNull(),
-	status: text().default('open').notNull(),
-	created_at: timestamp({ withTimezone: true, mode: 'string' }).defaultNow().notNull(),
-	updated_at: timestamp({ withTimezone: true, mode: 'string' }).defaultNow().notNull(),
-	filing: jsonb().default({}).notNull(),
-	client_ready_at: timestamp({ withTimezone: true, mode: 'string' }),
-	voucher_generation_status: text().default('idle').notNull(),
-	voucher_generation_started_at: timestamp({ withTimezone: true, mode: 'string' }),
-}, (table) => [
-	index("idx_tax_filing_periods_client_ym").using("btree", table.client_id.asc().nullsLast().op("text_ops"), table.year_month.asc().nullsLast().op("uuid_ops")),
-	index("tax_filing_periods_ready_idx").using("btree", table.firm_id.asc().nullsLast().op("timestamptz_ops"), table.client_ready_at.asc().nullsLast().op("timestamptz_ops")).where(sql`(client_ready_at IS NOT NULL)`),
-	foreignKey({
-			columns: [table.client_id],
-			foreignColumns: [clients.id],
-			name: "tax_filing_periods_client_id_fkey"
-		}).onDelete("cascade"),
-	foreignKey({
-			columns: [table.firm_id],
-			foreignColumns: [firms.id],
-			name: "tax_filing_periods_firm_id_fkey"
-		}).onDelete("cascade"),
-	unique("tax_filing_periods_client_year_month_key").on(table.client_id, table.year_month),
-	pgPolicy("Users can manage tax filing periods in their firm", { as: "permissive", for: "all", to: ["public"], using: sql`(((firm_id = get_auth_user_firm_id()) AND ((get_auth_user_client_id() IS NULL) OR (client_id = get_auth_user_client_id()))) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`, withCheck: sql`(((firm_id = get_auth_user_firm_id()) AND ((get_auth_user_client_id() IS NULL) OR (client_id = get_auth_user_client_id()))) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`  }),
-	check("tax_filing_periods_voucher_generation_status_check", sql`voucher_generation_status = ANY (ARRAY['idle'::text, 'running'::text])`),
-]);
-
 export const invoices = pgTable("invoices", {
 	id: uuid().defaultRandom().primaryKey().notNull(),
 	firm_id: uuid().notNull(),
@@ -347,6 +317,36 @@ export const invoice_ranges = pgTable("invoice_ranges", {
 			name: "invoice_ranges_firm_id_fkey"
 		}).onDelete("cascade"),
 	pgPolicy("Users can manage invoice ranges in their firm", { as: "permissive", for: "all", to: ["public"], using: sql`(((firm_id = get_auth_user_firm_id()) AND ((get_auth_user_client_id() IS NULL) OR (client_id = get_auth_user_client_id()))) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`, withCheck: sql`(((firm_id = get_auth_user_firm_id()) AND ((get_auth_user_client_id() IS NULL) OR (client_id = get_auth_user_client_id()))) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`  }),
+]);
+
+export const tax_filing_periods = pgTable("tax_filing_periods", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	firm_id: uuid().notNull(),
+	client_id: uuid().notNull(),
+	year_month: varchar({ length: 5 }).notNull(),
+	status: text().default('open').notNull(),
+	created_at: timestamp({ withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	updated_at: timestamp({ withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	filing: jsonb().default({}).notNull(),
+	client_ready_at: timestamp({ withTimezone: true, mode: 'string' }),
+	voucher_generation_status: text().default('idle').notNull(),
+	voucher_generation_started_at: timestamp({ withTimezone: true, mode: 'string' }),
+}, (table) => [
+	index("idx_tax_filing_periods_client_ym").using("btree", table.client_id.asc().nullsLast().op("text_ops"), table.year_month.asc().nullsLast().op("uuid_ops")),
+	index("tax_filing_periods_ready_idx").using("btree", table.firm_id.asc().nullsLast().op("timestamptz_ops"), table.client_ready_at.asc().nullsLast().op("timestamptz_ops")).where(sql`(client_ready_at IS NOT NULL)`),
+	foreignKey({
+			columns: [table.client_id],
+			foreignColumns: [clients.id],
+			name: "tax_filing_periods_client_id_fkey"
+		}).onDelete("cascade"),
+	foreignKey({
+			columns: [table.firm_id],
+			foreignColumns: [firms.id],
+			name: "tax_filing_periods_firm_id_fkey"
+		}).onDelete("cascade"),
+	unique("tax_filing_periods_client_year_month_key").on(table.client_id, table.year_month),
+	pgPolicy("Users can manage tax filing periods in their firm", { as: "permissive", for: "all", to: ["public"], using: sql`(((firm_id = get_auth_user_firm_id()) AND ((get_auth_user_client_id() IS NULL) OR (client_id = get_auth_user_client_id()))) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`, withCheck: sql`(((firm_id = get_auth_user_firm_id()) AND ((get_auth_user_client_id() IS NULL) OR (client_id = get_auth_user_client_id()))) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`  }),
+	check("tax_filing_periods_voucher_generation_status_check", sql`voucher_generation_status = ANY (ARRAY['idle'::text, 'running'::text])`),
 ]);
 
 export const profiles = pgTable("profiles", {

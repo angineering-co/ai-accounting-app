@@ -1,6 +1,6 @@
 import { relations } from "drizzle-orm/relations";
 import { authUsers as usersInAuth } from "drizzle-orm/supabase";
-import { clients, line_accounts, leads, documents, profiles, firms, journal_entries, journal_entry_lines, tax_filing_periods, invoices, allowances, invoice_ranges, fiscal_year_closes, audit_trails, voucher_sequences } from "./schema";
+import { clients, line_accounts, leads, documents, profiles, firms, journal_entries, journal_entry_lines, invoices, tax_filing_periods, allowances, invoice_ranges, fiscal_year_closes, audit_trails, voucher_sequences } from "./schema";
 
 export const line_accountsRelations = relations(line_accounts, ({one}) => ({
 	client: one(clients, {
@@ -17,10 +17,10 @@ export const clientsRelations = relations(clients, ({one, many}) => ({
 	line_accounts: many(line_accounts),
 	documents: many(documents),
 	journal_entries: many(journal_entries),
-	tax_filing_periods: many(tax_filing_periods),
 	invoices: many(invoices),
 	allowances: many(allowances),
 	invoice_ranges: many(invoice_ranges),
+	tax_filing_periods: many(tax_filing_periods),
 	profiles: many(profiles),
 	firm: one(firms, {
 		fields: [clients.firm_id],
@@ -81,10 +81,10 @@ export const profilesRelations = relations(profiles, ({one, many}) => ({
 export const firmsRelations = relations(firms, ({many}) => ({
 	documents: many(documents),
 	journal_entries: many(journal_entries),
-	tax_filing_periods: many(tax_filing_periods),
 	invoices: many(invoices),
 	allowances: many(allowances),
 	invoice_ranges: many(invoice_ranges),
+	tax_filing_periods: many(tax_filing_periods),
 	profiles: many(profiles),
 	clients: many(clients),
 	fiscal_year_closes: many(fiscal_year_closes),
@@ -132,19 +132,6 @@ export const journal_entry_linesRelations = relations(journal_entry_lines, ({one
 	}),
 }));
 
-export const tax_filing_periodsRelations = relations(tax_filing_periods, ({one, many}) => ({
-	client: one(clients, {
-		fields: [tax_filing_periods.client_id],
-		references: [clients.id]
-	}),
-	firm: one(firms, {
-		fields: [tax_filing_periods.firm_id],
-		references: [firms.id]
-	}),
-	invoices: many(invoices),
-	allowances: many(allowances),
-}));
-
 export const invoicesRelations = relations(invoices, ({one, many}) => ({
 	client: one(clients, {
 		fields: [invoices.client_id],
@@ -167,6 +154,19 @@ export const invoicesRelations = relations(invoices, ({one, many}) => ({
 		references: [profiles.id]
 	}),
 	allowances: many(allowances),
+}));
+
+export const tax_filing_periodsRelations = relations(tax_filing_periods, ({one, many}) => ({
+	invoices: many(invoices),
+	allowances: many(allowances),
+	client: one(clients, {
+		fields: [tax_filing_periods.client_id],
+		references: [clients.id]
+	}),
+	firm: one(firms, {
+		fields: [tax_filing_periods.firm_id],
+		references: [firms.id]
+	}),
 }));
 
 export const allowancesRelations = relations(allowances, ({one}) => ({

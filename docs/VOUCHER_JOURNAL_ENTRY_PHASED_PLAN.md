@@ -11,7 +11,7 @@
 > - ✅ Phase 6a.1 完成（documents 維持子表 amount / doc_date 的 denormalized cache；改採 DB trigger `sync_documents_cache_from_subtables`）
 > - ✅ Phase 6.5 完成（Drizzle ORM + 交易層基礎建設：postgres-js + Proxy lazy init、rls.ts 雙重 firm/client guard、drizzle-kit pull codegen、auth.users via drizzle-orm/supabase；PR #201）
 > - ✅ Phase 6b 完成（電子發票匯入改 documents-first 交易式，PR #204；document_id 收緊為 NOT NULL UNIQUE，PR #206；createInvoice / createAllowance 亦改 `db.transaction()`，PR #207）
-> - 🔧 Phase 7 進行中（confirm 寫入路徑：本階段只做 write-path）
+> - 🔧 Phase 7 進行中（分錄產生改為**期別層級批次**，取代 confirm 時派發；只做 write-path）
 >
 > **注意：Phase 5 schema / migrations 已落地（documents / journal_entries / … 皆存在），但 Phase 5 的「讀取 service + UI 從 demo store 切到真實 DB」尚未實作（傳票 / 報表頁仍讀 `useVoucherDemoStore`）。因此 Phase 7 限縮為 write-path：confirm 交易 + service wiring + 折讓預設科目 fallback，以整合測試與 DB 檢視驗證；UI 切換另開後續 PR。**
 >
@@ -384,7 +384,19 @@
 
 > **與原計畫的差異**：Phase 5.5 起 documents 已在上傳當下建立、Phase 6 之後既有資料也都有對應 documents row,所以 confirm RPC **不再需要 `upsert documents`**,只負責「取 invoice/allowance → 建立 entry → replace lines」。RPC 邏輯更簡單、語意更清楚。
 
-> **實作紀錄（write-path only，已完成）**：依 Phase 6.5 方向，confirm 以 **Drizzle `db.transaction()`**（非 PL/pgSQL RPC）實作。新增 `lib/services/journal-entry.ts`（內部模組，刻意**不**標 `'use server'`，避免把帶注入式 userId 的函式暴露為公開端點而繞過 RLS）：`confirmInvoiceEntry` / `confirmAllowanceEntry` 以 `document_id`（UNIQUE）為鍵 idempotent upsert draft 分錄（`FOR UPDATE` 鎖、借貸平衡斷言、僅 draft 可重生）。`updateInvoice` / `updateAllowance` 維持既有 Supabase 寫入路徑，僅在 status 翻 `confirmed` 後**追加 confirm 派發**（折讓在 re-link 之後才派發，確保 `original_invoice_id` 為最新）。折讓鏡像原發票分錄（Decision #13）；**僅當 `original_invoice_id IS NULL` 才走預設科目**（進項折讓 `7044 其他收入`、銷項折讓 `4101 營業收入`，結算依 §5.1 門檻，稅額為 0 不產生稅額行；經會計師確認，員工可於記帳前調整），`original_invoice_id` 有值但解析不到則 **fail loud**（引導先確認原發票）。`computeEntryFromAllowance` 鏡像時原 entry 必為應稅（銷項 entry 僅 應稅 才產生、進項可扣抵帶獨立進項稅），故零稅折讓鏡像幾乎必為髒資料：進項可扣抵與銷項兩支皆 **fail loud**（拒絕產生避免靜默錯帳，也避開 `debit_credit_xor`）。真正的零稅折讓（免稅 / 零稅率銷售）原發票不產生 entry，會走 `computeDefaultEntryFromAllowance` 預設規則（仍丟稅額行、不報錯）；進項不可扣抵 2 行分支稅額併入總額，不受影響。`update*` 新增 optional `options`（注入式 client / userId，供整合測試端對端驅動派發）。
+> **修訂（2026-06，分錄產生改為期別批次，取代下方「confirm 時派發」）**：
+> 原作法（PR #211）把分錄產生掛在 confirm 流程（`updateInvoice` / `updateAllowance` status 翻 `confirmed` 時派發）。但電子發票匯入路徑（`processElectronicInvoiceFile` → `commitInvoice/AllowanceRowsAtomically`）會**直接寫入 `confirmed` row**，繞過 `update*`，使匯入的銷項發票與折讓沒有分錄——這是個結構性缺口：只要還有第二條抵達 `confirmed` 的路徑，缺口就會復發。
+>
+> 因此把分錄產生**從 confirm 流程整個移除**，集中到一個**期別層級的批次動作**，使用者在確認完該期別文件後（於期別頁「報表」分頁，報表產生旁）按鈕觸發。"文件如何變成 confirmed" 不再重要，批次讀取該期別所有 confirmed 文件並推導 draft。匯入路徑**不需改動**，缺口由設計本身關閉。
+> - **`generateDraftEntriesByPeriod(periodId)`**：先發票後折讓（折讓鏡像剛產生的原發票分錄 / 預設規則）；新分錄走 set-based bulk insert（每 chunk 一交易，維持 entry+lines 原子性，不長開 10k row 交易），stale 重生走逐筆 `upsertDraftEntry`；idempotent + resumable（只處理 missing+stale，重跑自我修復），擴展至 ~10k 憑證的期別。原發票無分錄的折讓（如原進項發票仍 uploaded）記為非致命 failure，不中斷整批。
+> - **`getPeriodEntryStatus(periodId)`**：單一 set-based SQL 聚合回 `{missing, stale, lastGenerated, generationStatus}`。freshness 由既有兩個時鐘導出——`journal_entries.updated_at`（產生時戳記）與 `documents.updated_at`（`sync_documents_cache_*` trigger 於 `extracted_data`/`status` 變更時更新）：MISSING = 應產生卻無 entry；STALE = draft entry 比 `documents.updated_at` 舊。零 schema 成本。
+> - **單一執行 mutex**：新增 `tax_filing_periods.voucher_generation_status`（`idle`/`running`）+ `voucher_generation_started_at`（stale-run guard）。批次以 claim UPDATE 取得，`finally` 釋放；並發產生被擋下，UI 按鈕跨重整／分頁／其他員工維持 disabled。任何期別狀態（open/locked/filed）皆可產生（傳票是合理的申報後記帳步驟）。無進度數字，二元 running/idle 即可。
+> - **UI**：`components/period-voucher-generation.tsx`（freshness 徽章 + 產生按鈕 + 逐筆結果），`running` 時輪詢；`lib/services/voucher-generation.ts` 為 'use server' 薄包裝。
+> - 既有 `confirmInvoiceEntry` / `confirmAllowanceEntry` / `upsertDraftEntry` / 純函式**保留**，由批次重用（stale 重生與 Phase 9）。
+> - **下方「confirm 時派發」之實作紀錄與「已知限制」自此作廢**：confirm 不再寫分錄，原「confirm 失敗留下已確認卻無分錄」的非原子 window 不復存在。
+> - **檔案**：`lib/services/journal-entry.ts`（`getPeriodEntryStatus` / `generateDraftEntriesByPeriod`）、`voucher-generation.ts`（新）、`invoice.ts` / `allowance.ts`（移除 confirm 派發）、`components/period-voucher-generation.tsx`（新）+ 期別頁掛載、migration `20260605000000_add_voucher_generation_status.sql`、`tests/integration/services/period-draft-entries.test.ts`（新）。
+
+> **實作紀錄（write-path only，已完成；已被上方 2026-06 修訂取代）**：依 Phase 6.5 方向，confirm 以 **Drizzle `db.transaction()`**（非 PL/pgSQL RPC）實作。新增 `lib/services/journal-entry.ts`（內部模組，刻意**不**標 `'use server'`，避免把帶注入式 userId 的函式暴露為公開端點而繞過 RLS）：`confirmInvoiceEntry` / `confirmAllowanceEntry` 以 `document_id`（UNIQUE）為鍵 idempotent upsert draft 分錄（`FOR UPDATE` 鎖、借貸平衡斷言、僅 draft 可重生）。`updateInvoice` / `updateAllowance` 維持既有 Supabase 寫入路徑，僅在 status 翻 `confirmed` 後**追加 confirm 派發**（折讓在 re-link 之後才派發，確保 `original_invoice_id` 為最新）。折讓鏡像原發票分錄（Decision #13）；**僅當 `original_invoice_id IS NULL` 才走預設科目**（進項折讓 `7044 其他收入`、銷項折讓 `4101 營業收入`，結算依 §5.1 門檻，稅額為 0 不產生稅額行；經會計師確認，員工可於記帳前調整），`original_invoice_id` 有值但解析不到則 **fail loud**（引導先確認原發票）。`computeEntryFromAllowance` 鏡像時原 entry 必為應稅（銷項 entry 僅 應稅 才產生、進項可扣抵帶獨立進項稅），故零稅折讓鏡像幾乎必為髒資料：進項可扣抵與銷項兩支皆 **fail loud**（拒絕產生避免靜默錯帳，也避開 `debit_credit_xor`）。真正的零稅折讓（免稅 / 零稅率銷售）原發票不產生 entry，會走 `computeDefaultEntryFromAllowance` 預設規則（仍丟稅額行、不報錯）；進項不可扣抵 2 行分支稅額併入總額，不受影響。`update*` 新增 optional `options`（注入式 client / userId，供整合測試端對端驅動派發）。
 >
 > **已知限制（延後至 Phase 8）**：confirm 派發與 status flip 為兩個獨立交易，`update*` 整體**非原子**（confirm 失敗會留下「已確認卻無分錄」，可由 re-confirm 自我修復；目前 read-path 尚未切換、無 UI 消費這些分錄，故可接受）。把 flip + 分錄收進同一交易，待 Phase 8 持久層重構（post / edit / reverse 進場）時一併處理。
 >
@@ -415,7 +427,7 @@
   - 編輯已 confirmed invoice / allowance 但 entry 已 posted → regenerate 拒絕
 - 手動：confirm 一張 invoice → 對應產生 draft entry → 上傳一張對應之折讓 → confirm → 折讓 entry 之科目與原 invoice entry 完全一致（含結算渠道）
 
-**退出條件**：所有 confirmed invoice / allowance 都自動產生對應 draft entry。
+**退出條件**：期別批次（`generateDraftEntriesByPeriod`）能為該期別所有 confirmed、應產生分錄的發票 / 折讓產生對應 draft entry（不論文件經人工確認或匯入而 `confirmed`）；freshness 徽章（`getPeriodEntryStatus`）正確反映 missing / stale；單一執行 mutex 擋並發。
 
 ---
 

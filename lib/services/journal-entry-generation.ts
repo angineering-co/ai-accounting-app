@@ -320,7 +320,8 @@ function extractOutputInvoiceRoles(originalEntry: ComputedEntry): OutputInvoiceR
 // The tax line appears only when taxAmount > 0; the balancing settlement leg
 // follows the §5.1 threshold (≤ 10,000 現金 / 否則 銀行存款), matching the invoice
 // templates. This is reached only when original_invoice_id IS NULL — a
-// set-but-unresolvable link fails loud in the caller (confirmAllowanceEntry).
+// set-but-unresolvable link fails loud in the caller (the period batch records
+// it as a non-fatal failure).
 export function computeDefaultEntryFromAllowance(allowance: Allowance): ComputedEntry {
   const data = allowance.extracted_data ?? {};
   const amount = data.amount ?? 0;

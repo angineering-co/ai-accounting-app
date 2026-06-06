@@ -14,6 +14,7 @@ import { AllowanceTable } from "@/components/allowance-table";
 import { RangeManagement } from "@/components/range-management";
 import { ReportGeneration } from "@/components/report-generation";
 import { PeriodFilingCard } from "@/components/period-filing-card";
+import { PeriodVoucherGeneration } from "@/components/period-voucher-generation";
 import { StatusFilterBar } from "@/components/status-filter-bar";
 import { TablePagination } from "@/components/table-pagination";
 import { toast } from "sonner";
@@ -646,6 +647,7 @@ export default function PeriodDetailPage({
         </TabsContent>
 
         <TabsContent value="reports" className="mt-6 space-y-6">
+          <PeriodVoucherGeneration periodId={period.id} />
           <ReportGeneration
             client={client}
             period={rocPeriod}

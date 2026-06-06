@@ -189,3 +189,27 @@ export async function cleanupTestFixture(
   await supabase.from("firms").delete().eq("id", fixture.firmId);
   await supabase.auth.admin.deleteUser(fixture.userId);
 }
+
+/**
+ * Fetch a journal entry by its `document_id` together with its lines (ordered by
+ * line_number); null when no entry exists. Shared across the journal-entry
+ * integration suites. (A production read helper with auth belongs to the Phase 5
+ * read-path, not here.)
+ */
+export async function getEntryWithLines(
+  supabase: SupabaseClient<Database>,
+  documentId: string,
+) {
+  const { data: entry } = await supabase
+    .from("journal_entries")
+    .select("*")
+    .eq("document_id", documentId)
+    .maybeSingle();
+  if (!entry) return null;
+  const { data: lines } = await supabase
+    .from("journal_entry_lines")
+    .select("*")
+    .eq("journal_entry_id", entry.id)
+    .order("line_number", { ascending: true });
+  return { entry, lines: lines ?? [] };
+}

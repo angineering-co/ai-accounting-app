@@ -1,22 +1,17 @@
 // NOT a Server Action module (intentionally no 'use server'). The exports here
-// accept an injected userId (for tests / internal composition); marking this
-// 'use server' would expose them as public endpoints where a client could pass
-// an arbitrary userId and bypass the assertCallerCanAccessClient RLS check. The
-// UI reaches the period-batch helpers (getPeriodEntryStatus /
+// accept an injected userId / supabase client (for tests and internal
+// composition); marking this 'use server' would expose them as public endpoints
+// where a client could pass an arbitrary userId and skip the firm-scope
+// authorization these helpers perform via an RLS-bounded period read. The UI
+// reaches the period-batch helpers (getPeriodEntryStatus /
 // generateDraftEntriesByPeriod) through the thin 'use server' wrappers in
 // lib/services/voucher-generation.ts.
-//
-// confirmInvoiceEntry / confirmAllowanceEntry are the per-document generators
-// (compute + upsertDraftEntry); they are exercised by the journal-entry test
-// suite and earmarked for the edit path (Phase 9). The period batch shares their
-// compute/upsert layer rather than calling them directly.
 
 import { and, eq, lt, or, sql } from "drizzle-orm";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
 import { db, type Tx } from "@/lib/db/drizzle";
-import { assertCallerCanAccessClient } from "@/lib/db/rls";
 import {
   journal_entries as journalEntriesTable,
   journal_entry_lines as journalEntryLinesTable,
@@ -211,49 +206,6 @@ async function upsertDraftEntry(
 }
 
 /**
- * Generate (or regenerate) the draft journal entry for a confirmed invoice.
- * Idempotent and safe to call on every confirmed-state save. Returns the
- * entry id, or `null` when the invoice produces no entry (作廢 / 彙加 / 銷項
- * 零稅率·免稅) or is not in `confirmed` status.
- */
-export async function confirmInvoiceEntry(
-  invoiceId: string,
-  options?: JournalEntryServiceOptions,
-): Promise<string | null> {
-  const { supabase, userId } = await resolveAuth(options);
-
-  const { data: row, error } = await supabase
-    .from("invoices")
-    .select("*")
-    .eq("id", invoiceId)
-    .single();
-  if (error) throw error;
-  if (!row) throw new Error(`confirmInvoiceEntry: invoice ${invoiceId} not found`);
-
-  // Only confirmed, entry-producing invoices yield a voucher.
-  if (row.status !== "confirmed") return null;
-  if (!row.document_id) {
-    throw new Error(`confirmInvoiceEntry: invoice ${invoiceId} has no document_id`);
-  }
-
-  const invoice = rowToInvoice(row);
-  if (!shouldCreateEntry(invoice)) return null;
-
-  const computed = computeEntryFromInvoice(invoice);
-
-  return db.transaction(async (tx) => {
-    await assertCallerCanAccessClient(tx, userId, invoice.client_id);
-    return upsertDraftEntry(tx, {
-      firmId: invoice.firm_id,
-      clientId: invoice.client_id,
-      documentId: row.document_id!,
-      computed,
-      userId,
-    });
-  });
-}
-
-/**
  * Load an invoice's journal entry, reconstructed as a `ComputedEntry` (e.g. so an
  * allowance can mirror it, Decision #13). Get-or-throw: throws if the invoice,
  * its document, its entry, or its lines can't be found. Callers wanting a softer
@@ -315,53 +267,6 @@ async function getComputedEntryForInvoice(
       description: l.description,
     })),
   };
-}
-
-/**
- * Generate (or regenerate) the draft journal entry for a confirmed allowance.
- * Mirrors the original invoice's entry when `original_invoice_id` resolves; when
- * it is NULL, applies the default rule (進項折讓 → 7044 其他收入 /
- * 銷項折讓 → 4101 營業收入; tax line only when taxAmount > 0). Idempotent.
- */
-export async function confirmAllowanceEntry(
-  allowanceId: string,
-  options?: JournalEntryServiceOptions,
-): Promise<string | null> {
-  const { supabase, userId } = await resolveAuth(options);
-
-  const { data: row, error } = await supabase
-    .from("allowances")
-    .select("*")
-    .eq("id", allowanceId)
-    .single();
-  if (error) throw error;
-  if (!row) throw new Error(`confirmAllowanceEntry: allowance ${allowanceId} not found`);
-
-  if (row.status !== "confirmed") return null;
-  if (!row.document_id) {
-    throw new Error(`confirmAllowanceEntry: allowance ${allowanceId} has no document_id`);
-  }
-
-  const allowance = rowToAllowance(row);
-
-  const computed =
-    allowance.original_invoice_id == null
-      ? computeDefaultEntryFromAllowance(allowance)
-      : computeEntryFromAllowance(
-          allowance,
-          await getComputedEntryForInvoice(supabase, allowance.original_invoice_id),
-        );
-
-  return db.transaction(async (tx) => {
-    await assertCallerCanAccessClient(tx, userId, allowance.client_id);
-    return upsertDraftEntry(tx, {
-      firmId: allowance.firm_id,
-      clientId: allowance.client_id,
-      documentId: row.document_id!,
-      computed,
-      userId,
-    });
-  });
 }
 
 // ───────────────────────────────────────────────────────────────────────────

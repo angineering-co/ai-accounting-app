@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createInvoice } from "@/lib/services/invoice";
 import { createAllowance } from "@/lib/services/allowance";
 import {
-  confirmInvoiceEntry,
   generateDraftEntriesByPeriod,
   getPeriodEntryStatus,
 } from "@/lib/services/journal-entry";
@@ -218,9 +217,8 @@ describe.skipIf(!hasDbEnv)("Period draft entries — freshness + batch generatio
 
     expect((await getPeriodEntryStatus(periodId, opts())).missing).toBe(1);
 
-    // Seed one entry via the per-document generator, so the freshness check is
-    // shown to react to an entry regardless of which path created it.
-    await confirmInvoiceEntry(inv.id, opts());
+    // Generate via the batch, then verify freshness flips to up-to-date.
+    await generateDraftEntriesByPeriod(periodId, opts());
 
     const afterGen = await getPeriodEntryStatus(periodId, opts());
     expect(afterGen.missing).toBe(0);
@@ -294,6 +292,88 @@ describe.skipIf(!hasDbEnv)("Period draft entries — freshness + batch generatio
     const status = await getPeriodEntryStatus(periodId, opts());
     expect(status.missing).toBe(0);
     expect(status.generationStatus).toBe("idle"); // mutex released after the run
+  });
+
+  // ---------- additional templates (migrated from the per-document suite) ----------
+
+  it("invoice 進項不可扣抵 → 2-line entry (tax absorbed into the expense)", async () => {
+    const periodId = await createPeriod();
+    const inv = await seedConfirmedInvoice(periodId, "in", {
+      totalSales: 200,
+      tax: 10,
+      totalAmount: 210,
+      deductible: false,
+      account: "6120 交際費",
+    });
+
+    await generateDraftEntriesByPeriod(periodId, opts());
+
+    expect(simplify((await getEntryWithLines(supabase, inv.document_id))!.lines)).toEqual([
+      { account_code: "6120", debit: 210, credit: 0 },
+      { account_code: ACCT_CASH, debit: 0, credit: 210 }, // 210 ≤ 10,000 → 1111
+    ]);
+  });
+
+  it("invoice 作廢 → no entry, no failure", async () => {
+    const periodId = await createPeriod();
+    const inv = await seedConfirmedInvoice(periodId, "in", {
+      totalSales: 100,
+      tax: 5,
+      totalAmount: 105,
+      account: "6113 旅費",
+      taxType: "作廢",
+    });
+
+    const res = await generateDraftEntriesByPeriod(periodId, opts());
+    expect(res.generated).toBe(0);
+    expect(res.failures).toEqual([]);
+    expect(await getEntryWithLines(supabase, inv.document_id)).toBeNull();
+  });
+
+  it("進項折讓 mirrors a deductible input invoice (3 lines, input-tax leg)", async () => {
+    const periodId = await createPeriod();
+    const original = await seedConfirmedInvoice(periodId, "in", {
+      totalSales: 10_000,
+      tax: 500,
+      totalAmount: 10_500,
+      deductible: true,
+      account: "6113 旅費",
+    });
+    const allowance = await seedConfirmedAllowance(
+      periodId,
+      "in",
+      { amount: 1_000, taxAmount: 50 },
+      original.id,
+    );
+
+    await generateDraftEntriesByPeriod(periodId, opts());
+
+    const got = await getEntryWithLines(supabase, allowance.document_id);
+    expect(got!.entry.voucher_type).toBe("收入");
+    expect(simplify(got!.lines)).toEqual([
+      { account_code: ACCT_BANK, debit: 1_050, credit: 0 },
+      { account_code: "6113", debit: 0, credit: 1_000 },
+      { account_code: ACCT_INPUT_TAX, debit: 0, credit: 50 },
+    ]);
+  });
+
+  it("銷項折讓 default rule with taxAmount 0 → 2-line, no tax leg", async () => {
+    const periodId = await createPeriod();
+    const allowance = await seedConfirmedAllowance(
+      periodId,
+      "out",
+      { amount: 500, taxAmount: 0 },
+      null,
+    );
+
+    await generateDraftEntriesByPeriod(periodId, opts());
+
+    const got = await getEntryWithLines(supabase, allowance.document_id);
+    expect(got!.entry.voucher_type).toBe("支出");
+    expect(simplify(got!.lines)).toEqual([
+      { account_code: ACCT_REVENUE, debit: 500, credit: 0 },
+      { account_code: ACCT_CASH, debit: 0, credit: 500 },
+    ]);
   });
 
   it("mirrors the original invoice entry (invoices processed first)", async () => {

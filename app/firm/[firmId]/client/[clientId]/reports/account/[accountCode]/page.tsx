@@ -1,11 +1,11 @@
 "use client";
 
-import { use, useEffect, useMemo } from "react";
+import { use, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
+import useSWR from "swr";
 
 import { AmountCell } from "@/components/amount-cell";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -17,11 +17,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { accountLabel } from "@/lib/data/accounts";
-import {
-  seedVoucherDemoFor,
-  useVoucherDemoStore,
-} from "@/lib/dev/use-voucher-demo-store";
-import { getAccountLedger } from "@/lib/services/financial-statements";
+import { getAccountLedger } from "@/lib/services/voucher";
+import { RecordStateCard } from "@/components/record-state-card";
 import { cn, formatDateToISO, formatNTD } from "@/lib/utils";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -34,28 +31,36 @@ export default function AccountLedgerPage({
   const { firmId, clientId, accountCode } = use(params);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const store = useVoucherDemoStore();
-
-  useEffect(() => {
-    seedVoucherDemoFor(firmId, clientId);
-  }, [firmId, clientId]);
 
   const asOfDate = useMemo(() => {
     const raw = searchParams.get("asOf");
     return raw && ISO_DATE.test(raw) ? raw : formatDateToISO(new Date());
   }, [searchParams]);
 
-  const ledger = useMemo(
-    () =>
-      getAccountLedger({
-        entries: store.entries,
-        lines: store.lines,
-        clientId,
-        accountCode,
-        asOfDate,
-      }),
-    [store.entries, store.lines, clientId, accountCode, asOfDate],
+  const { data: ledger, isLoading, error } = useSWR(
+    ["account-ledger", clientId, accountCode, asOfDate],
+    () => getAccountLedger(clientId, accountCode, asOfDate),
+    { keepPreviousData: true },
   );
+
+  if (error) {
+    return (
+      <RecordStateCard
+        title={<span className="font-mono">{accountCode}</span>}
+        message="載入明細分類帳時發生錯誤，請稍後再試。"
+        tone="error"
+      />
+    );
+  }
+
+  if (isLoading || !ledger) {
+    return (
+      <RecordStateCard
+        title={<span className="font-mono">{accountCode}</span>}
+        message="載入中…"
+      />
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -69,9 +74,6 @@ export default function AccountLedgerPage({
         <h2 className="text-2xl font-semibold tracking-tight text-muted-foreground">
           {accountLabel(accountCode).replace(`${accountCode} `, "")}
         </h2>
-        <Badge variant="outline" className="text-sm">
-          示範資料(Phase 3)
-        </Badge>
       </div>
 
       <Card>

@@ -1,12 +1,12 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowLeft } from "lucide-react";
+import useSWR from "swr";
 
 import { AmountCell } from "@/components/amount-cell";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -18,15 +18,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ReportPeriodSelector } from "@/components/report-period-selector";
+import { RecordStateCard } from "@/components/record-state-card";
 import {
-  computeBalanceSheet,
   SYNTHETIC_NET_INCOME_CODE,
   type ReportSection,
 } from "@/lib/services/financial-statements";
-import {
-  seedVoucherDemoFor,
-  useVoucherDemoStore,
-} from "@/lib/dev/use-voucher-demo-store";
+import { getBalanceSheet } from "@/lib/services/voucher";
 import { formatDateToISO, formatNTD } from "@/lib/utils";
 
 function SectionCard({
@@ -129,26 +126,30 @@ export default function BalanceSheetPage({
 }) {
   const { firmId, clientId } = use(params);
   const router = useRouter();
-  const store = useVoucherDemoStore();
-
-  useEffect(() => {
-    seedVoucherDemoFor(firmId, clientId);
-  }, [firmId, clientId]);
 
   const [asOfDate, setAsOfDate] = useState<string>(() =>
     formatDateToISO(new Date()),
   );
 
-  const bs = useMemo(
-    () =>
-      computeBalanceSheet({
-        entries: store.entries,
-        lines: store.lines,
-        clientId,
-        asOfDate,
-      }),
-    [store.entries, store.lines, clientId, asOfDate],
+  const { data: bs, isLoading, error } = useSWR(
+    ["balance-sheet", clientId, asOfDate],
+    () => getBalanceSheet(clientId, asOfDate),
+    { keepPreviousData: true },
   );
+
+  if (error) {
+    return (
+      <RecordStateCard
+        title="資產負債表"
+        message="載入資產負債表時發生錯誤，請稍後再試。"
+        tone="error"
+      />
+    );
+  }
+
+  if (isLoading || !bs) {
+    return <RecordStateCard title="資產負債表" message="載入中…" />;
+  }
 
   const hasAnyRow =
     bs.assets.rows.length > 0 ||
@@ -167,9 +168,6 @@ export default function BalanceSheetPage({
           <ArrowLeft className="size-4" />
         </Button>
         <h1 className="text-3xl font-bold tracking-tight">資產負債表</h1>
-        <Badge variant="outline" className="text-sm">
-          示範資料(Phase 3)
-        </Badge>
       </div>
 
       <Card>
@@ -191,7 +189,7 @@ export default function BalanceSheetPage({
       {!hasAnyRow && (
         <Card className="border-dashed">
           <CardContent className="py-8 text-center text-base text-muted-foreground">
-            截止日前無已過帳分錄。可調整截止日或點上方「套用示範資料截止日」查看示範數字。
+            截止日前無已過帳分錄。可調整截止日查看其他區間。
           </CardContent>
         </Card>
       )}

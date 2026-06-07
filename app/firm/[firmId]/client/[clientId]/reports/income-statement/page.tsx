@@ -1,11 +1,11 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
+import useSWR from "swr";
 
 import { AmountCell } from "@/components/amount-cell";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -17,14 +17,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ReportPeriodSelector } from "@/components/report-period-selector";
-import {
-  computeIncomeStatement,
-  type ReportSection,
-} from "@/lib/services/financial-statements";
-import {
-  seedVoucherDemoFor,
-  useVoucherDemoStore,
-} from "@/lib/dev/use-voucher-demo-store";
+import { RecordStateCard } from "@/components/record-state-card";
+import { type ReportSection } from "@/lib/services/financial-statements";
+import { getIncomeStatement } from "@/lib/services/voucher";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { formatDateToISO } from "@/lib/utils";
 
@@ -118,27 +113,30 @@ export default function IncomeStatementPage({
 }: {
   params: Promise<{ firmId: string; clientId: string }>;
 }) {
-  const { firmId, clientId } = use(params);
+  const { clientId } = use(params);
   const router = useRouter();
-  const store = useVoucherDemoStore();
-
-  useEffect(() => {
-    seedVoucherDemoFor(firmId, clientId);
-  }, [firmId, clientId]);
 
   const [{ fromDate, toDate }, setRange] = useState(defaultRange);
 
-  const is = useMemo(
-    () =>
-      computeIncomeStatement({
-        entries: store.entries,
-        lines: store.lines,
-        clientId,
-        fromDate,
-        toDate,
-      }),
-    [store.entries, store.lines, clientId, fromDate, toDate],
+  const { data: is, isLoading, error } = useSWR(
+    ["income-statement", clientId, fromDate, toDate],
+    () => getIncomeStatement(clientId, fromDate, toDate),
+    { keepPreviousData: true },
   );
+
+  if (error) {
+    return (
+      <RecordStateCard
+        title="損益表"
+        message="載入損益表時發生錯誤，請稍後再試。"
+        tone="error"
+      />
+    );
+  }
+
+  if (isLoading || !is) {
+    return <RecordStateCard title="損益表" message="載入中…" />;
+  }
 
   const hasAnyRow =
     is.operatingRevenue.rows.length > 0 ||
@@ -155,9 +153,6 @@ export default function IncomeStatementPage({
           <ArrowLeft className="size-4" />
         </Button>
         <h1 className="text-3xl font-bold tracking-tight">損益表</h1>
-        <Badge variant="outline" className="text-sm">
-          示範資料(Phase 3)
-        </Badge>
       </div>
 
       <Card>
@@ -182,7 +177,7 @@ export default function IncomeStatementPage({
       {!hasAnyRow && (
         <Card className="border-dashed">
           <CardContent className="py-8 text-center text-base text-muted-foreground">
-            此期間無已過帳分錄。可切換期間或點上方「套用示範資料期間」查看示範數字。
+            此期間無已過帳分錄。可切換期間查看其他區間。
           </CardContent>
         </Card>
       )}

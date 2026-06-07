@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import useSWR from "swr";
 import {
   AlertTriangle,
@@ -21,9 +22,17 @@ import type { GeneratePeriodResult } from "@/lib/services/journal-entry";
 
 interface PeriodVoucherGenerationProps {
   periodId: string;
+  firmId: string;
+  clientId: string;
+  periodYYYMM: string;
 }
 
-export function PeriodVoucherGeneration({ periodId }: PeriodVoucherGenerationProps) {
+export function PeriodVoucherGeneration({
+  periodId,
+  firmId,
+  clientId,
+  periodYYYMM,
+}: PeriodVoucherGenerationProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [lastResult, setLastResult] = useState<GeneratePeriodResult | null>(null);
 
@@ -89,16 +98,25 @@ export function PeriodVoucherGeneration({ periodId }: PeriodVoucherGenerationPro
           依本期已確認的發票與折讓單產生草稿傳票。確認新文件或修改後，可隨時重新產生。
         </p>
 
-        <Button onClick={handleGenerate} disabled={running}>
-          {running ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : pending > 0 ? (
-            <FileStack className="mr-2 h-4 w-4" />
-          ) : (
-            <RefreshCw className="mr-2 h-4 w-4" />
-          )}
-          {buttonLabel}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button onClick={handleGenerate} disabled={running}>
+            {running ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : pending > 0 ? (
+              <FileStack className="mr-2 h-4 w-4" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
+            {buttonLabel}
+          </Button>
+          <Button variant="outline" asChild>
+            <Link
+              href={`/firm/${firmId}/client/${clientId}/voucher?period=${periodYYYMM}`}
+            >
+              查看草稿傳票
+            </Link>
+          </Button>
+        </div>
 
         {lastResult && (
           <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50 px-4 py-3">

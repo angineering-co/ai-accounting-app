@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
@@ -14,7 +14,7 @@ import {
   ArrowRight,
   ArrowLeftCircle,
 } from "lucide-react";
-import { toast } from "sonner";
+import useSWR from "swr";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -34,26 +34,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn, formatNTD } from "@/lib/utils";
 
-import {
-  seedVoucherDemoFor,
-  useVoucherDemoStore,
-} from "@/lib/dev/use-voucher-demo-store";
 import { accountLabel } from "@/lib/data/accounts";
-import { VoucherEditDialog } from "@/components/voucher-edit-dialog";
-import { VoucherReverseDialog } from "@/components/voucher-reverse-dialog";
-import { VoucherAuditHistory } from "@/components/voucher-audit-history";
-import { VoucherBatchPostDialog } from "@/components/voucher-batch-post-dialog";
+import { getVoucherDetail } from "@/lib/services/voucher";
+import { RecordStateCard } from "@/components/record-state-card";
 
 const DOC_TYPE_LABEL: Record<string, string> = {
   invoice: "發票",
@@ -64,6 +54,39 @@ const DOC_TYPE_LABEL: Record<string, string> = {
   manual: "手動建單",
 };
 
+// Read-only release: post / edit / reverse mutations and the audit trail land in
+// later phases (their RPCs don't exist yet), so these buttons stay disabled with a
+// tooltip naming the upcoming phase rather than being wired to anything.
+function DisabledAction({
+  icon,
+  label,
+  reason,
+  variant = "default",
+}: {
+  icon: React.ReactNode;
+  label: string;
+  reason: string;
+  variant?: "default" | "outline" | "destructive";
+}) {
+  return (
+    <TooltipProvider>
+      <Tooltip delayDuration={0}>
+        <TooltipTrigger asChild>
+          <div>
+            <Button variant={variant} disabled>
+              {icon}
+              {label}
+            </Button>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>{reason}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 export default function VoucherDetailPage({
   params,
 }: {
@@ -71,76 +94,42 @@ export default function VoucherDetailPage({
 }) {
   const { firmId, clientId, entryId } = use(params);
   const router = useRouter();
-  const store = useVoucherDemoStore();
-
-  useEffect(() => {
-    seedVoucherDemoFor(firmId, clientId);
-  }, [firmId, clientId]);
-
-  const [editOpen, setEditOpen] = useState(false);
-  const [reverseOpen, setReverseOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [postOpen, setPostOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-
-  const entry = useMemo(
-    () => store.entries.find((e) => e.id === entryId),
-    [store.entries, entryId],
+  const { data: detail, isLoading, error } = useSWR(
+    ["voucher-detail", clientId, entryId],
+    () => getVoucherDetail(clientId, entryId),
   );
 
-  const lines = useMemo(
-    () =>
-      [...store.lines.filter((l) => l.journal_entry_id === entryId)].sort(
-        (a, b) => a.line_number - b.line_number,
-      ),
-    [store.lines, entryId],
-  );
+  if (isLoading) {
+    return <RecordStateCard title="傳票詳情" message="載入中…" />;
+  }
 
-  const debitTotal = lines.reduce((s, l) => s + l.debit, 0);
-  const creditTotal = lines.reduce((s, l) => s + l.credit, 0);
-
-  const reverserEntry = useMemo(() => {
-    if (entry?.status !== "reversed") return null;
-    return store.entries.find((e) => e.reverses_entry_id === entryId) ?? null;
-  }, [entry?.status, store.entries, entryId]);
-
-  const reversedTarget = useMemo(() => {
-    if (!entry?.reverses_entry_id) return null;
-    return store.entries.find((e) => e.id === entry.reverses_entry_id) ?? null;
-  }, [entry?.reverses_entry_id, store.entries]);
-
-  const document = useMemo(() => {
-    if (!entry?.document_id) return null;
-    return store.documents.find((d) => d.id === entry.document_id) ?? null;
-  }, [entry?.document_id, store.documents]);
-
-  if (!entry) {
+  if (error) {
     return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => router.back()}>
-            <ArrowLeft className="size-4" />
-          </Button>
-          <h1 className="text-3xl font-bold tracking-tight">傳票詳情</h1>
-        </div>
-        <div className="rounded-md border border-dashed p-12 text-center text-muted-foreground text-base">
-          找不到傳票（id={entryId.slice(0, 8)}…）
-        </div>
-      </div>
+      <RecordStateCard
+        title="傳票詳情"
+        message="載入傳票時發生錯誤，請稍後再試。"
+        tone="error"
+      />
     );
   }
+
+  if (!detail) {
+    return (
+      <RecordStateCard
+        title="傳票詳情"
+        message={`找不到傳票（id=${entryId.slice(0, 8)}…）`}
+      />
+    );
+  }
+
+  const { entry, lines, document, reverserEntry, reversedTarget } = detail;
+  const debitTotal = lines.reduce((s, l) => s + l.debit, 0);
+  const creditTotal = lines.reduce((s, l) => s + l.credit, 0);
 
   const isDraft = entry.status === "draft";
   const isPosted = entry.status === "posted";
   const isReversed = entry.status === "reversed";
   const isReversalVoucher = entry.reverses_entry_id != null;
-
-  const handleDeleteDraft = () => {
-    store.deleteDraftEntry(entry.id);
-    toast.success("草稿已刪除");
-    setDeleteOpen(false);
-    router.push(`/firm/${firmId}/client/${clientId}/voucher`);
-  };
 
   return (
     <div className="space-y-4">
@@ -149,9 +138,6 @@ export default function VoucherDetailPage({
           <ArrowLeft className="size-4" />
         </Button>
         <h1 className="text-3xl font-bold tracking-tight">傳票詳情</h1>
-        <Badge variant="outline" className="text-sm">
-          示範資料（Phase 2）
-        </Badge>
       </div>
 
       <Card
@@ -317,95 +303,52 @@ export default function VoucherDetailPage({
           <div className="flex flex-wrap gap-2 pt-2">
             {isDraft && (
               <>
-                <Button onClick={() => setEditOpen(true)}>
-                  <Edit className="size-4 mr-1" />
-                  編輯
-                </Button>
-                <Button onClick={() => setPostOpen(true)} variant="default">
-                  <Send className="size-4 mr-1" />
-                  過帳
-                </Button>
-                <Button
+                <DisabledAction
+                  icon={<Edit className="size-4 mr-1" />}
+                  label="編輯"
+                  reason="編輯功能將於 Phase 9 開放"
+                />
+                <DisabledAction
+                  icon={<Send className="size-4 mr-1" />}
+                  label="過帳"
+                  reason="過帳功能將於 Phase 8 開放"
+                />
+                <DisabledAction
                   variant="outline"
-                  className="text-destructive hover:text-destructive"
-                  onClick={() => setDeleteOpen(true)}
-                >
-                  <Trash2 className="size-4 mr-1" />
-                  刪除草稿
-                </Button>
+                  icon={<Trash2 className="size-4 mr-1" />}
+                  label="刪除草稿"
+                  reason="刪除功能將於 Phase 9 開放"
+                />
               </>
             )}
             {isPosted && (
               <>
-                <Button onClick={() => setEditOpen(true)}>
-                  <Edit className="size-4 mr-1" />
-                  編輯（in-place）
-                </Button>
+                <DisabledAction
+                  icon={<Edit className="size-4 mr-1" />}
+                  label="編輯（in-place）"
+                  reason="編輯功能將於 Phase 9 開放"
+                />
                 {!isReversalVoucher && (
-                  <Button variant="destructive" onClick={() => setReverseOpen(true)}>
-                    <RotateCcw className="size-4 mr-1" />
-                    沖銷
-                  </Button>
+                  <DisabledAction
+                    variant="destructive"
+                    icon={<RotateCcw className="size-4 mr-1" />}
+                    label="沖銷"
+                    reason="沖銷功能將於 Phase 10 開放"
+                  />
                 )}
               </>
             )}
             {!isDraft && (
-              <Button variant="outline" onClick={() => setHistoryOpen(true)}>
-                <History className="size-4 mr-1" />
-                審計歷史
-              </Button>
+              <DisabledAction
+                variant="outline"
+                icon={<History className="size-4 mr-1" />}
+                label="審計歷史"
+                reason="審計歷史將於過帳 / 編輯功能上線後開放"
+              />
             )}
           </div>
         </CardContent>
       </Card>
-
-      <VoucherEditDialog
-        entry={entry}
-        open={editOpen}
-        onOpenChange={setEditOpen}
-      />
-
-      {reverseOpen && (
-        <VoucherReverseDialog
-          entry={entry}
-          open={reverseOpen}
-          onOpenChange={setReverseOpen}
-        />
-      )}
-      {historyOpen && (
-        <VoucherAuditHistory
-          entryId={entry.id}
-          open={historyOpen}
-          onOpenChange={setHistoryOpen}
-        />
-      )}
-      {postOpen && (
-        <VoucherBatchPostDialog
-          entries={[entry]}
-          open={postOpen}
-          onOpenChange={setPostOpen}
-        />
-      )}
-
-      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>刪除草稿？</AlertDialogTitle>
-            <AlertDialogDescription className="text-base">
-              草稿尚未進入帳本，刪除後將無法復原。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>保留草稿</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteDraft}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              確認刪除
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

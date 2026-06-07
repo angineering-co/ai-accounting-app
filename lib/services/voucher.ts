@@ -145,16 +145,17 @@ export interface VoucherDetail {
 
 // Full detail for one entry: the entry (Zod-parsed so timestamps are Dates for the
 // page's `format()` calls), its lines, its source document, and both reversal links
-// resolved to {id, voucher_no} for navigation. Scoped to `clientId` (the route's
-// client): the journal_entries RLS policy is firm-only, so the explicit client_id
-// filter is what keeps one client's vouchers from showing under another client's URL
-// (and enforces isolation for client-role users). Returns null when the entry is
-// missing, out-of-firm, or belongs to a different client.
+// resolved to {id, voucher_no} for navigation. Two layers of client scoping:
+// `assertClientAccess` authorizes the CALLER for this client (the journal_entries RLS
+// is firm-only and can't, so a client-role user passing a sibling's clientId is
+// rejected here), and the `.eq("client_id", clientId)` filter scopes the ROW to this
+// client so one client's voucher never renders under another's URL. Returns null when
+// the entry is missing, out-of-firm, or belongs to a different client.
 export async function getVoucherDetail(
   clientId: string,
   entryId: string,
 ): Promise<VoucherDetail | null> {
-  const supabase = await createClient();
+  const supabase = await assertClientAccess(clientId);
 
   const { data: entryRow, error: entryErr } = await supabase
     .from("journal_entries")

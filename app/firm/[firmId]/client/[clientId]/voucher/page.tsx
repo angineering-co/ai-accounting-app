@@ -39,8 +39,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TablePagination } from "@/components/table-pagination";
+import { RecordStateCard } from "@/components/record-state-card";
 import { cn, formatDateToISO, formatNTD } from "@/lib/utils";
 import { RocPeriod } from "@/lib/domain/roc-period";
+import { clientSchema } from "@/lib/domain/models";
+import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { getVoucherEntries, type VoucherListRow } from "@/lib/services/voucher";
 
 type StatusFilter = "all" | "draft" | "posted" | "reversed";
@@ -87,13 +90,27 @@ export default function VoucherListPage({
   const { firmId, clientId } = use(params);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const supabase = createSupabaseClient();
 
-  const { data, isLoading } = useSWR(
+  const { data, isLoading, error } = useSWR(
     ["voucher-entries", clientId],
     () => getVoucherEntries(clientId),
     { keepPreviousData: true },
   );
   const rows = useMemo(() => data ?? [], [data]);
+
+  // Client name for the page header so the list carries its client context (e.g. after
+  // landing via the period card's 查看草稿傳票 link). Decorative — a failed fetch just
+  // omits the name rather than blocking the list.
+  const { data: client } = useSWR(["client", clientId], async () => {
+    const { data, error } = await supabase
+      .from("clients")
+      .select("*")
+      .eq("id", clientId)
+      .single();
+    if (error) throw error;
+    return clientSchema.parse(data);
+  });
 
   // Pre-filter to a period when linked from the period's 草稿傳票 card. Entries carry
   // no period_id, so this filters by entry_date within the period's calendar range —
@@ -136,7 +153,7 @@ export default function VoucherListPage({
 
   const { counts, filtered } = useMemo(() => {
     const c: Record<StatusFilter, number> = {
-      all: rows.length,
+      all: 0,
       draft: 0,
       posted: 0,
       reversed: 0,
@@ -144,8 +161,9 @@ export default function VoucherListPage({
     const kw = keyword.trim();
     const list: VoucherListRow[] = [];
     for (const e of rows) {
-      c[e.status] += 1;
-      if (statusFilter !== "all" && e.status !== statusFilter) continue;
+      // Apply every non-status filter first, then tally per status, so the tab
+      // badges reconcile with the rows actually shown — clicking a tab can never
+      // reveal a different count than its badge.
       if (dateFrom && e.entry_date < dateFrom) continue;
       if (dateTo && e.entry_date > dateTo) continue;
       if (docTypeFilter !== "all") {
@@ -161,6 +179,9 @@ export default function VoucherListPage({
           (e.description?.includes(kw) ?? false);
         if (!matches) continue;
       }
+      c.all += 1;
+      c[e.status] += 1;
+      if (statusFilter !== "all" && e.status !== statusFilter) continue;
       list.push(e);
     }
     list.sort((a, b) => {
@@ -199,13 +220,30 @@ export default function VoucherListPage({
     setPage(0);
   };
 
+  if (error) {
+    return (
+      <RecordStateCard
+        title="傳票管理"
+        message="載入傳票清單時發生錯誤，請稍後再試。"
+        tone="error"
+      />
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => router.back()}>
           <ArrowLeft className="size-4" />
         </Button>
-        <h1 className="text-3xl font-bold tracking-tight">傳票管理</h1>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">傳票管理</h1>
+          {client && (
+            <p className="text-base text-muted-foreground">
+              {client.name}（統編 {client.tax_id}）
+            </p>
+          )}
+        </div>
       </div>
 
       <Card>
@@ -272,7 +310,7 @@ export default function VoucherListPage({
                 <PopoverContent className="w-auto p-0" align="start">
                   <Calendar
                     mode="single"
-                    selected={dateFrom ? new Date(dateFrom) : undefined}
+                    selected={dateFrom ? new Date(`${dateFrom}T00:00:00`) : undefined}
                     onSelect={(d) => {
                       setDateFrom(d ? format(d, "yyyy-MM-dd") : "");
                       setPeriodActive(false);
@@ -302,7 +340,7 @@ export default function VoucherListPage({
                 <PopoverContent className="w-auto p-0" align="start">
                   <Calendar
                     mode="single"
-                    selected={dateTo ? new Date(dateTo) : undefined}
+                    selected={dateTo ? new Date(`${dateTo}T00:00:00`) : undefined}
                     onSelect={(d) => {
                       setDateTo(d ? format(d, "yyyy-MM-dd") : "");
                       setPeriodActive(false);

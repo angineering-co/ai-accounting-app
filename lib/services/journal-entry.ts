@@ -7,15 +7,17 @@
 // generateDraftEntriesByPeriod) through the thin 'use server' wrappers in
 // lib/services/voucher-generation.ts.
 
-import { and, eq, lt, or, sql } from "drizzle-orm";
+import { and, eq, inArray, lt, or, sql } from "drizzle-orm";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
 import { db, type Tx } from "@/lib/db/drizzle";
 import {
+  fiscal_year_closes as fiscalYearClosesTable,
   journal_entries as journalEntriesTable,
   journal_entry_lines as journalEntryLinesTable,
   tax_filing_periods as taxFilingPeriodsTable,
+  voucher_sequences as voucherSequencesTable,
 } from "@/lib/db/schema";
 import { chunkedIn } from "@/lib/services/invoice-import";
 import type { Database } from "@/supabase/database.types";
@@ -749,4 +751,192 @@ export async function generateDraftEntriesByPeriod(
       .where(eq(taxFilingPeriodsTable.id, periodId));
   }
   return result;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// 過帳 (Post): draft → posted, no-gap voucher_no assignment
+// ───────────────────────────────────────────────────────────────────────────
+
+export type PostResult = {
+  entry_id: string;
+  voucher_no: string | null;
+  error: string | null;
+};
+
+/**
+ * Batch-post draft journal entries (§5.4). In one Drizzle transaction, assigns
+ * each balanced draft a no-gap `voucher_no` and flips it draft→posted. Per-entry
+ * success/failure (partial success): a failed entry never consumes a sequence
+ * number, so the successes stay gap-free. Single-entry posting is just a
+ * length-1 array — there is no separate single-post function (§5.4).
+ *
+ * No-gap discipline — keep these invariant (the integration test guards them):
+ *  1. `voucher_sequences` is a TABLE, not a PG SEQUENCE: a rollback restores
+ *     `next_seq` (nextval() would not), so partial-failure can't leave a gap.
+ *  2. Every failure check (status / balance / fiscal-year) runs BEFORE the seq
+ *     UPSERT, so a skipped entry never burns a number. New guards go here too.
+ *  3. No per-entry SAVEPOINT — a failure just records an error and continues; the
+ *     transaction commits with only the successful entries posted.
+ *  4. The final status UPDATE cannot fail: the row is FOR UPDATE-locked and every
+ *     CHECK (balance, voucher_no-when-booked) is already satisfied.
+ *
+ * Authorization (the Drizzle writes below bypass RLS, so this is the role + firm
+ * boundary): posting finalizes vouchers with permanent numbers and is a firm-staff
+ * action, so the caller must be admin / staff / super_admin — a client-role (portal)
+ * user is rejected even for their own client. The caller's firm must own `clientId`,
+ * and the transaction's `client_id = clientId` filter additionally scopes the ROWS,
+ * so one client's voucher can't be posted under another's id. Ids not under this
+ * client (or absent) come back as a "找不到" failure so the UI never leaves them
+ * stuck in the pre-post state.
+ */
+export async function postJournalEntries(
+  clientId: string,
+  entryIds: string[],
+  options?: JournalEntryServiceOptions,
+): Promise<PostResult[]> {
+  const { supabase, userId } = await resolveAuth(options);
+
+  // Staff-only gate (mirrors lib/services/line.ts::authorizeAdminForClient): a
+  // client-role portal user can read their own client row, so a plain client read
+  // is NOT sufficient authorization for this finalizing action.
+  const { data: profile, error: profileErr } = await supabase
+    .from("profiles")
+    .select("role, firm_id")
+    .eq("id", userId)
+    .maybeSingle();
+  if (profileErr) throw profileErr;
+  if (!profile || !["admin", "staff", "super_admin"].includes(profile.role ?? "")) {
+    throw new Error("postJournalEntries: 權限不足（過帳為事務所員工專屬動作）");
+  }
+
+  // Firm-scope boundary: the caller's firm must own this client.
+  const { data: client, error } = await supabase
+    .from("clients")
+    .select("firm_id")
+    .eq("id", clientId)
+    .maybeSingle();
+  if (error) throw error;
+  if (
+    !client ||
+    (profile.role !== "super_admin" && client.firm_id !== profile.firm_id)
+  ) {
+    throw new Error(
+      `postJournalEntries: client ${clientId} not found or not accessible`,
+    );
+  }
+
+  if (entryIds.length === 0) return [];
+
+  return db.transaction(async (tx) => {
+    // Lock the candidate rows in the deterministic posting order (entry_date,
+    // created_at), scoped to the client so a foreign id never matches.
+    const entries = await tx
+      .select({
+        id: journalEntriesTable.id,
+        status: journalEntriesTable.status,
+        voucher_no: journalEntriesTable.voucher_no,
+        entry_date: journalEntriesTable.entry_date,
+      })
+      .from(journalEntriesTable)
+      .where(
+        and(
+          eq(journalEntriesTable.client_id, clientId),
+          inArray(journalEntriesTable.id, entryIds),
+        ),
+      )
+      .orderBy(journalEntriesTable.entry_date, journalEntriesTable.created_at)
+      .for("update");
+
+    if (entries.length === 0) {
+      return entryIds.map((id) => ({ entry_id: id, voucher_no: null, error: "找不到" }));
+    }
+    const foundIds = new Set(entries.map((e) => e.id));
+
+    // Preload line sums (balance) and closed years — one aggregate query each, no
+    // N+1. An entry absent from sumByEntry has no lines → reads as unbalanced.
+    const sumRows = await tx
+      .select({
+        journal_entry_id: journalEntryLinesTable.journal_entry_id,
+        debit: sql<string>`COALESCE(SUM(${journalEntryLinesTable.debit}), 0)`,
+        credit: sql<string>`COALESCE(SUM(${journalEntryLinesTable.credit}), 0)`,
+      })
+      .from(journalEntryLinesTable)
+      .where(
+        inArray(
+          journalEntryLinesTable.journal_entry_id,
+          entries.map((e) => e.id),
+        ),
+      )
+      .groupBy(journalEntryLinesTable.journal_entry_id);
+    const sumByEntry = new Map(
+      sumRows.map((r) => [
+        r.journal_entry_id,
+        { debit: Number(r.debit), credit: Number(r.credit) },
+      ]),
+    );
+
+    const closedRows = await tx
+      .select({ year: fiscalYearClosesTable.gregorian_year })
+      .from(fiscalYearClosesTable)
+      .where(eq(fiscalYearClosesTable.client_id, clientId));
+    const closedYears = new Set(closedRows.map((r) => r.year));
+
+    const results: PostResult[] = [];
+    for (const e of entries) {
+      // (2) Idempotent: an already-posted / reversed entry returns its number.
+      if (e.status !== "draft") {
+        results.push({ entry_id: e.id, voucher_no: e.voucher_no, error: null });
+        continue;
+      }
+      // (2) Balance — must pass before consuming a number.
+      const sums = sumByEntry.get(e.id) ?? { debit: 0, credit: 0 };
+      if (sums.debit !== sums.credit || sums.debit === 0) {
+        results.push({ entry_id: e.id, voucher_no: null, error: "借貸不平衡" });
+        continue;
+      }
+      // (2) Fiscal-year close guard — reject an entry_date in a closed year.
+      const year = Number(e.entry_date.slice(0, 4));
+      if (closedYears.has(year)) {
+        results.push({ entry_id: e.id, voucher_no: null, error: "該年度已關帳" });
+        continue;
+      }
+
+      // (1) Atomic seq consume: INSERT … ON CONFLICT increments next_seq and
+      // RETURNs the value just used (next_seq-1). First post on a date → 1.
+      const [{ seq }] = await tx
+        .insert(voucherSequencesTable)
+        .values({ client_id: clientId, seq_date: e.entry_date, next_seq: 2 })
+        .onConflictDoUpdate({
+          target: [voucherSequencesTable.client_id, voucherSequencesTable.seq_date],
+          set: { next_seq: sql`${voucherSequencesTable.next_seq} + 1` },
+        })
+        .returning({ seq: sql<number>`${voucherSequencesTable.next_seq} - 1` });
+
+      const vno = `${e.entry_date.replaceAll("-", "")}-${String(seq).padStart(5, "0")}`;
+
+      // (4) Cannot fail: row is locked, all CHECKs already satisfied.
+      await tx
+        .update(journalEntriesTable)
+        .set({
+          status: "posted",
+          voucher_no: vno,
+          posted_at: sql`now()`,
+          posted_by: userId,
+          updated_at: sql`now()`,
+        })
+        .where(eq(journalEntriesTable.id, e.id));
+
+      results.push({ entry_id: e.id, voucher_no: vno, error: null });
+    }
+
+    // Ids not under this client (or nonexistent) — surface as failures so the UI
+    // doesn't render them stuck in the pre-post state.
+    for (const id of entryIds) {
+      if (!foundIds.has(id)) {
+        results.push({ entry_id: id, voucher_no: null, error: "找不到" });
+      }
+    }
+
+    return results;
+  });
 }

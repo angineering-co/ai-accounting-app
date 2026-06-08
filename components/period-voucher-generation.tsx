@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import {
@@ -17,8 +17,12 @@ import { cn, formatIsoDateTimeZhTW } from "@/lib/utils";
 import {
   generateDraftEntriesByPeriodAction,
   getPeriodEntryStatusAction,
+  getPeriodGenerationStatusAction,
 } from "@/lib/services/voucher-generation";
-import type { GeneratePeriodResult } from "@/lib/services/journal-entry";
+import type {
+  GeneratePeriodResult,
+  VoucherGenerationStatus,
+} from "@/lib/services/journal-entry";
 
 interface PeriodVoucherGenerationProps {
   periodId: string;
@@ -36,18 +40,37 @@ export function PeriodVoucherGeneration({
   const [isGenerating, setIsGenerating] = useState(false);
   const [lastResult, setLastResult] = useState<GeneratePeriodResult | null>(null);
 
-  const { data: status, mutate } = useSWR(
+  // Heavy missing/stale/lastGenerated counts: a set-based scan over the period's
+  // confirmed docs. Fetched on load and revalidated only when a run finishes —
+  // never on the polling path — so it doesn't re-scan every 2s on large periods.
+  const { data: status, mutate: mutateStatus } = useSWR(
     ["period-entry-status", periodId],
     () => getPeriodEntryStatusAction(periodId),
+  );
+
+  // Run-state flag only — an O(1) single-row read, polled while a run is in flight
+  // (started by this client or anyone else) so the disabled state stays live
+  // across reloads / tabs / staff without re-running the heavy count.
+  const { data: genStatus, mutate: mutateGenStatus } = useSWR(
+    ["period-generation-status", periodId],
+    () => getPeriodGenerationStatusAction(periodId),
     {
-      // Poll while a run is in flight (started by this client or anyone else) so
-      // the disabled state and badge stay live across reloads / tabs / staff.
-      refreshInterval: (latest) =>
-        latest?.generationStatus === "running" ? 2000 : 0,
+      refreshInterval: (latest?: VoucherGenerationStatus) =>
+        latest === "running" ? 2000 : 0,
     },
   );
 
-  const running = status?.generationStatus === "running" || isGenerating;
+  // When a run (this client's or another staff's) flips back to idle, refresh the
+  // heavy counts once — off the polling path.
+  const prevGenStatus = useRef<VoucherGenerationStatus | undefined>(undefined);
+  useEffect(() => {
+    if (prevGenStatus.current === "running" && genStatus === "idle") {
+      void mutateStatus();
+    }
+    prevGenStatus.current = genStatus;
+  }, [genStatus, mutateStatus]);
+
+  const running = genStatus === "running" || isGenerating;
   const pending = (status?.missing ?? 0) + (status?.stale ?? 0);
 
   const handleGenerate = async () => {
@@ -64,7 +87,7 @@ export function PeriodVoucherGeneration({
           `已完成，但有 ${result.failures.length} 筆未能產生，請見下方明細`,
         );
       }
-      await mutate();
+      await Promise.all([mutateStatus(), mutateGenStatus()]);
     } catch (error) {
       toast.error(
         "草稿傳票產生失敗：" +

@@ -4,6 +4,7 @@ import { createAllowance } from "@/lib/services/allowance";
 import {
   generateDraftEntriesByPeriod,
   getPeriodEntryStatus,
+  getPeriodGenerationStatus,
 } from "@/lib/services/journal-entry";
 import {
   ACCT_BANK,
@@ -251,6 +252,13 @@ describe.skipIf(!hasDbEnv)("Period draft entries — freshness + batch generatio
     const periodId = await createPeriod();
     const status = await getPeriodEntryStatus(periodId, opts());
     expect(status.generationStatus).toBe("idle");
+  });
+
+  it("getPeriodGenerationStatus reflects the run-state flag (cheap poll read)", async () => {
+    const periodId = await createPeriod();
+    expect(await getPeriodGenerationStatus(periodId, opts())).toBe("idle");
+    await setGenerationFlag(periodId, "running", new Date().toISOString());
+    expect(await getPeriodGenerationStatus(periodId, opts())).toBe("running");
   });
 
   // ---------- generateDraftEntriesByPeriod (batch) ----------

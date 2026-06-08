@@ -418,6 +418,32 @@ export async function getPeriodEntryStatus(
   };
 }
 
+/**
+ * Just the period's run-state flag — an O(1) single-row read, no confirmed-row
+ * scan. The period UI polls THIS while a run is in flight (to keep the button
+ * disabled and the spinner live across reloads / tabs / staff); the heavier
+ * `getPeriodEntryStatus` count is fetched only off the polling path (on load and
+ * once a run finishes), so poll cost stays constant regardless of period size.
+ */
+export async function getPeriodGenerationStatus(
+  periodId: string,
+  options?: JournalEntryServiceOptions,
+): Promise<VoucherGenerationStatus> {
+  const { supabase } = await resolveAuth(options);
+  const { data, error } = await supabase
+    .from("tax_filing_periods")
+    .select("voucher_generation_status")
+    .eq("id", periodId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) {
+    throw new Error(
+      `getPeriodGenerationStatus: period ${periodId} not found or not accessible`,
+    );
+  }
+  return (data.voucher_generation_status ?? "idle") as VoucherGenerationStatus;
+}
+
 export type GeneratePeriodResult = {
   /** new draft entries created */
   generated: number;

@@ -291,7 +291,7 @@ export type PeriodEntryStatus = {
 
 /**
  * THE single source of the new/stale/missing rule. Returns a subquery with one row
- * per confirmed document in the period, each carrying a `verdict`:
+ * per confirmed document in the period, each carrying a `freshness`:
  *   'new'   — entry-producing, no journal entry exists yet
  *   'stale' — its draft entry is older than the doc's last edit
  *   NULL    — skip: up to date, posted/reversed, or non-entry-producing
@@ -308,7 +308,7 @@ export type PeriodEntryStatus = {
  * full timestamptz precision here, the only place the comparison is made. Posted
  * entries are excluded from 'stale' (a stale posted entry is a Phase 9 edit concern).
  */
-function periodEntryVerdicts(periodId: string) {
+function periodEntryFreshness(periodId: string) {
   return sql`(
     WITH docs AS (
       SELECT i.document_id,
@@ -350,7 +350,7 @@ function periodEntryVerdicts(periodId: string) {
              WHEN je.document_id IS NULL THEN 'new'
              WHEN je.status = 'draft' AND doc.updated_at > je.updated_at THEN 'stale'
              ELSE NULL
-           END AS verdict,
+           END AS freshness,
            je.updated_at AS entry_updated_at
       FROM classified c
       JOIN documents doc ON doc.id = c.document_id
@@ -361,9 +361,9 @@ function periodEntryVerdicts(periodId: string) {
 /**
  * Freshness summary for a period's draft journal entries plus the run-state flag —
  * the single query the period UI reads (and polls while a run is in flight). Rolls
- * the shared `periodEntryVerdicts` relation into counts:
- *   MISSING = verdict 'new'   (confirmed entry-producing doc with no entry)
- *   STALE   = verdict 'stale' (draft entry older than the doc's last edit)
+ * the shared `periodEntryFreshness` relation into counts:
+ *   MISSING = freshness 'new'   (confirmed entry-producing doc with no entry)
+ *   STALE   = freshness 'stale' (draft entry older than the doc's last edit)
  * Set-based: transfers no document rows regardless of period size, so it scales to
  * ~10k-doc periods.
  */
@@ -393,10 +393,10 @@ export async function getPeriodEntryStatus(
       (SELECT voucher_generation_status
          FROM tax_filing_periods
         WHERE id = ${periodId}) AS generation_status,
-      count(*) FILTER (WHERE w.verdict = 'new')   AS missing,
-      count(*) FILTER (WHERE w.verdict = 'stale') AS stale,
+      count(*) FILTER (WHERE w.freshness = 'new')   AS missing,
+      count(*) FILTER (WHERE w.freshness = 'stale') AS stale,
       max(w.entry_updated_at) AS last_generated
-    FROM ${periodEntryVerdicts(periodId)} w
+    FROM ${periodEntryFreshness(periodId)} w
   `);
 
   const row = (
@@ -434,8 +434,8 @@ type DraftEntryItem = {
   computed: ComputedEntry;
 };
 
-// A document the SQL `periodEntryVerdicts` relation flagged for (re)generation.
-type WorkItem = { documentId: string; kind: "invoice" | "allowance"; verdict: "new" | "stale" };
+// A document the SQL `periodEntryFreshness` relation flagged for (re)generation.
+type WorkItem = { documentId: string; kind: "invoice" | "allowance"; freshness: "new" | "stale" };
 
 // `now()` minus the stale-run window: a 'running' flag older than this is treated
 // as a crashed/timed-out run and may be reclaimed (the batch is idempotent).
@@ -461,21 +461,21 @@ function assertBalanced(computed: ComputedEntry, documentId: string): void {
   }
 }
 
-// Per-document work-list for the period: the shared `periodEntryVerdicts` relation,
+// Per-document work-list for the period: the shared `periodEntryFreshness` relation,
 // filtered to the docs that actually need work ('new' or 'stale'). The batch then
 // loads full row payload only for these, not the whole confirmed period. Computed
 // once at the start of a run — generating an invoice entry never bumps an allowance's
-// documents.updated_at, so every verdict stays valid for the whole run.
+// documents.updated_at, so every doc's freshness stays valid for the whole run.
 async function loadPeriodWorkList(periodId: string): Promise<WorkItem[]> {
   const rows = (await db.execute(sql`
-    SELECT w.document_id, w.kind, w.verdict
-    FROM ${periodEntryVerdicts(periodId)} w
-    WHERE w.verdict IS NOT NULL
-  `)) as unknown as Array<{ document_id: string; kind: string; verdict: string }>;
+    SELECT w.document_id, w.kind, w.freshness
+    FROM ${periodEntryFreshness(periodId)} w
+    WHERE w.freshness IS NOT NULL
+  `)) as unknown as Array<{ document_id: string; kind: string; freshness: string }>;
   return rows.map((r) => ({
     documentId: r.document_id,
     kind: r.kind as WorkItem["kind"],
-    verdict: r.verdict as WorkItem["verdict"],
+    freshness: r.freshness as WorkItem["freshness"],
   }));
 }
 
@@ -547,7 +547,7 @@ async function regenerateStaleEntries(items: DraftEntryItem[], userId: string): 
 }
 
 // Load full rows for only the work-set document_ids (chunked under PostgREST's
-// URL-length limit), keyed for verdict lookup. The work-list already encodes
+// URL-length limit), keyed for freshness lookup. The work-list already encodes
 // `produces_entry`, so no `shouldCreateEntry` re-filter is needed here.
 async function processInvoices(
   supabase: SupabaseClient<Database>,
@@ -556,7 +556,7 @@ async function processInvoices(
   result: GeneratePeriodResult,
 ): Promise<void> {
   if (work.length === 0) return;
-  const verdictByDoc = new Map(work.map((w) => [w.documentId, w.verdict]));
+  const freshnessByDoc = new Map(work.map((w) => [w.documentId, w.freshness]));
   const rows = await chunkedIn<InvoiceRow>(
     () => supabase.from("invoices"),
     "*",
@@ -568,8 +568,8 @@ async function processInvoices(
   const staleItems: DraftEntryItem[] = [];
   for (const row of rows) {
     const documentId = row.document_id;
-    const verdict = documentId ? verdictByDoc.get(documentId) : undefined;
-    if (!documentId || !verdict) continue;
+    const freshness = documentId ? freshnessByDoc.get(documentId) : undefined;
+    if (!documentId || !freshness) continue;
     const invoice = rowToInvoice(row);
     let computed: ComputedEntry;
     try {
@@ -579,7 +579,7 @@ async function processInvoices(
       result.failures.push({ documentId, kind: "invoice", reason: errorReason(e) });
       continue;
     }
-    (verdict === "new" ? newItems : staleItems).push({
+    (freshness === "new" ? newItems : staleItems).push({
       firmId: invoice.firm_id,
       clientId: invoice.client_id,
       documentId,
@@ -597,7 +597,7 @@ async function processAllowances(
   result: GeneratePeriodResult,
 ): Promise<void> {
   if (work.length === 0) return;
-  const verdictByDoc = new Map(work.map((w) => [w.documentId, w.verdict]));
+  const freshnessByDoc = new Map(work.map((w) => [w.documentId, w.freshness]));
   const rows = await chunkedIn<AllowanceRow>(
     () => supabase.from("allowances"),
     "*",
@@ -609,8 +609,8 @@ async function processAllowances(
   const staleItems: DraftEntryItem[] = [];
   for (const row of rows) {
     const documentId = row.document_id;
-    const verdict = documentId ? verdictByDoc.get(documentId) : undefined;
-    if (!documentId || !verdict) continue;
+    const freshness = documentId ? freshnessByDoc.get(documentId) : undefined;
+    if (!documentId || !freshness) continue;
     const allowance = rowToAllowance(row);
     let computed: ComputedEntry;
     try {
@@ -630,7 +630,7 @@ async function processAllowances(
       result.failures.push({ documentId, kind: "allowance", reason: errorReason(e) });
       continue;
     }
-    (verdict === "new" ? newItems : staleItems).push({
+    (freshness === "new" ? newItems : staleItems).push({
       firmId: allowance.firm_id,
       clientId: allowance.client_id,
       documentId,
@@ -702,7 +702,7 @@ export async function generateDraftEntriesByPeriod(
     // One SQL work-list for the whole period, computed up front. Invoices first
     // (self-contained), then allowances (mirror the now-existing invoice entries) —
     // generating an invoice entry doesn't bump any allowance's documents.updated_at,
-    // so the allowance verdicts captured here stay valid.
+    // so the allowance freshness values captured here stay valid.
     const work = await loadPeriodWorkList(periodId);
     await processInvoices(
       supabase,

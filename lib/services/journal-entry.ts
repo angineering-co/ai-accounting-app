@@ -39,6 +39,7 @@ import {
 import {
   assertPeriodReadable,
   assertStaffCanAccessClient,
+  assertStaffRole,
 } from "@/lib/services/authz";
 
 type JournalEntryServiceOptions = {
@@ -683,19 +684,14 @@ export async function generateDraftEntriesByPeriod(
 ): Promise<GeneratePeriodResult> {
   const { supabase, userId } = await resolveAuth(options);
 
-  // Authorize through the RLS-enforced client (firm-scope boundary; the Drizzle
-  // writes below bypass RLS).
-  const { data: period, error: periodErr } = await supabase
-    .from("tax_filing_periods")
-    .select("id")
-    .eq("id", periodId)
-    .maybeSingle();
-  if (periodErr) throw periodErr;
-  if (!period) {
-    throw new Error(
-      `generateDraftEntriesByPeriod: period ${periodId} not found or not accessible`,
-    );
-  }
+  // Staff-only: draft-entry generation produces ledger data, so a portal
+  // client-role user is rejected even for their own client (matches
+  // postJournalEntries). Run before the period read + mutex claim so a denied
+  // caller leaves no run-state flag set.
+  await assertStaffRole(supabase, userId);
+
+  // Firm-scope boundary (the Drizzle writes below bypass RLS).
+  await assertPeriodReadable(supabase, periodId);
 
   // Claim the single-run mutex (reclaiming a flag stuck by a crashed run).
   const claimed = await db

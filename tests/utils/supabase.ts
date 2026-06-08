@@ -59,6 +59,39 @@ export function getServiceClient(): SupabaseClient<Database> {
   });
 }
 
+// Anon-key client (RLS enforced, no session). Pair with signInAsTestUser to read
+// the DB as a specific user, which the service-role client (getServiceClient) bypasses.
+export function getAnonClient(): SupabaseClient<Database> {
+  const supabaseUrl = getEnvOrThrow("NEXT_PUBLIC_SUPABASE_URL");
+  const anonKey = getEnvOrThrow("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY");
+  assertLocalUrl("NEXT_PUBLIC_SUPABASE_URL", supabaseUrl);
+  return createClient<Database>(supabaseUrl, anonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
+// An RLS-bound client authenticated as the given test user (anon key + sign-in), so
+// tests can assert row-level security from a real user's perspective. The
+// get_auth_user_firm_id()/get_auth_user_client_id() RLS helpers read profiles by
+// auth.uid(), so the user's profile (firm_id / client_id / role) drives what they see.
+export async function signInAsTestUser(
+  email: string
+): Promise<SupabaseClient<Database>> {
+  const client = getAnonClient();
+  const { error } = await client.auth.signInWithPassword({
+    email,
+    password: TEST_PASSWORD,
+  });
+  if (error) {
+    throw error;
+  }
+  return client;
+}
+
 export async function createTestUser(
   supabase: SupabaseClient<Database>
 ): Promise<{ id: string; email: string }> {

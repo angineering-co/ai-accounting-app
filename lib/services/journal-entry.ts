@@ -36,6 +36,10 @@ import {
   computeEntryFromAllowance,
   computeEntryFromInvoice,
 } from "@/lib/services/journal-entry-generation";
+import {
+  assertPeriodReadable,
+  assertStaffCanAccessClient,
+} from "@/lib/services/authz";
 
 type JournalEntryServiceOptions = {
   supabaseClient?: SupabaseClient<Database>;
@@ -375,20 +379,9 @@ export async function getPeriodEntryStatus(
 ): Promise<PeriodEntryStatus> {
   const { supabase } = await resolveAuth(options);
 
-  // Authorize through the RLS-enforced client: a user only sees their firm's
-  // periods, so a missing row means no access. The aggregate below runs through
-  // Drizzle (which bypasses RLS), so this read is the firm-scope boundary.
-  const { data: period, error } = await supabase
-    .from("tax_filing_periods")
-    .select("id")
-    .eq("id", periodId)
-    .maybeSingle();
-  if (error) throw error;
-  if (!period) {
-    throw new Error(
-      `getPeriodEntryStatus: period ${periodId} not found or not accessible`,
-    );
-  }
+  // Firm-scope boundary (the Drizzle aggregate below bypasses RLS). No role
+  // gate — the freshness badge is a client-visible read.
+  await assertPeriodReadable(supabase, periodId);
 
   const result = await db.execute(sql`
     SELECT
@@ -805,34 +798,11 @@ export async function postJournalEntries(
 ): Promise<PostResult[]> {
   const { supabase, userId } = await resolveAuth(options);
 
-  // Staff-only gate (mirrors lib/services/line.ts::authorizeAdminForClient): a
-  // client-role portal user can read their own client row, so a plain client read
-  // is NOT sufficient authorization for this finalizing action.
-  const { data: profile, error: profileErr } = await supabase
-    .from("profiles")
-    .select("role, firm_id")
-    .eq("id", userId)
-    .maybeSingle();
-  if (profileErr) throw profileErr;
-  if (!profile || !["admin", "staff", "super_admin"].includes(profile.role ?? "")) {
-    throw new Error("postJournalEntries: 權限不足（過帳為事務所員工專屬動作）");
-  }
-
-  // Firm-scope boundary: the caller's firm must own this client.
-  const { data: client, error } = await supabase
-    .from("clients")
-    .select("firm_id")
-    .eq("id", clientId)
-    .maybeSingle();
-  if (error) throw error;
-  if (
-    !client ||
-    (profile.role !== "super_admin" && client.firm_id !== profile.firm_id)
-  ) {
-    throw new Error(
-      `postJournalEntries: client ${clientId} not found or not accessible`,
-    );
-  }
+  // Staff-only, firm-scoped: posting finalizes vouchers with permanent numbers
+  // (a firm-staff action), and the Drizzle writes below bypass RLS, so this app
+  // check IS the role + firm boundary. The in-transaction client_id filter
+  // additionally row-scopes the entries.
+  await assertStaffCanAccessClient(supabase, userId, clientId);
 
   if (entryIds.length === 0) return [];
   if (entryIds.length > MAX_POST_BATCH) {

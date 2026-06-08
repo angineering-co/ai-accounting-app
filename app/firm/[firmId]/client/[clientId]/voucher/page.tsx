@@ -32,14 +32,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Checkbox } from "@/components/ui/checkbox";
 import { TablePagination } from "@/components/table-pagination";
 import { RecordStateCard } from "@/components/record-state-card";
+import { VoucherBatchPostDialog } from "@/components/voucher-batch-post-dialog";
 import { cn, formatDateToISO, formatNTD } from "@/lib/utils";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { clientSchema } from "@/lib/domain/models";
@@ -92,7 +88,7 @@ export default function VoucherListPage({
   const searchParams = useSearchParams();
   const supabase = createSupabaseClient();
 
-  const { data, isLoading, error } = useSWR(
+  const { data, isLoading, error, mutate } = useSWR(
     ["voucher-entries", clientId],
     () => getVoucherEntries(clientId),
     { keepPreviousData: true },
@@ -132,6 +128,8 @@ export default function VoucherListPage({
   const [periodActive, setPeriodActive] = useState<boolean>(false);
   const [keyword, setKeyword] = useState("");
   const [page, setPage] = useState(0);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [postOpen, setPostOpen] = useState(false);
 
   // Apply the ?period= range to the date filters whenever the param changes — including
   // soft navigations that keep this page mounted (arriving from 查看草稿傳票, switching
@@ -195,6 +193,40 @@ export default function VoucherListPage({
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages - 1);
   const pageRows = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
+  // The set actually posted: selected drafts within the CURRENT filtered view —
+  // `filtered` spans all pages of the active filter, so a selection survives paging,
+  // but a draft hidden by the active filter (or one that became posted after a
+  // refresh) drops out and can't be silently posted. The button count and dialog
+  // both read this, so they can't disagree with what's on screen.
+  const selectedDraftEntries = useMemo(
+    () => filtered.filter((r) => r.status === "draft" && selectedIds.has(r.id)),
+    [filtered, selectedIds],
+  );
+
+  // Header select-all toggles only the draft rows on the current page.
+  const pageDraftIds = pageRows.filter((r) => r.status === "draft").map((r) => r.id);
+  const allPageSelected =
+    pageDraftIds.length > 0 && pageDraftIds.every((id) => selectedIds.has(id));
+  const somePageSelected = pageDraftIds.some((id) => selectedIds.has(id));
+
+  const toggleRow = (id: string, checked: boolean) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+
+  const togglePage = (checked: boolean) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of pageDraftIds) {
+        if (checked) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
 
   const hasActiveFilters =
     statusFilter !== "all" ||
@@ -399,18 +431,14 @@ export default function VoucherListPage({
                 <X className="size-4 mr-1" />
                 清除篩選
               </Button>
-              <TooltipProvider>
-                <Tooltip delayDuration={0}>
-                  <TooltipTrigger asChild>
-                    <div>
-                      <Button disabled>批次過帳</Button>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>批次過帳功能將於 Phase 8 開放</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <Button
+                onClick={() => setPostOpen(true)}
+                disabled={selectedDraftEntries.length === 0}
+              >
+                批次過帳
+                {selectedDraftEntries.length > 0 &&
+                  `（已選 ${selectedDraftEntries.length} 筆）`}
+              </Button>
             </div>
           </div>
         </CardContent>
@@ -421,6 +449,20 @@ export default function VoucherListPage({
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={
+                      allPageSelected
+                        ? true
+                        : somePageSelected
+                          ? "indeterminate"
+                          : false
+                    }
+                    onCheckedChange={(v) => togglePage(v === true)}
+                    disabled={pageDraftIds.length === 0}
+                    aria-label="全選本頁草稿"
+                  />
+                </TableHead>
                 <TableHead className="w-28">日期</TableHead>
                 <TableHead className="w-36">傳票編號</TableHead>
                 <TableHead className="w-20">類型</TableHead>
@@ -432,13 +474,13 @@ export default function VoucherListPage({
             <TableBody>
               {isLoading && rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12 text-muted-foreground text-base">
+                  <TableCell colSpan={7} className="text-center py-12 text-muted-foreground text-base">
                     載入中…
                   </TableCell>
                 </TableRow>
               ) : pageRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12 text-muted-foreground text-base">
+                  <TableCell colSpan={7} className="text-center py-12 text-muted-foreground text-base">
                     尚無符合條件的傳票
                   </TableCell>
                 </TableRow>
@@ -451,6 +493,15 @@ export default function VoucherListPage({
                       entry.status === "reversed" && "opacity-60",
                     )}
                   >
+                    <TableCell>
+                      {entry.status === "draft" && (
+                        <Checkbox
+                          checked={selectedIds.has(entry.id)}
+                          onCheckedChange={(v) => toggleRow(entry.id, v === true)}
+                          aria-label="選取此草稿"
+                        />
+                      )}
+                    </TableCell>
                     <TableCell className="font-mono text-base">
                       <Link
                         href={`/firm/${firmId}/client/${clientId}/voucher/${entry.id}`}
@@ -493,6 +544,23 @@ export default function VoucherListPage({
         totalItems={filtered.length}
         pageSize={PAGE_SIZE}
         onPageChange={setPage}
+      />
+
+      <VoucherBatchPostDialog
+        clientId={clientId}
+        entries={selectedDraftEntries}
+        open={postOpen}
+        onOpenChange={setPostOpen}
+        onPosted={(results) => {
+          void mutate();
+          // Deselect only the entries that actually posted; leave failures
+          // (unbalanced / closed year) selected so they can be retried.
+          setSelectedIds((prev) => {
+            const next = new Set(prev);
+            for (const r of results) if (!r.error) next.delete(r.entry_id);
+            return next;
+          });
+        }}
       />
     </div>
   );

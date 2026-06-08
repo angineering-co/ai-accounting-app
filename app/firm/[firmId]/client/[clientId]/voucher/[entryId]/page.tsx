@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
@@ -44,6 +44,7 @@ import { cn, formatNTD } from "@/lib/utils";
 import { accountLabel } from "@/lib/data/accounts";
 import { getVoucherDetail } from "@/lib/services/voucher";
 import { RecordStateCard } from "@/components/record-state-card";
+import { VoucherBatchPostDialog } from "@/components/voucher-batch-post-dialog";
 
 const DOC_TYPE_LABEL: Record<string, string> = {
   invoice: "發票",
@@ -94,7 +95,8 @@ export default function VoucherDetailPage({
 }) {
   const { firmId, clientId, entryId } = use(params);
   const router = useRouter();
-  const { data: detail, isLoading, error } = useSWR(
+  const [postOpen, setPostOpen] = useState(false);
+  const { data: detail, isLoading, error, mutate } = useSWR(
     ["voucher-detail", clientId, entryId],
     () => getVoucherDetail(clientId, entryId),
   );
@@ -308,11 +310,10 @@ export default function VoucherDetailPage({
                   label="編輯"
                   reason="編輯功能將於 Phase 9 開放"
                 />
-                <DisabledAction
-                  icon={<Send className="size-4 mr-1" />}
-                  label="過帳"
-                  reason="過帳功能將於 Phase 8 開放"
-                />
+                <Button onClick={() => setPostOpen(true)}>
+                  <Send className="size-4 mr-1" />
+                  過帳
+                </Button>
                 <DisabledAction
                   variant="outline"
                   icon={<Trash2 className="size-4 mr-1" />}
@@ -349,6 +350,23 @@ export default function VoucherDetailPage({
           </div>
         </CardContent>
       </Card>
+
+      <VoucherBatchPostDialog
+        clientId={clientId}
+        entries={[
+          {
+            id: entry.id,
+            entry_date: entry.entry_date,
+            voucher_type: entry.voucher_type,
+            description: entry.description ?? null,
+            debit: debitTotal,
+            credit: creditTotal,
+          },
+        ]}
+        open={postOpen}
+        onOpenChange={setPostOpen}
+        onPosted={() => void mutate()}
+      />
     </div>
   );
 }

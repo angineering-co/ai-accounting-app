@@ -11,9 +11,11 @@
 > - ✅ Phase 6a.1 完成（documents 維持子表 amount / doc_date 的 denormalized cache；改採 DB trigger `sync_documents_cache_from_subtables`）
 > - ✅ Phase 6.5 完成（Drizzle ORM + 交易層基礎建設：postgres-js + Proxy lazy init、rls.ts 雙重 firm/client guard、drizzle-kit pull codegen、auth.users via drizzle-orm/supabase；PR #201）
 > - ✅ Phase 6b 完成（電子發票匯入改 documents-first 交易式，PR #204；document_id 收緊為 NOT NULL UNIQUE，PR #206；createInvoice / createAllowance 亦改 `db.transaction()`，PR #207）
-> - 🔧 Phase 7 進行中（分錄產生改為**期別層級批次**，取代 confirm 時派發；只做 write-path）
+> - ✅ Phase 7 完成（分錄產生改為**期別層級批次** `generateDraftEntriesByPeriod`，取代 confirm 時派發、修補匯入缺口；freshness 徽章 + 單一執行 mutex；PR #213）
+> - ✅ Phase 5 讀取路徑切換完成（傳票 / 詳情 / 報表頁從 `useVoucherDemoStore` 切到真實 DB service；journal_entries/lines RLS 收斂為 firm + client；new/stale/missing 判定收斂為單一 SQL；PR #214 / #215 / #217）
+> - ✅ Phase 8 完成（`postJournalEntries` Drizzle 交易：no-gap 連號賦號 + status flip；列表批次過帳 + 詳情單筆過帳接真實 service；256/256 測試綠，新增 8）
 >
-> **注意：Phase 5 schema / migrations 已落地（documents / journal_entries / … 皆存在），但 Phase 5 的「讀取 service + UI 從 demo store 切到真實 DB」尚未實作（傳票 / 報表頁仍讀 `useVoucherDemoStore`）。因此 Phase 7 限縮為 write-path：confirm 交易 + service wiring + 折讓預設科目 fallback，以整合測試與 DB 檢視驗證；UI 切換另開後續 PR。**
+> **注意：Phase 5 schema / migrations 已落地，讀取路徑也已切到真實 DB（傳票 / 詳情 / 報表頁不再讀 `useVoucherDemoStore`）。demo store 目前僅剩尚未遷移的編輯 / 沖銷 / 審計 dialog 暫用，待 Phase 9 / 10 接真實 service 時一併清理。**
 >
 > **配套文件**：[`VOUCHER_JOURNAL_ENTRY_PLAN.md`](./VOUCHER_JOURNAL_ENTRY_PLAN.md) — 已收斂的設計提案（Decisions #1–#12）。本文件中所有 §x.y 章節編號皆指向設計提案。
 
@@ -431,28 +433,33 @@
 
 ---
 
-## Phase 8 — `post_journal_entries` RPC（接 phase 2 的批次過帳）
+## ✅ Phase 8 — `postJournalEntries`（接 phase 2 的批次過帳）
 
-**目標**：phase 2 已建好的「批次過帳」按鈕從 in-memory mutation 切到真實 RPC。
+**狀態**：完成（branch `phase-8-post-journal-entries`）。
 
-> **Phase 7 帶入的 deferred 項（confirm 原子化）**：Phase 7 write-path（PR #211）中，`updateInvoice` / `updateAllowance` 的 status flip 與分錄產生為**兩個獨立交易**，整體非原子（confirm 失敗會留下「已確認卻無分錄」，靠 idempotent re-confirm 自我修復；Phase 7 時 read-path 尚未切換、無 UI 消費這些分錄，故可接受）。本階段引入 post / edit / reverse 的多表原子寫入時，順勢抽一層薄持久化 / 交易 helper，讓 `update*` 的「flip + 產生分錄」收進同一 `db.transaction()`，消除該 window。屆時若仍有殘留的 confirmed-無分錄 row，可用 idempotent 的 `confirmInvoiceEntry` / `confirmAllowanceEntry` 寫一次性 reconcile 補齊。
+**目標**：phase 2 已建好的「批次過帳」按鈕從 in-memory mutation 切到真實的 Drizzle 交易。
 
-**改動**：
-- Migration `<ts>_create_post_journal_entries_rpc.sql`：完整實作 §5.4
-  - FOR UPDATE 排序、status check、balance check、**fiscal_year_closes guard**、atomic seq UPSERT（`voucher_sequences`）、status flip
-  - **no-gap 紀律 4 條全部遵守**（table-based seq、所有 fail check 在 seq 消耗之前、不用 SAVEPOINT、UPDATE 不可能失敗）
-- `lib/services/journal-entry.ts`：加 `postJournalEntries(entryIds, userId)` → `supabase.rpc(...)`
-- 把 phase 2 的批次過帳 dialog 從 store mutation 切到真 RPC；過帳完成後 inline 顯示逐筆結果（成功 ✓ + voucher_no、失敗紅字 + error）
+> **原「Phase 7 帶入的 deferred 項（confirm 原子化）」已不適用**：2026-06 修訂把分錄產生整個移出 confirm 流程（改期別批次），`updateInvoice` / `updateAllowance` 不再寫分錄，原「confirm 失敗留下已確認卻無分錄」的非原子 window 不復存在。故本階段純做 post，不再處理 confirm 原子化。
 
-**驗證**：
-- Integration test `tests/integration/services/post-journal-entries.test.ts`：
-  - happy（單筆 + 批次）、idempotent、unbalanced 拒絕
-  - 部分成功 → 成功者的 voucher_no 連續無 gap（**核心 invariant**）
-  - 不同 client 並發互不阻塞
-  - 已關帳年度的 entry_date 拒絕（guard 內建，phase 11 close action 會驗）
-- 手動：confirm 5 張 invoice / allowance 混合 → 批次選取 → post → 5 個連號 voucher_no
+**已交付**：
+- `lib/services/journal-entry.ts`：新增 `postJournalEntries(clientId, entryIds, options?)` + `PostResult` 型別（**不**標 `'use server'`，沿用注入式 userId 慣例）。依 Phase 6.5 方向以 **Drizzle `db.transaction()`** 實作（非 PL/pgSQL RPC），完整實作 §5.4：
+  - 候選 entries 以 `inArray + FOR UPDATE` 依 `(entry_date, created_at)` 排序鎖定、並以 `client_id = clientId` 收斂 row（雙層 firm-scope：先以 RLS-bounded `clients` 讀授權 caller，交易內再 scope row，鏡像 `getVoucherDetail`）
+  - 逐筆 fail check 全在序號消耗之前：已 posted（idempotent 回傳既有 voucher_no）/ 借貸不平衡 / **fiscal_year_closes guard**；line 借貸總和與 closed years 各預載一條聚合查詢（避免 N+1）
+  - 序號以 `voucher_sequences` UPSERT 原子遞增、回傳已用號，組 `YYYYMMDD-NNNNN`，status flip 為 posted（填 `posted_at` / `posted_by`）
+  - **no-gap 紀律 4 條全部遵守**（table-based seq、所有 fail check 在 seq 消耗之前、不用 SAVEPOINT、最後 UPDATE 不可能失敗）；部分成功逐筆獨立、成功者連號無 gap
+  - 傳入但不屬於該 client / 不存在的 id 回傳 `{ error: '找不到' }`，避免 UI 停在 pre-state
+- `lib/services/voucher-posting.ts`（新）：薄 `'use server'` wrapper `postJournalEntriesAction(clientId, entryIds)`，鏡像 `voucher-generation.ts`。
+- `components/voucher-batch-post-dialog.tsx`：移除 `useVoucherDemoStore` 依賴改呼叫真實 action；借貸平衡改由 row 的 debit/credit 直接判定；**送出時 snapshot 已過帳集合**，使結果表在父層 revalidate（選取清空）後仍正確顯示逐筆結果（✓ + voucher_no / 紅字 error）。
+- 列表頁 `voucher/page.tsx`：新增勾選欄（逐列 + 整頁全選含 indeterminate）、啟用「批次過帳（已選 N 筆）」、過帳後 SWR `mutate()` 重新整理並清空選取。
+- 詳情頁 `voucher/[entryId]/page.tsx`：草稿「過帳」按鈕接真實流程（單筆即長度 1 陣列，§5.4），reuse 同一 dialog；過帳後 `mutate()` 重新載入詳情。
 
-**退出條件**：no-gap test 通過；UI 過帳流程順手。
+**驗證紀錄**：
+- `tests/integration/services/post-journal-entries.test.ts`（新）8 cases：happy 單筆 / 批次、同日連號、跨日各自從 00001、idempotent（重跑不再賦號）、不平衡拒絕且不消耗序號、**部分成功成功者連號無 gap（核心 invariant）**、已關帳年度拒絕（其他年度照常）、跨 client row-scope（他人 entry 回「找不到」）。
+- `npm run test:run` 256/256 全綠（新增 8）；`npm run lint` 0 error；`npm run build` 通過（兩個 voucher route 編譯，確認 server action → client dialog 的 RSC 邊界正確）。
+
+**保留**：`lib/dev/use-voucher-demo-store.ts` 未動 — 其 `postEntries` 已不被本 dialog 使用，但 store 仍是尚未遷移的編輯 / 沖銷 / 審計 dialog 的後端（Phase 9 / 10 接真實 service 時一併清理）。
+
+**退出條件（達成）**：no-gap 部分成功測試通過；列表批次過帳 + 詳情單筆過帳兩個入口都從 store 接到真實交易；過帳後 UI 即時反映 posted 狀態與連號 voucher_no。
 
 ---
 
@@ -572,7 +579,7 @@
 - `supabase/migrations/<ts>_create_confirm_invoice_rpc.sql`（phase 7）
 - `supabase/migrations/<ts>_create_confirm_allowance_rpc.sql`（phase 7，**鏡像 invoice 版**）
 - `supabase/migrations/<ts>_create_regenerate_draft_entry_rpc.sql`（phase 7，吃 entity_type + entity_id）
-- `supabase/migrations/<ts>_create_post_journal_entries_rpc.sql`（phase 8）
+- `lib/services/journal-entry.ts::postJournalEntries` + `lib/services/voucher-posting.ts`（phase 8，已完成；Drizzle `db.transaction()`，非 migration RPC）
 - `supabase/migrations/<ts>_create_edit_posted_entry_rpc.sql`（phase 9）
 - `supabase/migrations/<ts>_create_reverse_entry_rpc.sql`（phase 10）
 - `lib/services/fiscal-year-close.ts` + `fiscal-year-close/page.tsx`（phase 11）

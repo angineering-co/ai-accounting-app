@@ -1,237 +1,258 @@
-# 上傳分類器 (Upload Classifier) — 設計與實作計畫
+# 上傳分類器 (Upload Classifier)：設計與實作計畫
 
-> **狀態**: 延後實作。啟動條件 = `VOUCHER_JOURNAL_ENTRY_PHASED_PLAN.md`
-> **Phase 5 + Phase 5.5 + Phase 6** 全部完成。Phase 5.5 把 upload pipeline 倒置為
-> documents-first 是本計畫的關鍵前提 (見 §3、§5)。
+> **狀態**：設計定案，待實作。本版為 2026-06 重寫，依據 Voucher 計畫
+> **Phase 5.5 / 6b / 7 實際落地後的架構**校正，並改採「非阻擋的客戶端自我校正
+> overlay」模型，取代前一版的「上傳當下同步阻擋 + 批次審核 dialog」設計。
 >
-> **配套文件**: [`VOUCHER_JOURNAL_ENTRY_PLAN.md`](./VOUCHER_JOURNAL_ENTRY_PLAN.md) §3.1
-> (`documents` schema)、§3.2 (CTI 關係);
-> [`VOUCHER_JOURNAL_ENTRY_PHASED_PLAN.md`](./VOUCHER_JOURNAL_ENTRY_PHASED_PLAN.md) Phase 5.5
-> (documents-first upload refactor)。本文件假設 `documents` 已存在、
-> `invoices` / `allowances` 已具備 `document_id` 反向指標、且 upload 流程已是
-> documents-first (`createDocument` 為主入口、`linkInvoiceToDocument` /
-> `linkAllowanceToDocument` 為子表掛接動作)。
+> **配套文件**：[`VOUCHER_JOURNAL_ENTRY_PLAN.md`](./VOUCHER_JOURNAL_ENTRY_PLAN.md)
+> §3.1 (`documents` schema)、§3.2 (CTI 關係)；
+> [`VOUCHER_JOURNAL_ENTRY_PHASED_PLAN.md`](./VOUCHER_JOURNAL_ENTRY_PHASED_PLAN.md)
+> Phase 5.5 / 6a / 6b / 7。
+>
+> **與實際架構的關鍵校正**（前一版計畫假設了未曾實作的 API）：
+> - Phase 5.5 並非把上傳改成「`createDocumentAction` 為主入口 + `linkInvoiceToDocument` /
+>   `linkAllowanceToDocument` 掛接子表」的兩步式公開 API。實際落地的是
+>   **`createInvoice` / `createAllowance` 維持單一公開入口**，內部以一個 Drizzle
+>   `db.transaction()` 同時建 `documents` 父 row 與子表 row（documents-first 是
+>   **內部**重構，對外簽章不變）。`lib/services/document.ts` 只 export `createDocument`
+>   一個內部 helper，**沒有** `linkInvoiceToDocument` / `linkAllowanceToDocument` /
+>   `updateDocumentDocType` / `softDeleteDocument`。
+> - Phase 6b 已把 `invoices.document_id` / `allowances.document_id` 收緊為
+>   **`NOT NULL UNIQUE`**（`20260601000000_tighten_document_id.sql`）。這是
+>   **子表指向父表**的保證（每筆子表 row 恰有一個 document），**並未**強制
+>   每個 document 一定要有子表。故 `doc_type='other'` 的**無子表 (childless) document
+>   在現行 schema 下已合法，本計畫不需要任何 schema 變更**即可產生 childless other。
+> - Phase 7 已把分錄產生改為**期別層級批次**（`generateDraftEntriesByPeriod`），
+>   與 confirm 解耦。它在文件已被判定為 invoice / allowance / other **之後**才作用，
+>   與分類器正交，不影響本計畫設計。
 
 ## 1. 動機
 
-`in_or_out` (進項/銷項) 上傳時錯選會導致 TET_U 申報資料錯誤, 法律風險不可
-忽視。目前唯一抓得到分類錯誤的時機是使用者上傳當下的選擇, 因為
-`lib/services/gemini.ts:172–174` 的擷取 prompt 寫死:
+`in_or_out` (進項/銷項) 上傳時錯選會導致 TET_U 申報資料錯誤，法律風險不可
+忽視。根因在 `lib/services/gemini.ts` 的擷取 prompt 寫死：
 
-> "If Source is 進項 -> Client is the **Buyer**.  […]
->  If Source is 銷項 -> Client is the **Seller**.  […]"
+> 「If Source is 進項 -> Client is the **Buyer**.  […]
+>  If Source is 銷項 -> Client is the **Seller**.  […]」
 
-擷取流程把 buyer/seller 映射綁死於使用者選擇的 `in_or_out`, 與文件實際內容
-無關。因此事後做「buyer.tax_id 是否等於 client.tax_id」的校驗永遠回傳一致,
-無法暴露分類錯誤。
+擷取流程把 buyer/seller 映射綁死於使用者上傳時選的 `in_or_out`，與文件實際
+內容無關。因此事後做「buyer.tax_id 是否等於 client.tax_id」的校驗永遠回傳
+一致，無法暴露分類錯誤。
 
-評估過、排除的兩個替代方案:
-- **中立化擷取 prompt + 程式碼端角色檢查**: 模糊文件的擷取準確度有退步風險,
-  需先建立 eval 框架才敢動。
-- **單一驗證呼叫只查 in/out**: 無法捕捉 doc type (invoice vs allowance) 的錯
-  分類。
+**本計畫的定位（核心）**：分類器是一個**讓客戶自我校正上傳分類的工具**。
+未來事務所要服務數百個客戶，**審核人員無法當每一筆誤分類的安全網**。因此
+分類器的目標是：在誤分類進入審核之前，把「這份分類對嗎？」這個選擇權交回
+**客戶手上**，避免把負擔推給審核人員。據此衍生兩條設計鐵則：
 
-本案決定: 於上傳當下執行同步 4-class 分類器
-(`{invoice, allowance} × {進項, 銷項}` 加上「作廢」、「非發票/折讓」旗標),
-與使用者選擇比對, 不一致時顯示**軟性警告** (可繼續上傳), 並把分類結果落於
-`documents.classifier_hint`, 後續審核 dialog 可顯示。
+1. **校正提示永遠面向客戶，不轉嫁給審核人員。** 任何把不一致丟回事務所
+   review 才處理的設計都背離了本計畫目的（那只是把負擔換個位置）。
+2. **`other`（非發票/折讓）的早期辨識是分類器的首要價值。** `other` 的路由
+   與 invoice / allowance 完全不同（childless document、無子表、不進 VAT 管線），
+   越早辨識越能避免它污染期別頁與後續分錄。
 
-擷取 prompt 維持原樣 (它是 happy-path 準確度的支柱); 過了這道門, `in_or_out`
-即視為可信。
-
-**與 documents-first upload pipeline 的契合**: Phase 5.5 把上傳流程倒置為「先建
-documents row、再依分類路由到子表」之後, classifier 從原本的「上傳前警告比對」
-升級為**路由分流工具**。`verdict='other'` (非發票/折讓) 不再需要被強迫塞進 invoice
-/ allowance 或取消;documents row 可以直接以 `doc_type='other'` 留在 documents 表,
-**不建子表**, 不參與 TET_U / IS-BS, 直到使用者於 /documents 列表手動重新分類或刪除。
-這讓 classifier 的「四類 + other」設計名實相符。
+擷取 prompt 維持原樣（它是 happy-path 準確度的支柱）；分類器是**獨立於擷取
+的另一個 job**，只看文件本身，中立地報告所見。
 
 ## 2. v1 範圍 / 範圍外
 
-**本計畫 v1 範圍內**(在 Voucher Phase 5.5 已落地的 documents-first 基礎上新增):
-- 上傳當下同步分類器 (4 類 + other + voided)
-- `documents.classifier_hint` JSONB 欄位 + 寫入
-- 批次審核 dialog (含 `other` 卡片變體)
-- 啟用 `doc_type='other'` 路徑 (Voucher §3.1 已將 enum 簡化為 `invoice / allowance / other`;Phase 5 schema 已含 'other',本計畫只是讓 'other' row 真正被自動產生 + 提供管理 UI)
-- **最簡 /documents 列表頁** (僅列 `doc_type='other'` 的文件 + 重分類 / 刪除動作) — 因為 'other' 文件在期別頁不出現,沒這頁等於孤兒
+**v1 範圍內**：
+- 上傳後**非阻擋、平行**執行的分類器（獨立 queue / worker，與 extraction-worker 分離）
+- `documents.classifier_hint` JSONB 欄位 + 寫入 + 佇列用 partial index
+- **客戶端校正佇列**（portal「待您確認」清單 + 側欄徽章）
+- 佇列處理動作集：`維持原選擇` / `改進銷 (switch in/out)` / `改為發票↔折讓 (convert)` /
+  `改為其他文件 (demote → other)`
+- 信心分級（high-confidence 且一致才靜默通過；中/低信心也進佇列）
+- **直接上傳「其他文件」** 的上傳選項（客戶確定不是發票/折讓時，直接建 childless
+  document，跳過子表與 OCR）
+- 審核 dialog 顯示分類不符旗標（資訊性）
+- `/documents`「其他文件」列表頁（列 `doc_type='other'`：promote 回 invoice/allowance、刪除）；
+  因 direct-other 上傳的加入，此頁從「孤兒收容所」升級為真正的文件庫
 - Eval harness scaffold
 
-**v1 範圍外**:
-- 修改擷取 prompt 本身。
-- 同次上傳內快取分類結果 (參考 PR #138 FIA 快取分析: 節省約 2–10%, 不值得
-  維護成本)。
-- 任何硬阻擋 (hard block); 所有不一致都僅為軟性警告, 含 doc type 不符。
-- 跨上傳記憶使用者覆蓋 (briefing 中提到的「N 次連續確認後不再問」)。等有
-  分類不符率資料後再評估。
-- 完整 /documents 文件管理頁面 (含 invoice / allowance 與所有子表的跨類查找、
-  進階篩選等);v1 的 /documents 列表**僅服務 `doc_type='other'` 的待分類文件**,
-  既有 invoice / allowance 仍以期別頁為主入口。完整版留待 v2+ 引入非 VAT 子表
-  時擴充。
+**v1 範圍外**：
+- 修改擷取 prompt 本身
+- 任何**上傳阻擋 (hard / soft block)**；分類器全程非阻擋，客戶照常先看到上傳結果
+- 任何**上傳當下的同步審核 dialog**（前一版設計，已廢除）
+- 跨上傳記憶使用者覆蓋（「N 次連續確認後不再問」）；等有不符率資料後再評估
+- 同次上傳內快取分類結果（PR #138 FIA 分析：節省 2–10%，不值得維護成本）
+- 完整 `/documents` 文件管理頁（跨子表查找、進階篩選）；v1 只做 `other` 列表 + promote/刪除
 
-## 3. 流程設計 (documents-first + Batch)
+## 3. 流程設計（optimistic 建立 + 非阻擋 async 分類 overlay）
 
-`components/document-upload-section.tsx` 桌機支援拖放最多 10 份檔案,
-手機 portal FAB 也支援多選, 單檔流程是批次流程的 N=1 特例。所以以批次為主
-設計, 單檔自動兼容。
+`components/document-upload-section.tsx` 桌機支援拖放最多 10 份檔案，手機 portal
+FAB 也支援多選，單檔流程是批次流程的 N=1 特例。
 
-**核心改變 (vs Phase 5.5 之前的設計草案)**: 此計畫**依賴 documents-first upload pipeline**
-(由 Voucher Phase 5.5 落地)。每份檔案上傳第一時間建 documents row, classifier
-判決決定**接下來掛不掛子表**,而不是「分類後才決定要建 invoice 還是 allowance」。
-這讓 `verdict='other'` 真正有歸宿 (停在 documents、不建子表)。
+**核心模型**：上傳當下**樂觀地 (optimistic)** 依使用者選擇建好 document + 子表
+（沿用現行 `createInvoice` / `createAllowance` 不變），使用者**立刻**在期別頁看到
+invoice / allowance 並照常作業。分類器是**事後平行跑的另一個 job**，只負責**標註**
+與**在不一致時把文件丟進客戶端佇列**，本身**不建、不刪子表**。所有路由 / 拆解動作
+都由使用者在佇列裡的決策觸發（對既有 row 做 mutation）。
 
 ```
-使用者拖放 1–10 份檔案 + 選擇分類 (doc_type, in_or_out)
+使用者拖放 1–10 份檔案 + 選擇分類 (invoice / allowance / 其他文件)
         │
         ▼
-所有檔案平行 Storage upload + createDocument
-   Promise.all(files.map(f => createDocumentAction({
-     storagePath, mimeType, clientId,
-     doc_type: userChoice.docType,    // 初值 = 使用者選擇
-     in_or_out: userChoice.inOrOut,   // 寫入未來會建的子表用
-   })))
-   → 每份檔案: documents row (status='active', classifier_hint=NULL) 已存在
-   → OCR worker 已 enqueue (Phase 5.5 起 OCR 觸發點在 documents insert)
+所有檔案平行 Storage upload (documents bucket)
+        │
+        ├─ 選 invoice / allowance ─▶ createInvoice / createAllowance (現行不變)
+        │                            一個交易內建 documents 父 row + 子表 row
+        │                            子表 status='uploaded'
+        │
+        └─ 選「其他文件」──────────▶ createDocument (doc_type='other')
+                                     無子表、OCR 略過 (childless document)
         │
         ▼
-[NEW] 所有檔案平行分類:
-   Promise.all(docs.map(d => classifyDocumentAction({ documentId })))
-   牆鐘時間 ≈ 最慢的一個呼叫 ≈ 1-2s, 並非 N × 1-2s
-   → 每份檔案: documents.classifier_hint 寫入 verdict
+上傳完成。使用者立刻在期別頁看到 invoice / allowance，照常作業。
         │
         ▼
-[NEW] 分群結果:
-   - agreed[]      → 立刻呼叫 linkInvoiceToDocument / linkAllowanceToDocument
-                     (依使用者選擇 = classifier verdict)
-                     classifier_hint.disagreed = false
-   - disagreed[]   → 統整於一個批次審核畫面 (見下)
-                     子表「暫不建立」, 等使用者決策
-   - failed[]      → 寫 log, 退回「依使用者選擇 link 子表」
-                     classifier_hint = { error: '...', disagreed: false }
+[非阻擋] 上傳處理常式呼叫 enqueueClassification([...documentIds])
+   (在 row 建立後一次性 batch enqueue；createInvoice/createAllowance 本身不改)
         │
         ▼
-disagreed[] 為空: agreed 全部建好 invoice / allowance 子表, 無 UI 中斷
-        │
-disagreed[] 非空: 顯示 <DocumentClassifierBatchReview>
-   每份檔案一張卡片, verdict 不同卡片變體不同:
-   - verdict ∈ {invoice, allowance}: [改成 X] / [維持原選擇] / [取消此筆]
-   - verdict='other': [改為其他憑證 (留在 documents、不建子表)] /
-                       [維持原選擇 (仍建 invoice/allowance)] / [取消此筆]
-   底部單一「繼續上傳」按鈕 (所有 row 都選好才啟用)
-   agreed[] 已於背景建好, 不出現在此畫面
-        │
-        ▼ 依各 row 決策派發:
-[改成 X]                 → 改 documents.doc_type=X + linkXToDocument
-[維持原選擇] (vs invoice/allowance verdict)
-                         → linkXToDocument(用使用者原選擇) + classifier_hint.disagreed=true
-[改為其他憑證] (verdict='other')
-                         → UPDATE documents SET doc_type='other'
-                            (不建子表, 文件停在 documents)
-[維持原選擇] (vs verdict='other')
-                         → linkXToDocument(用使用者原選擇) + classifier_hint.disagreed=true
-                            (使用者堅持這是 invoice/allowance, 強過 classifier)
-[取消此筆]               → soft delete documents (status='deleted')
-                            + storage 物件清除
+classification-worker (獨立 pgmq queue / worker，與 extraction-worker 分離)：
+   逐筆 dequeue documentId
+   → 下載原檔 (documents bucket)；取 client name + tax_id
+   → classifyDocument(file, clientInfo) 取得中立 verdict
+   → 比對 verdict vs 子表現況 (doc_type + in_or_out)
+   → UPDATE documents.classifier_hint：
+        高信心且一致        → 不設 review_status (靜默通過，客戶無感)
+        不一致 或 中/低信心  → review_status='pending' (進客戶端佇列)
+        分類失敗            → 寫 error 欄位、不進佇列 (靜默通過)
+   worker 全程不碰子表，只寫 classifier_hint
         │
         ▼
-原 extraction worker 流程不變 (OCR 在 createDocument 時已 enqueue): 自 pgmq 取出,
-跑 Gemini 擷取, 寫 extracted_data, status → processed。worker 只對
-doc_type ∈ {invoice, allowance} 的 row 做擷取; doc_type='other' 的 row OCR
-worker 直接 skip + 標記 ocr_status='skipped'。
+客戶端校正佇列 (portal「待您確認」+ 側欄徽章)：
+   列出 review_status='pending' 的文件，每筆一張卡片，客戶有空再逐筆處理。
+   動作落地後 review_status='resolved'，離開佇列。
 ```
 
-> **關鍵不變式**: 每份檔案永遠有 `documents` row (即使取消上傳, soft delete 留在表),
-> 子表 row 為 0 或 1 個 (UNIQUE constraint)。本流程的核心保證: documents row 在 storage
-> upload 成功的瞬間就建好,後續任何決策都是「在這份已知 row 上掛 / 不掛子表 / 改 doc_type」。
+> **關鍵不變式**：文件的核心生命週期（子表、OCR、期別頁可見性、confirm、報表、分錄）
+> **完全不依賴分類器是否跑完**。分類器掛了 / 排隊延遲 / Gemini outage 時，文件就跟
+> 「沒有分類器」時一模一樣地照客戶選擇走完流程。分類器只會「額外」在不一致時加一個
+> 佇列旗標。這是選 optimistic 而非 hold-until-verdict 的決定性理由（見 §3.2）。
 
-### Batch 延遲預算
+### 3.1 為什麼非阻擋 / 為什麼分類器是獨立 job
 
-| 步驟 | 牆鐘時間 | 備註 |
+- **延遲穩健**：Gemini 延遲樂觀時 2–3s，但實測可能 8–10s（小模型在負載 / rate limit /
+  retry 下）。若把分類做成上傳阻擋，每次批次上傳都要對著 spinner 等最慢的一個呼叫，
+  而這只是一個**軟性建議**，不值得。非阻擋讓延遲對使用者完全隱形。
+- **與擷取分離**：分類（中立 prompt）與擷取（被 `in_or_out` 帶偏的 prompt）是兩個不同
+  關注點，獨立的 queue / worker 讓兩者**故障域隔離**，分類器 outage 不會卡住 OCR，
+  反之亦然。**不**與 extraction-worker 共用（不 piggyback）。
+- **enqueue 時點**：分類器在**上傳當下**（document 建立後）即 enqueue，目的就是讓客戶
+  儘早拿到佇列旗標、趁手邊還有 context 時自我校正。這與 OCR 的 enqueue 時點不同：
+  OCR 走的是期別頁的手動 / 批次 enqueue（`lib/services/bulk-extraction.ts`），通常較晚。
+
+### 3.2 路由時機：為什麼 optimistic 而非 hold-until-verdict
+
+| | optimistic（採用） | hold-until-verdict（不採用） |
 |---|---|---|
-| Storage 上傳 (10 份平行) | 2-5s | 未變 |
-| 分類器 (10 份平行 `Promise.all`) | +1-2s | 新增 |
-| 渲染批次審核畫面 (若有 disagreed) | +<100ms | 新增 |
-| 使用者決策時間 (僅 disagreed 時) | 視情況 | 新增 |
+| 子表建立 | 上傳當下依選擇即建 | 等分類 verdict 才建 |
+| 期別頁可見 | 立即 | 分類完成前不可見 |
+| 分類器 outage / 延遲 | 文件照常走完流程（=無分類器行為） | 文件卡在 childless 中間態，需 reaper 補救，否則孤兒 |
+| classifier false-agree（誤判一致）| 子表已建、無提示，審核人員事後 demote | 子表照建、無提示，審核人員事後 demote（**相同**）|
 
-淨增加 ≈ 1-2s, 當所有檔案一致時 (常見情境)。藉由平行化避開了 N × 對話框
-排隊的卡頓。
+`false-agree`（Gemini 自信地誤判為「與客戶選擇一致」）在兩種策略下**結果相同**：
+都會建好子表、不提示、由審核人員事後處理，因為 agree 不產生任何不一致訊號可供路由
+反應。但在我們已選的 **pure async** 前提下，分類完成本來就不可靠（背景排隊、可能
+outage），此時 hold-until-verdict 會讓分類器變成「文件能不能用」的單點故障，
+optimistic 則讓分類器退化成純 overlay。故 optimistic 在 false-agree 軸上與
+hold 打平、在 lag/outage 軸上明顯更穩健，勝出。
 
-### 故障處理
+### 3.3 false-agree 的真正緩解（與路由時機正交）
 
-分類可能失敗 (Gemini outage、回傳格式錯、被 rate limit)。本門的職責是抓
-**分類錯誤**, 而非為分類器健康度把關。所以單檔分類失敗 = 靜默回退: 寫 log、
-依使用者原本選擇上傳、`classifier_hint` 寫入 `{ error: '<reason>', ... }`
-而非 verdict 欄位。
+路由時機擋不住 false-agree，真正的緩解在別處：
+1. **信心分級**：不是每個 agree 都靜默。只有 **high-confidence 且一致**才靜默通過；
+   **中 / 低信心的 agree 仍進客戶佇列**（「我們不太確定這份文件的分類，請您確認」）。
+   這把常見的「不確定型 false-agree」轉成客戶可處理的項目。
+2. **永遠可用的 demote / convert 動作**（與分類器無關的人工後路）：審核人員與客戶
+   都能對任何文件做 `改為其他文件` / `改為發票↔折讓`。這是 high-confidence 仍誤判
+   時的最終後路。
 
-審核 dialog 可在底部以低調文字顯示「上傳時分類失敗」(選配)。
+誠實地說：false-agree 無法被設計完全消除，它是客戶自我校正層之後的**殘餘審核負擔**；
+信心分級縮小它，demote / convert 讓它在漏網時的修正成本很低。
 
-全部 N 個都失敗 (通常代表 outage / 金鑰問題) 同樣放行 — 不能因 Gemini
-停擺而全 firm 上傳卡住。
+### 3.4 故障處理
+
+分類可能失敗 (Gemini outage、回傳格式錯、rate limit、檔案過大)。本門的職責是抓
+**分類錯誤**，而非為分類器健康度把關。所以：
+- 單檔分類失敗 = 寫 `classifier_hint.error`、**不**進佇列、文件照客戶選擇走（靜默通過）。
+- 全部失敗（通常代表 outage / 金鑰問題）同樣全部靜默通過，不能因 Gemini 停擺而讓
+  整批上傳的客戶被佇列轟炸或卡住。
+- worker 端 retry / dead-letter 沿用 pgmq 既有機制（與 extraction-worker 一致）。
 
 ## 4. 資料層
 
-### 4.1 Schema 變更
-
-**單一新欄位**: `documents.classifier_hint JSONB NULL`。**只加在 documents,
-不加在子表** — 分類器的判決概念上屬於「這份文件本身」, 自然對應 CTI 父表。
+### 4.1 Schema 變更（單一新欄位 + 一個 partial index，無其他變更）
 
 ```sql
 -- supabase/migrations/<ts>_add_classifier_hint_to_documents.sql
 ALTER TABLE documents ADD COLUMN classifier_hint JSONB;
-COMMENT ON COLUMN documents.classifier_hint IS '上傳時分類器判決; 欄位設計詳見 docs/UPLOAD_CLASSIFIER_PLAN.md §4.2';
+COMMENT ON COLUMN documents.classifier_hint IS
+  '上傳時分類器判決與佇列狀態; 形狀詳見 docs/UPLOAD_CLASSIFIER_PLAN.md §4.2';
+
+-- 客戶端佇列 / 側欄徽章用 partial index (只索引待處理的 active 文件，極小)
+CREATE INDEX idx_documents_pending_classification
+  ON documents (client_id)
+  WHERE classifier_hint->>'review_status' = 'pending' AND status = 'active';
 ```
 
-> **無需 enum 擴充**: Voucher 計畫 §3.1 已將 `doc_type` 簡化為三值 `invoice / allowance / other`,
-> Phase 5 schema 落地時 'other' 即已存在。本計畫只需新增 `classifier_hint` 欄位,
-> 不需要動 doc_type CHECK 約束 / enum type。
+> **無需任何其他 schema 變更**：
+> - `doc_type` 已是三值 `invoice / allowance / other`（`20260519000000_create_documents.sql:13`）。
+> - childless `other` document 已合法（§ 開頭校正：`document_id NOT NULL UNIQUE` 是
+>   子表→父表方向，不強制父表有子）。
+> - Phase 6b 的 orphan-detection query 已 scope 在 `doc_type IN ('invoice','allowance')`，
+>   故 `other` 天然被排除；唯一要注意的是它需容忍 invoice/allowance 在 convert/demote
+>   期間**極短暫**的 childless 中間態（交易內完成，幾乎不可觀察）。
 
-依 memory `feedback_no_apply_migration`: 寫好 .sql 後不自動 `supabase migration up`、
-也不自動 regenerate types, 交由使用者執行。
+依 memory `feedback_no_apply_migration`：寫好 .sql 後不自動 `supabase migration up`、
+也不自動 regenerate types，交由使用者執行。
 
 ### 4.2 JSONB 形狀
 
 ```ts
 {
-  doc_type: 'invoice' | 'allowance' | 'other',  // 與 documents.doc_type 同語意 (參考用; documents.doc_type 才是 authoritative)
-  in_or_out: 'in' | 'out' | null,                // VAT 子表才有意義; doc_type='other' 時為 null
-  voided: boolean,                                // 分類器是否偵測到作廢章 / 紅色浮水印 / 「作廢」字樣;
-                                                  // **不**對應 documents.status (documents 層無 void 概念);
-                                                  // 為 true 時, 應提示使用者在 invoice.extracted_data.taxType
-                                                  // 設為 '作廢' (Phase 5.5 documents-first 流程下, linkInvoiceToDocument
-                                                  // 帶入 taxType='作廢' 即可)
+  // ── verdict (classifier 產出) ──
+  doc_type: 'invoice' | 'allowance' | 'other',
+  in_or_out: 'in' | 'out' | null,        // doc_type='other' 時為 null
+  voided: boolean,                        // 偵測到作廢章 / 紅色浮水印 / 「作廢」字樣
   confidence: 'low' | 'medium' | 'high',
-  disagreed: boolean,                             // UX 旗標 (使用者選擇 ≠ 判決)
-  model: string,                                  // 例 'gemini-2.5-flash-lite'
-  classified_at: string,                          // ISO timestamp
-  error?: string,                                 // 失敗時填入; verdict 欄位則為 null
+
+  // ── 比對結果 (worker 落庫時算出) ──
+  disagreed: boolean,                     // verdict 的 (doc_type, in_or_out) ≠ 子表現況
+  low_confidence: boolean,                // confidence ∈ {low, medium} 的便利旗標
+
+  // ── 佇列狀態 ──
+  review_status?: 'pending' | 'resolved', // 需客戶處理時才設; 高信心一致則不設 (靜默)
+  resolution?: 'kept' | 'switched_in_out' | 'converted' | 'demoted' | 'promoted',
+  resolved_at?: string,                   // ISO timestamp
+
+  // ── metadata ──
+  model: string,                          // 例 'gemini-2.5-flash-lite'
+  classified_at: string,                  // ISO timestamp
+  error?: string,                         // 失敗時填入; 此時 verdict 欄位無意義
 }
 ```
 
-> `doc_type` 與 `documents.doc_type` 表面重複, 但意義不同:
-> - `documents.doc_type`: 使用者最終決定 (可能採納分類器建議或維持原選擇),
->   是 authoritative
-> - `classifier_hint.doc_type`: 分類器當下的看法, 是個 audit / 回顧用紀錄
->
-> 若兩者不一致 ⇒ 使用者覆蓋了分類器建議 (即 `disagreed=true`)。
+> 進佇列條件：`review_status='pending'` ⟺ worker 判定 `disagreed || low_confidence`。
+> `classifier_hint.doc_type` 是 audit / 回顧用（分類器當下看法）；`documents.doc_type`
+> 才是 authoritative（客戶最終決定）。兩者不一致代表客戶覆蓋了分類器建議。
 
 ### 4.3 Zod schema
 
-`lib/domain/models.ts`: 新增 `classifierHintSchema`, 加進 documents row schema
-(`classifier_hint: classifierHintSchema.nullable().optional()`)。
+`lib/domain/document.ts`：新增 `classifierHintSchema`，加進 document row schema
+（`classifier_hint: classifierHintSchema.nullable().optional()`）。
 
 ## 5. 服務層
 
-### 5.1 純函式: `classifyDocument`
+### 5.1 純函式：`classifyDocument`
 
-新檔: `lib/services/document-classifier.ts`
+新檔：`lib/services/document-classifier.ts`（純函式段，不標 `'use server'`）。
+風格沿用 `lib/services/gemini.ts`：
 
-風格沿用 `lib/services/gemini.ts`:
 - 原生 `fetch()` 打 `https://generativelanguage.googleapis.com/v1beta/models/<model>:generateContent`
-- `process.env.GEMINI_API_KEY` (Node) / `Deno.env.get` (Edge)
-- `inline_data` + `Buffer.from(fileData).toString('base64')`, MIME allowlist 與
-  `lib/services/gemini.ts:42-48` 一致 (PDF、PNG、JPEG、GIF、WebP)
+- `inline_data` + base64，MIME allowlist 與 `lib/services/gemini.ts` 一致（PDF、PNG、JPEG、GIF、WebP）
 - `generationConfig.response_mime_type: "application/json"`
-- `JSON.parse` 後**加一道 Zod runtime parse** (現有擷取流程沒做; 對小模型加個
-  防呆便宜划算)
+- `JSON.parse` 後**加一道 Zod runtime parse**（對小模型的便宜防呆）
 
 ```ts
 export const CLASSIFIER_MODEL = 'gemini-2.5-flash-lite';
@@ -239,425 +260,327 @@ export const CLASSIFIER_MODEL = 'gemini-2.5-flash-lite';
 export interface ClassifyDocumentArgs {
   fileData: ArrayBuffer;
   mimeType: string;
-  clientInfo: { name: string; taxId: string };  // 讓模型可比對 buyer/seller 與 client tax_id
+  clientInfo: { name: string; taxId: string };  // 供模型比對 buyer/seller 與 client tax_id
 }
 
 export interface DocumentClassification {
   docType: 'invoice' | 'allowance' | 'other';
   inOrOut: 'in' | 'out' | null;
-  voided: boolean;                                // 與 §4.2 JSONB 欄位同名, 落庫零映射
+  voided: boolean;
   confidence: 'low' | 'medium' | 'high';
 }
 
 export async function classifyDocument(args: ClassifyDocumentArgs): Promise<DocumentClassification>;
 ```
 
-> `model` 與 `classified_at` 不在本函式回傳值內 — 它們是落庫邊界 (Server
-> Action 包成 `classifier_hint` 物件時) 才填入的 metadata, 不該與模型實際
-> 產出混淆。
-
-### 5.2a 檔案大小: 20MB inline_data 上限的處理
-
-應用層 (`components/document-upload-section.tsx:90`、`portal-upload-fab.tsx:63`、
-`invoice/invoice-upload-dialog.tsx:114`) 允許單檔最大 **50MB**, 但 Gemini
-`generateContent` 的 `inline_data` 上限是 **20MB**, 且 base64 編碼會放大
-約 33%, 所以原始檔超過 ~15MB 即會被拒絕。
-
-擷取流程 (extraction-worker) 也吃同樣的上限, 但分類器更挑剔 —— 真實 50MB
-PDF 雖罕見, 仍需保護。處理策略:
-
-1. **影像 (PNG/JPEG/WebP/GIF)**: 若 `fileData.byteLength > 15 * 1024 * 1024`,
-   先用 server-side image processing 縮放至長邊 ≤ 2048px、品質 0.85 JPEG。
-   `sharp` 已是 Next.js 預設可用相依。分類器只看版面/印章/稅號, 解析度
-   2048px 足夠。
-2. **PDF**: 若同樣超過 ~15MB, 用 `pdf-lib` 或 `pdfjs-dist` 只擷取第 1 頁
-   後另存; 統一發票/折讓單實務上幾乎都是單頁文件, 第 1 頁就有所需訊號
-   (賣方/買方稅號、作廢章、文件抬頭)。
-3. **超過 ~15MB 且既非影像亦非可處理 PDF**: 直接回傳 `classifier_hint =
-   { error: 'file_too_large', ... }`, 走 §3 故障處理的「靜默通過」路徑。
-   使用者選擇被信任, 不阻擋上傳。
-
-此降採樣只用於**分類器路徑**; 擷取 worker 仍讀原檔 (`extractInvoiceCore`
-不變)。分類器與擷取兩段對檔案有不同 fidelity 需求, 不需共用同一份預處
-理結果。
-
-成本/延遲補充: 縮放/拆頁本身 < 200ms (server-side), 反而能讓 Gemini 呼叫
-更快, 因為 payload 更小。
+`model` / `classified_at` / `disagreed` / `review_status` 不在純函式回傳值內，皆為
+worker 落庫邊界才填入的 metadata 與比對結果。
 
 ### 5.2 Prompt 設計原則
 
-與擷取 prompt **明確區隔**: 中立, **不**接受任何預先宣告的 `in_or_out`。
-分類器只看文件 + `clientInfo`, 回報所看見的:
+與擷取 prompt **明確區隔**：中立，**不**接受任何預先宣告的 `in_or_out`。分類器只看
+文件 + `clientInfo`，回報所見：
 
-- 文件類型: `invoice` (統一發票) / `allowance` (折讓證明單) / `other`
-- 若為 invoice/allowance: 找出 seller_tax_id 與 buyer_tax_id, 與 `clientInfo.taxId` 比對:
-  - seller_tax_id == client.tax_id → `in_or_out='out'` (銷項)
-  - buyer_tax_id == client.tax_id → `in_or_out='in'` (進項)
-  - 都不符 → `in_or_out=null`、`confidence` 不得高於 `low`
-- `isVoided`: 偵測作廢章 / 紅色浮水印 / 顯式「作廢」文字
-- `confidence`: 模型依檔案清晰度 / 完整度自評
+- 文件類型：`invoice` (統一發票) / `allowance` (折讓證明單) / `other`
+- 若為 invoice/allowance：找出 seller_tax_id 與 buyer_tax_id，與 `clientInfo.taxId` 比對：
+  - seller_tax_id == client.tax_id → `inOrOut='out'` (銷項)
+  - buyer_tax_id == client.tax_id → `inOrOut='in'` (進項)
+  - 都不符 → `inOrOut=null`、`confidence` 不得高於 `low`
+- `voided`：偵測作廢章 / 紅色浮水印 / 顯式「作廢」文字
+- `confidence`：依檔案清晰度 / 完整度自評
 
-輸出 JSON shape 與 `DocumentClassification` 一致; prompt 必須明確要求 JSON
-only、無前綴。
+輸出 JSON shape 與 `DocumentClassification` 一致；prompt 必須要求 JSON only、無前綴。
 
-### 5.3 Server action 包裝 (documents-first 兩步驟)
+### 5.2a 檔案大小：20MB inline_data 上限
 
-同檔 (`'use server'` 區段):
+應用層允許單檔最大 50MB，但 Gemini `generateContent` 的 `inline_data` 上限是 20MB，
+base64 放大約 33%，故原始檔超過約 15MB 即會被拒。**此處純為正確性下限**（延遲已因
+async 不再是考量）：
+
+1. **影像**：> 15MB 時 server-side 縮放至長邊 ≤ 2048px、JPEG 品質 0.85（`sharp` 已可用）。
+   分類器只看版面 / 印章 / 稅號，2048px 足夠。
+2. **PDF**：> 15MB 時用 `pdf-lib` / `pdfjs-dist` 只取第 1 頁；統一發票 / 折讓單幾乎都單頁。
+3. **超過 15MB 且既非影像亦非可處理 PDF**：回 `classifier_hint = { error: 'file_too_large', ... }`，
+   走 §3.4 靜默通過。
+
+此降採樣只用於**分類器路徑**；擷取 worker 仍讀原檔。
+
+### 5.3 Enqueue：`enqueueClassification`（上傳處理常式呼叫）
+
+新增 server action（`lib/services/document-classifier.ts` 的 `'use server'` 段）：
 
 ```ts
-// 已由 Voucher Phase 5.5 提供, 本計畫只是呼叫
-// export async function createDocumentAction(args): Promise<{ documentId: string }>
-
-export async function classifyDocumentAction(args: {
-  documentId: string;
-}): Promise<DocumentClassification>
+export async function enqueueClassification(documentIds: string[]): Promise<void>;
 ```
 
-`classifyDocumentAction` 步驟:
-1. Auth check (`createClient()` → `auth.getUser()`)
-2. 授權檢查: 沿用 `lib/services/invoice.ts:createInvoice` lines 76-104 的 pattern;
-   以 documentId 反查 firm/client 後校驗
-3. 自 documents row 讀 `file_url`、`mimeType`、`client_id`
-4. 自 `invoices` storage bucket 讀檔 (同 `lib/services/allowance.ts:165-167`)
-5. 取 client name + tax_id (`lib/services/client.ts`)
-6. `classifyDocument()` 取得 verdict
-7. **同一動作內** UPDATE documents SET classifier_hint = { ...verdict, model,
-   classified_at, disagreed: <比對使用者初值算出> }
-8. 回傳 verdict 供客戶端決策
+- 沿用 `lib/services/bulk-extraction.ts` 的 pgmq 模式：`supabase.schema('pgmq_public').rpc('send_batch', ...)`，
+  但送進**獨立的 `document_classification` queue**（非 extraction queue）。
+- **`createInvoice` / `createAllowance` 完全不改。** 上傳處理常式在所有 row 建立後，
+  收集回傳的 `document_id`，一次性 batch enqueue（單一 round trip）。
+- direct-other 上傳（§5.6）可選擇性 enqueue 做反向檢查（見 §5.6）。
 
-> 與原計畫的差異: 不再是「分類結果由客戶端帶回, 後續 createDocument 落庫」。
-> documents row **已在上傳當下由 `createDocumentAction` 建好** (Phase 5.5 流程);
-> classifier action 是針對已存在的 row 做 UPDATE。這讓「documents 不會卡在
-> 中間態 (檔案上傳了但 row 還沒建)」的不變式更乾淨。
+> 把 enqueue 放在上傳處理常式而非 `createInvoice` 內，是為了維持 §3 的「creation 不變」
+> 原則，並讓 enqueue 一次 batch 化。
 
-### 5.4 路由 (分類後依決策派發)
+### 5.4 Worker：`document-classification` worker
 
-`lib/services/document.ts` 提供:
-- `linkInvoiceToDocument(documentId, vatArgs)` — Phase 5.5 已存在,
-  INSERT invoices row 指向已存在的 documents
-- `linkAllowanceToDocument(documentId, vatArgs)` — Phase 5.5 已存在
-- `updateDocumentDocType(documentId, newDocType, options)` — 新增,
-  支援「verdict='other' → 把 doc_type 從使用者原選擇改為 'other'」這條路徑
-- `softDeleteDocument(documentId)` — 取消上傳時, status='deleted' +
-  cleanup storage 物件 (沿用既有 storage 刪除 helper)
+新檔：`supabase/functions/classification-worker/`（Deno edge function，鏡像
+`supabase/functions/extraction-worker/` 的結構：pgmq read、download、Gemini fetch、
+回寫、retry / dead-letter）。**獨立部署，與 extraction-worker 分離。**
 
-派發邏輯由客戶端 (上傳元件) 在分類完成後依使用者決策呼叫上述任一函式。
-**不在 server 端重跑分類器** — 信任 documents.classifier_hint 已是
-server-authoritative。
+每筆訊息步驟：
+1. dequeue `documentId`
+2. 讀 document：`file_url`、`doc_type`、`client_id`；若有子表，讀子表 `in_or_out`
+3. 自 `documents` bucket 下載原檔（`extraction-worker` 的 `toDocumentsKey` 模式）
+4. 取 client name + tax_id
+5. `classifyDocument()` 取得 verdict
+6. 比對 verdict vs 現況，算 `disagreed` / `low_confidence`
+7. `UPDATE documents SET classifier_hint = { ...verdict, disagreed, low_confidence,
+   model, classified_at, review_status }`，其中 `review_status='pending'` 僅當
+   `disagreed || low_confidence`
+8. 失敗：寫 `classifier_hint = { error, model, classified_at }`，不設 `review_status`
+
+> worker **永遠不碰子表**，只寫 `classifier_hint`。所有子表的建立 / 刪除 / 改 doc_type
+> 都發生在使用者佇列決策時（§5.5），而非 worker。
+
+### 5.5 佇列處理動作（對既有 row 的 mutation）
+
+新增於 `lib/services/document.ts`（Drizzle 交易，Phase 6.5 後可用；非 PostgREST RPC，
+遵循 memory `feedback_avoid_rpc`）。每個動作完成後設
+`classifier_hint.review_status='resolved'` + 對應 `resolution`，使文件離開佇列。
+
+| 動作 | 成本 | 機制 |
+|---|---|---|
+| `keep` | 極低 | 僅標 resolved；`disagreed` 紀錄保留供 audit |
+| `switchInOrOut` | 低 | 子表 `in_or_out` 欄位 update |
+| `convertDocType` (invoice↔allowance) | 最高 | 交易內：刪原子表 + 建目標子表（不同 schema）+ 翻 `documents.doc_type` |
+| `demoteToOther` | 低 | 交易內：刪子表 + 翻 `documents.doc_type='other'` |
+| `promoteFromOther` | 低 | 交易內：建子表 + 翻 `doc_type`（`/documents` other 列表用，demote 的反向） |
+
+```ts
+export async function resolveClassificationKeep(documentId: string): Promise<void>;
+export async function switchInOrOut(documentId: string): Promise<void>;
+export async function convertDocType(
+  documentId: string,
+  target: { docType: 'invoice' | 'allowance'; inOrOut: 'in' | 'out' },
+): Promise<void>;
+export async function demoteToOther(documentId: string): Promise<void>;
+export async function promoteFromOther(
+  documentId: string,
+  target: { docType: 'invoice' | 'allowance'; inOrOut: 'in' | 'out' },
+): Promise<void>;
+```
+
+**OCR 重跑的細節（重要）**：擷取 prompt 被 `in_or_out` 帶偏，所以 `switchInOrOut` /
+`convertDocType` 若在 **OCR 已跑過之後**才執行，原 `extracted_data` 的 buyer/seller
+映射已錯，需 `ocr_status='pending'`（並清 / 標記 `extracted_data`）以便重新擷取。
+但因分類器在**上傳當下** enqueue、OCR 走**期別批次**較晚，**常見情況是客戶在 OCR
+之前就處理完佇列**，校正自然流入稍後的擷取，毋需重跑。重跑只是 resolve-after-OCR
+的邊緣情況。`convertDocType` 因兩子表 schema 不同，一律以「建全新目標子表 +
+`ocr_status='pending'` 重新擷取」處理（不嘗試搬移 `extracted_data`）。
+
+**Guard（v1 從簡）**：上述拆解動作要求子表尚未 confirmed 且無對應 journal entry。
+佇列項通常是剛上傳的 row（status `uploaded`），此 guard 多數時候不會觸發；若文件已
+confirmed / 已有分錄，動作擋下並提示改由事務所處理。
+
+**可用對象**：客戶（portal 佇列）為主，事務所員工（審核端）亦可用同一組動作作為後路。
+兩者皆走同一 service 函式，RLS 以 firm + client 範圍隔離（Phase 6b 之 RLS）。
+
+### 5.6 直接上傳「其他文件」（唯一真正用到 document-first 建立的路徑）
+
+客戶確定一份文件不是發票 / 折讓（例：保險帳單、合約、收據）時，可在上傳當下選
+「其他文件」。此為**唯一**真正使用 standalone document-first 建立的路徑：
+
+- 呼叫既有的 `createDocument`（`lib/services/document.ts` 已 export）→ 建 childless
+  `doc_type='other'` row（已合法，無 schema 變更），**無子表、OCR 略過**。
+- 落入 `/documents`「其他文件」列表（§6.5）管理。
+- **反向檢查（可選）**：對 direct-other 仍可 enqueue 分類器，捕捉「客戶標其他文件、
+  但其實是統一發票」的反向錯誤，並在佇列提出 `promote` 建議。保持安全網對稱。
+
+此路徑**不影響** invoice / allowance 主流程（後者維持 coupled-optimistic）。它真正改變
+的是**產品範圍而非架構**：`/documents` 從「誤分類收容所」升級為真正的文件庫。
 
 ## 6. UI 層
 
-### 6.1 批次審核元件
+字級依專案規約：`text-base` 為主、`text-sm` 為輔、禁用 `text-xs`。
 
-新檔: `components/document-classifier-batch-review.tsx`
+### 6.1 上傳入口：第三個選項「其他文件」
 
-單一 modal, 處理 1-N 個分類不一致檔案。用 shadcn `Dialog` (非
-`AlertDialog` — 後者僅支援 confirm/cancel; 批次需可捲動)。
+3 個上傳入口（`components/document-upload-section.tsx`、
+`components/invoice/invoice-upload-dialog.tsx`、portal FAB 的 parent）的分類選擇
+新增第三個選項：發票 / 折讓 / **其他文件 (直接上傳)**。
 
-```ts
-interface DisagreeingFile {
-  id: string;                                   // 本地 id (= documentId, 已建好)
-  documentId: string;
-  filename: string;
-  thumbnailUrl: string | null;                  // signed URL, 來自已建好的 document
-  userChoice: { docType: 'invoice' | 'allowance'; inOrOut: 'in' | 'out' };
-  verdict: DocumentClassification;
-}
+- 選發票 / 折讓：現行 `createInvoice` / `createAllowance` 不變。
+- 選其他文件：呼叫 `createDocument`（§5.6）。
+- 上傳處理常式在 row 建立後一次性呼叫 `enqueueClassification([...documentIds])`。
 
-type Decision =
-  | 'switch_to_invoice_in'  | 'switch_to_invoice_out'
-  | 'switch_to_allowance_in' | 'switch_to_allowance_out'
-  | 'switch_to_other'        // 新增: 留在 documents 不建子表 (verdict='other' 時)
-  | 'keep'                   // 仍按 userChoice 建子表 (classifier_hint.disagreed=true)
-  | 'cancel';                // soft delete document + storage cleanup
+portal FAB 是**客戶路徑**、是自我校正的首要受眾，優先確保其體驗。
 
-interface Props {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  files: DisagreeingFile[];
-  tone: 'firm' | 'client';
-  onSubmit: (decisions: Record<string /*file.id*/, Decision>) => void;
-}
-```
+### 6.2 客戶端校正佇列（核心新 UI）
 
-排版: 縱向卡片清單, 每張卡片:
-- 左: 縮圖 (沿用 `components/upload-queue-list.tsx:76-93` pattern)
-- 中: 檔名 + 平語化說明
-- 右: 依 verdict 變體呈現選項 (見下)
-- 預設不選任何項; 底部「繼續上傳」按鈕在所有 row 都選好前 disabled
+新檔：`components/document-classifier-queue.tsx`（portal 內），列出該 client
+`review_status='pending'` 的文件，每筆一張卡片，客戶有空再逐筆處理。**非 modal、
+非阻擋**，是一個常駐清單頁（例：portal 側欄「待您確認」入口）。
 
-**卡片變體**:
+卡片內容：
+- 左：縮圖（沿用 `components/upload-queue-list.tsx` 的 pattern）
+- 中：檔名 + 平語化說明（client tone）
+- 右：依 verdict 變體呈現動作
 
-A. `verdict.docType ∈ {invoice, allowance}` 且與 userChoice 不一致:
-   選項: [改成 verdict 的 docType+inOrOut] / [維持原選擇] / [取消此筆]
+**卡片變體 / 動作**：
+- A. verdict 為 invoice/allowance 但與選擇不一致（doc type 或 in/out）：
+  `[改為 verdict 的類型/方向]` / `[維持原選擇]`
+- B. verdict='other'：「這份文件看起來不是統一發票或折讓單。」
+  `[改為其他文件 (收進文件庫，不歸發票/折讓)]` / `[維持原選擇]`
+- C. 僅低 / 中信心、方向一致：「我們不太確定這份文件的分類，請您確認。」
+  `[確認無誤]` / `[改為…]`
+- direct-other 的反向建議：「這份其他文件看起來像統一發票，要歸入發票嗎？」`[promote]` / `[維持]`
 
-B. `verdict.docType === 'other'` (新): 該文件看起來不是發票或折讓單。
-   選項: [改為其他憑證 (留在文件庫,不建發票/折讓)] /
-         [維持原選擇 (仍建 invoice/allowance)] /
-         [取消此筆]
-   卡片內文 (client tone): 「這份文件看起來不是統一發票或折讓單。
-                            您可以把它收進文件庫不歸入發票/折讓,
-                            或仍按原本選擇上傳。」
-   卡片內文 (firm tone): 「分類為 other (非 invoice/allowance);
-                          可改為 doc_type=other 留在 documents、不建子表」
+文案依 tone 切換（client 平語化 / firm 簡潔可用術語）。`voided=true` 時加一條低調
+文字徽章「此發票看似已作廢」，不影響主動作（v1 選配）。
 
-單檔即 N=1 排版, 不另寫單檔 dialog。
+> 與前一版的差異：**沒有**上傳當下的同步 batch-review dialog。客戶先看到上傳結果，
+> 校正在佇列裡非同步進行；延遲與 Gemini 健康度對上傳體驗完全隱形。
 
-文案 (依 tone 切換):
-- **client tone** (非專業): 平語化。
-  「這份文件看起來像**銷項折讓單**, 但您上傳到了**進項發票**。」
-- **firm tone** (事務所): 簡潔, 可用術語。
-  「偵測為銷項折讓, 所選為進項發票」
+### 6.3 側欄徽章
 
-標題:
-- 單檔: 「請確認分類」
-- 批次 (N>1): 「N 份文件分類不一致, 請確認」
+`components/portal-sidebar.tsx`（client）與 `components/firm-sidebar.tsx`（事務所）
+新增「待您確認 / 待確認分類」入口，徽章顯示該 client `review_status='pending'` 文件數
+（走 §4.1 partial index）。
 
-字級依專案規約: `text-base` 為主, `text-sm` 為輔, 禁用 `text-xs`。
+### 6.4 審核 dialog 顯示分類不符旗標
 
-分類失敗的檔案**不**進此 dialog (它們已靜默通過); 可選: 底部低調文字
-「另有 K 份文件分類失敗, 已照您的選擇上傳」。
+`components/invoice-review-dialog.tsx` 與 `components/allowance-review-dialog.tsx`：
+當對應 document 的 `classifier_hint.disagreed === true`（即使客戶選了 keep），於表單
+頂端渲染一條 inline `Alert`（shadcn `default` variant，提示但不警示）：
 
-**作廢偵測 (`verdict.voided`) 的 UI 處理 (v1 選配)**:
+> 「上傳時系統判斷此文件為 X，但選擇為 Y，請於確認前再次核對分類。」
 
-分類器可能偵測到作廢章 / 紅色浮水印 / 「作廢」字樣 → `verdict.voided=true`。documents 層**無** void 狀態 (見 Voucher §3.1);作廢語意承載於 `invoices.extracted_data.taxType='作廢'`。
+僅資訊性、不阻擋；字級 `text-sm`。這是給審核端的最後一道可見提示，不是主校正管道
+（主管道是客戶佇列）。
 
-v1 處理路徑:
-- A. **靜默路徑** (預設): 不在 batch review dialog 中特別呈現;依正常流程建立 invoice 子表時,在 `linkInvoiceToDocument` 階段把 `extracted_data.taxType` 預設為 `'作廢'` (若 verdict.voided=true)。員工事後於 invoice review dialog 中可確認 / 修正。
-- B. **顯式提示** (v1 選配): 在分類審核卡片上加一個小徽章 ⚠️「此發票看似已作廢」,但**不影響** dialog 主流程選項 (switch / keep / cancel)。員工點開後仍按平常流程處理。
+### 6.5 `/documents`「其他文件」列表頁
 
-任一路徑下,既有 [reports.ts](../../lib/services/reports.ts) TET_U 邏輯都會正確辨識 `taxType='作廢'` 並產出格式碼 F。
+新檔：`app/firm/[firmId]/client/[clientId]/documents/page.tsx`，列 `doc_type='other'`
+的文件（含 direct-other 上傳與 demote 而來者）。
 
-### 6.2 接入 3 個上傳入口
+- **欄位**：縮圖、檔名、`doc_date`、`classifier_hint` 摘要（verdict + confidence）、操作
+- **操作**：`promoteFromOther`（重分類為發票 / 折讓，需指定 in/out，會觸發 OCR）、刪除（soft delete + 清 storage）
+- **排序**：`created_at DESC`；**分頁**：沿用 `usePaginatedPeriodInvoices` SWR pattern
+- 因 direct-other 加入，此頁是真正的文件庫入口，非僅孤兒收容所
 
-每個入口的改動形狀一致, pseudocode:
+### 6.6 審核端的 demote / convert 後路
 
-```ts
-async function processBatch(files: File[], userChoice) {
-  // 1. Storage 上傳 + createDocument 平行
-  //    (Phase 5.5 起 createDocumentAction 內部處理 storage upload + INSERT documents)
-  const docs = await Promise.all(files.map(f => createDocumentAction({
-    file: f, clientId,
-    doc_type: userChoice.docType,        // 初值
-    in_or_out: userChoice.inOrOut,       // 暫存以備建子表
-  })));
-  // 結果: docs[].documentId, files 已成 documents row, classifier_hint=NULL
-
-  // 2. 分類器平行 (對已存在的 documentId 跑)
-  const classifications = await Promise.all(
-    docs.map(async (d) => {
-      try {
-        const verdict = await classifyDocumentAction({ documentId: d.documentId });
-        // server action 已將 verdict 寫進 documents.classifier_hint
-        return { ...d, verdict, error: null };
-      } catch (err) {
-        console.error('classifier failed for', d.filename, err);
-        return { ...d, verdict: null, error: String(err) };
-      }
-    })
-  );
-
-  // 3. 分群 (only invoice/allowance verdicts compare to userChoice; 'other' always disagrees)
-  const disagreed = classifications.filter(c => c.verdict && (
-    c.verdict.docType === 'other' ||
-    c.verdict.docType !== userChoice.docType ||
-    c.verdict.inOrOut !== userChoice.inOrOut
-  ));
-  const agreed = classifications.filter(c => c.verdict && !disagreed.includes(c));
-  const failed = classifications.filter(c => !c.verdict);
-
-  // 4. agreed + failed: 立刻 link 子表 (依使用者初值, 此時 verdict 與 userChoice 一致或不可用)
-  await Promise.all([
-    ...agreed.map(c => linkSubtableForChoice(c.documentId, userChoice)),
-    ...failed.map(c => linkSubtableForChoice(c.documentId, userChoice)),
-    // classifier_hint.disagreed=false 已由 server action 寫入 (或 error)
-  ]);
-
-  // 5. disagreed 進批次審核 dialog
-  if (disagreed.length === 0) return;
-  const decisions = await openBatchReview({ files: disagreed, tone });
-  await Promise.all(disagreed.map(c => {
-    const dec = decisions[c.documentId];
-    switch (dec) {
-      case 'cancel':
-        return softDeleteDocument(c.documentId);  // status='deleted' + storage cleanup
-      case 'switch_to_other':
-        return updateDocumentDocType(c.documentId, 'other');
-        // 文件停在 documents, 不建子表; OCR worker 將 skip
-      case 'switch_to_invoice_in':
-      case 'switch_to_invoice_out':
-      case 'switch_to_allowance_in':
-      case 'switch_to_allowance_out':
-        return linkSubtableForChoice(c.documentId, parseDecision(dec));
-      case 'keep':
-        return Promise.all([
-          linkSubtableForChoice(c.documentId, userChoice),
-          markClassifierDisagreed(c.documentId),  // 把 classifier_hint.disagreed = true
-        ]);
-    }
-  }));
-}
-```
-
-`linkSubtableForChoice(documentId, choice)` 為本地 helper, 依 `choice.docType`
-派分到 `linkInvoiceToDocument` 或 `linkAllowanceToDocument` (Phase 5.5 已存在,
-INSERT 子表 row 指向已存在的 documents)。`markClassifierDisagreed(documentId)` 為
-單表 UPDATE: SET classifier_hint = jsonb_set(classifier_hint, '{disagreed}', 'true')。
-
-**修改檔案**:
-- `components/document-upload-section.tsx` (lines ~138-157): 接 `processBatch`,
-  `tone` 由 parent 依角色帶入 (firm 期別頁 vs portal)
-- `components/invoice/invoice-upload-dialog.tsx` (lines ~141-150): 同上,
-  firm-only `tone="firm"` 寫死
-- `components/portal-upload-fab.tsx` 的 parent (在 `app/firm/[firmId]/client/[clientId]/portal/...`):
-  `tone="client"`; FAB 本身不改, 是它回呼進來的 parent 接 `processBatch`
-
-### 6.3 審核 dialog 顯示分類不符旗標
-
-修改 `components/invoice-review-dialog.tsx` 與 `components/allowance-review-dialog.tsx`:
-
-當對應 documents row 的 `classifier_hint?.disagreed === true`, 於表單頂端
-渲染一條 inline `Alert` (shadcn variant `default`, 提示但不警示):
-
-> 「上傳時系統判斷此文件為 X, 但您選擇 Y, 請於確認前再次核對分類。」
-
-僅資訊性, 不阻擋確認。字級 `text-sm`。
-
-### 6.4 最簡 /documents 列表頁
-
-新檔: `app/firm/[firmId]/client/[clientId]/documents/page.tsx`
-
-僅列出 `doc_type='other'` 的文件 (因為其他 doc_type 已有期別頁 / 傳票頁可入)。
-沒有此頁面, 'other' 文件等於孤兒, 對使用者不可見。
-
-**列表欄位**: 縮圖、檔名、`doc_date`、`classifier_hint` 摘要 (verdict + confidence)、操作。
-
-**操作按鈕** (每列):
-- 「重分類為發票」→ 開 dialog 讓使用者指定 in/out → UPDATE `documents.doc_type='invoice'` +
-  `linkInvoiceToDocument(...)` (此時 OCR worker 會重新被觸發, 因為 doc_type 變成 invoice)
-- 「重分類為折讓」→ 同上但 link allowance
-- 「刪除」→ soft delete (`status='deleted'`) + 清 storage object
-
-**Sidebar 入口**: `components/firm-sidebar.tsx` 與 `components/portal-sidebar.tsx`
-新增「其他文件」入口, 徽章顯示該 client 之 `doc_type='other'` 文件數量。
-
-**排序**: `created_at DESC`。**分頁**: 沿用 `usePaginatedPeriodInvoices` SWR pattern。
-
-**字級**: `text-base` 為主, 列表 metadata 用 `text-sm`。
-
-> **為何不做完整 /documents 頁**: v1 唯二的「可入」doc_type 是 invoice/allowance,
-> 期別頁已分別呈現。完整跨子表查找、進階篩選留待 v2+ 引入非 VAT 子表時再做。
-> 本頁面的存在價值是讓 `'other'` 文件不孤兒, 不是文件管理中心。
+事務所員工在 invoice / allowance 的 review dialog 或列表，可對單筆文件執行
+`demoteToOther` / `convertDocType`（§5.5 同一組 service 函式），作為 false-agree
+漏網時的人工修正後路。與客戶佇列共用邏輯，只是入口不同。
 
 ## 7. Eval Harness
 
-依 prior session 評估目標: 收 ~50 真實上傳 + ground truth, 量測分類器準確
-率, 作為「軟警告」是否可進階為「硬阻擋」之決策依據。
+目標：收約 50 份真實上傳 + ground truth，量測分類器準確率，作為「是否值得把信心
+門檻調更嚴 / 未來是否升級為更強提示」的依據。
 
-**新檔**:
-- `tests/fixtures/classifier/README.md`: 收樣指引 (匿名化、敏感欄位處理)
-- `tests/fixtures/classifier/manifest.json`: 起始為 `[]`, 之後填入
-  `{ filename, ground_truth: { docType, inOrOut, isVoided }, notes }[]`
-- `tests/fixtures/classifier/.gitignore`: 排除影像檔
-- `tests/integration/document-classifier.eval.ts`: 讀 manifest, 逐檔呼叫
-  `classifyDocument()`, 算 per-class precision/recall + 整體準確率, 印表格。
-  **manifest 為空時 skip** (CI 不會因此 fail)
-- `lib/services/document-classifier.test.ts`: parsing 層單元測試 (mock fetch、
-  Zod 驗證、錯誤路徑), 不打真 Gemini
+**新檔**：
+- `tests/fixtures/classifier/README.md`：收樣指引（匿名化、敏感欄位）
+- `tests/fixtures/classifier/manifest.json`：起始 `[]`，填入
+  `{ filename, ground_truth: { docType, inOrOut, voided }, notes }[]`
+- `tests/fixtures/classifier/.gitignore`：排除影像檔
+- `tests/integration/document-classifier.eval.ts`：讀 manifest、逐檔呼叫
+  `classifyDocument()`、算 per-class precision/recall + 整體準確率、印表格。
+  **manifest 為空時 skip**（CI 不會 fail）
+- `lib/services/document-classifier.test.ts`：parsing 層單元測試（mock fetch、Zod 驗證、
+  錯誤路徑），不打真 Gemini
 
-**非**回歸測試, 是量測工具。用其輸出決定 doc-type 分類是否可升級為硬阻擋。
+**非**回歸測試，是量測工具。
 
 ## 8. 改動清單一覽
 
 | 檔案 | 改動 |
 |---|---|
-| `supabase/migrations/<ts>_add_classifier_hint_to_documents.sql` | NEW — documents 加 JSONB 欄位 |
-| `supabase/database.types.ts` | regenerate (使用者執行) |
-| `lib/domain/models.ts` | 加 `classifierHintSchema` + 擴充 documents schema |
-| `lib/services/document-classifier.ts` | NEW — `classifyDocument` + `classifyDocumentAction` |
+| `supabase/migrations/<ts>_add_classifier_hint_to_documents.sql` | NEW — JSONB 欄位 + partial index |
+| `supabase/database.types.ts` | regenerate（使用者執行）|
+| `lib/domain/document.ts` | 加 `classifierHintSchema` + 擴充 document schema |
+| `lib/services/document-classifier.ts` | NEW — `classifyDocument` 純函式 + `enqueueClassification` server action |
 | `lib/services/document-classifier.test.ts` | NEW — 單元測試 |
-| `lib/services/document.ts` | `createDocument` 接受並寫入 `classifier_hint` |
-| `components/document-classifier-batch-review.tsx` | NEW — 單一 modal, 1-N 卡片 |
-| `components/document-upload-section.tsx` | 接 `processBatch` |
-| `components/invoice/invoice-upload-dialog.tsx` | 接 `processBatch` |
-| Portal upload parent in `app/firm/[firmId]/client/[clientId]/portal/...` | 接 `processBatch` |
-| `components/invoice-review-dialog.tsx` | 顯示 disagreed 旗標 |
-| `components/allowance-review-dialog.tsx` | 顯示 disagreed 旗標 |
-| `app/firm/[firmId]/client/[clientId]/documents/page.tsx` | NEW — 最簡 /documents 列表 (僅列 `doc_type='other'` + 重分類/刪除) |
-| `components/firm-sidebar.tsx` | 加「其他文件」入口 (徽章顯示 'other' 文件數) |
-| `components/portal-sidebar.tsx` | 加「其他文件」入口 (client tone) |
-| `lib/services/document.ts` | 加 `updateDocumentDocType` (重分類用) |
-| `tests/fixtures/classifier/README.md` + `manifest.json` + `.gitignore` | NEW — eval scaffolding |
-| `tests/integration/document-classifier.eval.ts` | NEW — eval harness (manifest 空時 skip) |
+| `supabase/functions/classification-worker/` | NEW — 獨立 pgmq worker（鏡像 extraction-worker）|
+| `supabase/migrations/<ts>_create_classification_queue.sql` | NEW — pgmq `document_classification` queue |
+| `lib/services/document.ts` | 加 `resolveClassificationKeep` / `switchInOrOut` / `convertDocType` / `demoteToOther` / `promoteFromOther`（Drizzle 交易）|
+| `components/document-upload-section.tsx` | 加「其他文件」選項 + 上傳後 `enqueueClassification` |
+| `components/invoice/invoice-upload-dialog.tsx` | 同上（firm tone）|
+| Portal upload parent（`app/firm/[firmId]/client/[clientId]/portal/...`）| 加「其他文件」選項 + enqueue（client tone）|
+| `components/document-classifier-queue.tsx` | NEW — 客戶端校正佇列 |
+| `components/portal-sidebar.tsx` / `components/firm-sidebar.tsx` | 加「待確認分類」入口 + 徽章 |
+| `components/invoice-review-dialog.tsx` / `components/allowance-review-dialog.tsx` | 顯示 disagreed 旗標 + 審核端 demote/convert 後路 |
+| `app/firm/[firmId]/client/[clientId]/documents/page.tsx` | NEW —「其他文件」列表（promote / 刪除）|
+| `tests/fixtures/classifier/*` + `tests/integration/document-classifier.eval.ts` | NEW — eval scaffolding |
+
+> **`createInvoice` / `createAllowance` 不在清單內**：optimistic 模型下其建立邏輯完全不變。
 
 ## 9. Reuse 既有
 
-- shadcn `Dialog` (`components/ui/dialog.tsx`) + `Alert` (`components/ui/alert.tsx`)
-- 縮圖渲染 pattern (`components/upload-queue-list.tsx:76-93`、`dropzone.tsx:110-120`)
-- Gemini fetch、MIME allowlist、base64 boilerplate (`lib/services/gemini.ts:42-48, 99-129, 245-249`)
-- Auth + 授權 pattern (`lib/services/invoice.ts:76-104`)
-- Storage 下載 (`lib/services/allowance.ts:165-167` 模式;**Phase 5.5 起 bucket 已從 `invoices` 改名為 `documents`**)
-- Storage path convention `{firmId}/{periodYYYMM}/{clientId}/{uuid}.{ext}` 未變
-- Test fixture helpers (`tests/utils/supabase.ts:104` `createTestFixture` / `cleanupTestFixture`)
+- shadcn `Dialog` / `Alert`（`components/ui/`）
+- 縮圖渲染（`components/upload-queue-list.tsx`、`dropzone.tsx`）
+- Gemini fetch、MIME allowlist、base64 boilerplate（`lib/services/gemini.ts`）
+- pgmq enqueue 模式（`lib/services/bulk-extraction.ts` 的 `send_batch`）
+- worker 結構、`documents` bucket 下載、`toDocumentsKey`（`supabase/functions/extraction-worker/`）
+- Drizzle 交易（`lib/db/`，Phase 6.5）；既有 `createDocument`（`lib/services/document.ts`）
+- Storage path convention `/{firmId}/{clientId}/{periodYYYMM}/`（Phase 5.6）
+- Auth + firm/client 授權（Phase 6b RLS；`lib/services/invoice.ts` 的 `assertCallerCanAccessClient`）
+- Test fixture helpers（`tests/utils/supabase.ts`）
 
 ## 10. 驗證
 
-於 worktree (`.claude/worktrees/upload-classifier`) 執行:
+於 worktree 執行：
 
 1. `npm run lint` — 型別 + ESLint 通過
-2. `npm run test:run` — 單元測試通過; eval harness 在 manifest 空時 skip
-3. `npm run dev` — 手動瀏覽器驗證:
-   - **單檔, 一致**: 上傳清晰 進項 invoice + `in_or_out=in` → 無 dialog,
-     documents row + invoice row 建好, `classifier_hint.disagreed=false`
-   - **單檔, 不一致**: 上傳 銷項 invoice + `in_or_out=in` → dialog 一張卡 →
-     點「維持原選擇」 → row 建好, `classifier_hint.disagreed=true`
-   - **單檔, 切換**: 同上, 點「改成 X」 → row 走 verdict 的路徑, `disagreed=false`
-   - **單檔, doc type 不符**: 上傳折讓單到 invoice 流程 → 同 UX, switch 鍵改打 `linkAllowanceToDocument`
-   - **單檔, "other"**: 上傳非發票 (例: 收據相片) → 卡片顯示三選一 [改為其他憑證 / 維持原選擇 / 取消]
-     - 點「改為其他憑證」→ documents.doc_type='other'、無子表 row、OCR 跳過、/documents 頁多一筆
-     - 點「維持原選擇」→ 仍建 invoice/allowance 子表、classifier_hint.disagreed=true
-     - 點「取消」→ documents soft delete + storage 清除
-   - **單檔, 取消**: 觸發 dialog, 點「取消此筆」 → documents row status='deleted', storage 物件清掉
-   - **批次, 全一致**: 拖放 5 份吻合的 invoice → 無 dialog, 5 row 靜默出現
-   - **批次, 部分不一致**: 拖放 5 份, 其中 2 份 doc type 不符、1 份 in/out 不符、1 份 verdict='other'
-     → dialog 4 張卡 (含 other 變體), agreed 不顯示。每張選不同決策 → submit → 取消那筆走 soft delete,
-     其餘照各自決策落地。確認牆鐘 ≈ storage 上傳 + ~1-2s, **不是** N × per-file
-   - **批次, 分類失敗**: 暫時把 `GEMINI_API_KEY` 弄壞跑一遍 → 失敗檔走 silent
-     fallback, `classifier_hint.error` 寫入; 真不符的還是進 dialog; dialog
-     底部 footer 數出失敗數
-   - **Client portal 批次**: 同 firm 批次, 但 `tone="client"` 文案
-   - **審核 dialog**: 開一筆 `disagreed=true` 的 row → 表單頂端見 inline alert
-   - **/documents 列表頁**: 進入 `/firm/[firmId]/client/[clientId]/documents` →
-     看到剛才「改為其他憑證」那筆收據 → 點「重分類為發票 (進項)」→ 列表少一筆、
-     對應期別頁多一筆 invoice → OCR 重新觸發、`extracted_data` 填好後可 review confirm
-   - **/documents 刪除**: 上傳一張錯的文件、走「改為其他憑證」 → /documents 頁點刪除
-     → row status='deleted'、storage object 清除、列表少一筆
-   - **Sidebar 徽章**: 「其他文件」入口的徽章數字隨 /documents 操作即時更新
-
-4. psql 抽查 JSONB 形狀:
+2. `npm run test:run` — 單元測試通過；eval harness 在 manifest 空時 skip
+3. `npm run dev` — 手動瀏覽器驗證：
+   - **上傳一致（高信心）**：上傳清晰進項 invoice + `in=in` → 立刻見於期別頁；佇列無此筆；
+     `classifier_hint` 寫入但無 `review_status`
+   - **上傳不一致**：上傳銷項 invoice 但選進項 → 立刻見於期別頁（照原選擇）；數秒後佇列
+     出現一筆 → 點「改為銷項」→ 子表 `in_or_out` 更新、離開佇列、`resolution='switched_in_out'`
+   - **doc type 不符**：上傳折讓單到 invoice 流程 → 佇列卡片 → `[改為折讓]`（convert）→
+     原 invoice 子表刪除、建 allowance 子表、`doc_type='allowance'`、`ocr_status='pending'`
+   - **verdict='other'**：上傳收據相片走 invoice → 佇列卡片 →「改為其他文件」→ 子表刪除、
+     `doc_type='other'`、`/documents` 多一筆；或「維持原選擇」→ 留 invoice、`disagreed=true`
+   - **低信心一致**：上傳模糊但方向正確的 invoice → 佇列出現「請確認」卡 →「確認無誤」→
+     `resolution='kept'`、離開佇列
+   - **direct-other 上傳**：選「其他文件」上傳保險帳單 → 無子表、不進期別頁、進 `/documents`；
+     OCR 略過；（若開反向檢查）佇列可能出現 promote 建議
+   - **`/documents` promote**：在 `/documents` 對一筆 other 點「重分類為發票(進項)」→ 建子表、
+     `doc_type='invoice'`、OCR 觸發、可後續 review/confirm
+   - **分類失敗**：暫時弄壞 `GEMINI_API_KEY` → 文件照客戶選擇走、`classifier_hint.error` 寫入、
+     佇列不出現、徽章不變
+   - **延遲穩健**：人為延遲 / 停掉 classification-worker → 上傳與期別頁完全不受影響，
+     佇列只是稍後才出現項目
+   - **審核 dialog 旗標**：開一筆 `disagreed=true`（客戶選 keep）的 invoice → 表單頂端見 inline alert
+   - **側欄徽章**：徽章數隨佇列處理即時更新
+4. psql 抽查：
    ```sql
-   SELECT id, classifier_hint FROM documents ORDER BY created_at DESC LIMIT 5;
+   SELECT id, doc_type, classifier_hint FROM documents
+   WHERE classifier_hint IS NOT NULL ORDER BY created_at DESC LIMIT 10;
    ```
-
-5. **既有發票流程不退步 smoke**: 上傳 invoice → AI extract → review → confirm
-   → 期別頁渲染、TET_U 匯出。上傳 allowance 同樣跑一次。
+5. **既有流程不退步 smoke**：上傳 invoice → OCR → review → confirm → 期別頁、TET_U 匯出；
+   allowance 同樣跑一次；電子發票匯入路徑（`processElectronicInvoiceFile`）不受影響
 
 ## 11. 分支 / commit
 
-依 memory `feedback_branch_workflow`: 開新 feature branch (例
-`feature/upload-classifier`), 不直接動 main。
-
-依 memory `feedback_no_apply_migration`: migration .sql 寫好後**不要**自動
-跑 `supabase migration up` 或 regenerate types, 等使用者執行。
+- 依 memory `feedback_branch_workflow`：開新 feature branch（例 `feature/upload-classifier`），不直接動 main。
+- 依 memory `feedback_separate_commits`：拆成可讀的數個 commit（schema → 純函式/worker → 服務動作 → UI → eval）。
+- 依 memory `feedback_no_apply_migration`：migration .sql 寫好後**不**自動 `supabase migration up`
+  或 regenerate types，等使用者執行。
 
 ## 12. 依賴與時序
 
-本案啟動條件 = `VOUCHER_JOURNAL_ENTRY_PHASED_PLAN.md` **Phase 5 + Phase 5.5 + Phase 6** 全部完成。
-- **Phase 5**: `documents` 表落地, `classifier_hint` 才有地方加;`doc_type` 三值 enum 含 `'other'`
-- **Phase 5.5** (關鍵前提): upload pipeline 倒置為 documents-first;
-  `createDocumentAction` 為主入口、`linkInvoiceToDocument` / `linkAllowanceToDocument` 為子表掛接動作;
-  OCR 觸發點繫到 document insert。沒有這個前提, classifier 沒有「先建好的 documents row」可作為 UPDATE 目標,
-  `verdict='other'` 也無處停留 — 整個流程設計都會崩
-- **Phase 6**: CTI backfill, 既有資料都已有對應 documents row
+本案啟動條件 = Voucher `VOUCHER_JOURNAL_ENTRY_PHASED_PLAN.md` 的 **Phase 5.5 / 5.6 / 6a /
+6b / 6.5** 完成（皆已完成）：
+- **Phase 5.5 / 6b**：`documents` 為 CTI 父表，`createInvoice` / `createAllowance` 已 documents-first
+  （內部 coupled）、`document_id` 為 `NOT NULL UNIQUE`。classifier overlay 直接在這些 row 上標註。
+- **Phase 5.6**：storage 已收斂到 `documents` bucket，classification-worker 與 extraction-worker
+  都從同一 bucket 下載。
+- **Phase 6.5**：Drizzle 交易層，供 §5.5 的 convert / demote / promote 多表原子動作使用。
+- **Phase 6a.1**：`sync_documents_cache_from_subtables` trigger 維持 `documents.amount` / `doc_date`
+  與子表同步；demote / convert 改 doc_type 後此 cache 行為仍正確（childless other 由父表自身為真實來源）。
 
-實作前確認 Voucher Phase 5 / 5.5 / 6 PR 已合, 並 `git pull` 取最新 schema。
+Phase 7（期別批次分錄）與本計畫正交：分錄只對已判定且有子表的 invoice / allowance 產生，
+`other` 不產生分錄。實作前 `git pull` 取最新 schema 並確認上述 Phase 已合。

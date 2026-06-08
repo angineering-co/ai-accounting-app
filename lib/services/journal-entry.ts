@@ -763,6 +763,15 @@ export type PostResult = {
   error: string | null;
 };
 
+// Upper bound on a single post batch. Posting is a deliberate, review-gated action
+// (the UI selection is manual / a page at a time), so this is a defensive guard, not
+// a normal limit: it keeps `entryIds` well under Postgres' bind-parameter cap on the
+// candidate + balance `inArray` queries and bounds how long the per-entry loop holds
+// the voucher_sequences row lock inside one transaction. If posting genuinely large
+// batches ever becomes a workflow, switch the per-entry writes to a set-based
+// (per-date) allocation rather than raising this.
+export const MAX_POST_BATCH = 1000;
+
 /**
  * Batch-post draft journal entries (§5.4). In one Drizzle transaction, assigns
  * each balanced draft a no-gap `voucher_no` and flips it draft→posted. Per-entry
@@ -826,6 +835,11 @@ export async function postJournalEntries(
   }
 
   if (entryIds.length === 0) return [];
+  if (entryIds.length > MAX_POST_BATCH) {
+    throw new Error(
+      `一次最多可過帳 ${MAX_POST_BATCH} 筆，請分批選取後再過帳。`,
+    );
+  }
 
   return db.transaction(async (tx) => {
     // Lock the candidate rows in the deterministic posting order (entry_date,

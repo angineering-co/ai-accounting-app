@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { postJournalEntries } from "@/lib/services/journal-entry";
+import { MAX_POST_BATCH, postJournalEntries } from "@/lib/services/journal-entry";
 import {
   cleanupTestFixture,
   createTestClient,
@@ -200,6 +200,16 @@ describe.skipIf(!hasDbEnv)("postJournalEntries — no-gap batch posting", () => 
     expect(results).toHaveLength(1);
     expect(results[0].error).toBe("找不到");
     expect((await getEntry(id)).status).toBe("draft");
+  });
+
+  it("rejects an over-cap batch defensively (before touching the DB)", async () => {
+    // Ids need not exist — the cap guard fires before the candidate fetch.
+    const tooMany = Array.from({ length: MAX_POST_BATCH + 1 }, () =>
+      crypto.randomUUID(),
+    );
+    await expect(
+      postJournalEntries(fixture.clientId, tooMany, opts()),
+    ).rejects.toThrow(/一次最多可過帳/);
   });
 
   it("rejects a non-staff (portal client-role) caller", async () => {

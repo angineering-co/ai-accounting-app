@@ -33,7 +33,6 @@ import {
   computeDefaultEntryFromAllowance,
   computeEntryFromAllowance,
   computeEntryFromInvoice,
-  shouldCreateEntry,
 } from "@/lib/services/journal-entry-generation";
 
 type JournalEntryServiceOptions = {
@@ -291,24 +290,82 @@ export type PeriodEntryStatus = {
 };
 
 /**
- * Freshness summary for a period's draft journal entries plus the run-state
- * flag — the single query the period UI reads (and polls while a run is in
- * flight). Set-based: transfers no document rows regardless of period size, so
- * it scales to ~10k-doc periods.
+ * THE single source of the new/stale/missing rule. Returns a subquery with one row
+ * per confirmed document in the period, each carrying a `freshness`:
+ *   'new'   — entry-producing, no journal entry exists yet
+ *   'stale' — its draft entry is older than the doc's last edit
+ *   NULL    — skip: up to date, posted/reversed, or non-entry-producing
+ * Both callers consume this — `getPeriodEntryStatus` rolls it into counts, the batch
+ * (`loadPeriodWorkList`) reads it as a work-list — so the badge and the batch decide
+ * staleness from the exact same comparison and can never disagree.
  *
- * Freshness rides two existing clocks: `journal_entries.updated_at` (stamped on
- * every (re)generation) and `documents.updated_at` (bumped by the
- * `sync_documents_cache_from_*` trigger on `extracted_data` / `status` edits —
- * exactly the entry-affecting fields). So:
- *   MISSING ⟺ a confirmed entry-producing doc has no journal_entries row
- *   STALE   ⟺ its draft entry exists and documents.updated_at > entry.updated_at
- * Posted entries are excluded from STALE (a stale posted entry is a Phase 9
- * edit concern, not a draft regeneration).
- *
- * The `produces_entry` SQL filter mirrors `shouldCreateEntry` for invoices
- * (作廢 / 彙加, and 銷項 零稅率·免稅 produce no entry); allowances always attempt
- * one. KEEP IN SYNC with `shouldCreateEntry` (parity test in the integration
- * suite).
+ * `produces_entry` mirrors `shouldCreateEntry` for invoices (作廢 / 彙加, and 銷項
+ * 零稅率·免稅 produce no entry); allowances always attempt one. KEEP IN SYNC with
+ * `shouldCreateEntry` (parity test in the integration suite). Staleness rides two
+ * existing clocks: `journal_entries.updated_at` (stamped on every (re)generation) and
+ * `documents.updated_at` (bumped by the `sync_documents_cache_from_*` trigger on
+ * `extracted_data` / `status` edits — exactly the entry-affecting fields), compared at
+ * full timestamptz precision here, the only place the comparison is made. Posted
+ * entries are excluded from 'stale' (a stale posted entry is a Phase 9 edit concern).
+ */
+function periodEntryFreshness(periodId: string) {
+  return sql`(
+    WITH docs AS (
+      SELECT i.document_id,
+             i.in_or_out,
+             i.extracted_data->>'taxType' AS tax_type,
+             'invoice'::text AS kind
+        FROM invoices i
+       WHERE i.tax_filing_period_id = ${periodId}
+         AND i.status = 'confirmed'
+      UNION ALL
+      SELECT a.document_id,
+             a.in_or_out,
+             a.extracted_data->>'taxType' AS tax_type,
+             'allowance'::text AS kind
+        FROM allowances a
+       WHERE a.tax_filing_period_id = ${periodId}
+         AND a.status = 'confirmed'
+    ),
+    classified AS (
+      SELECT docs.document_id,
+             docs.kind,
+             CASE
+               WHEN docs.kind = 'invoice' THEN
+                 docs.tax_type IS DISTINCT FROM '作廢'
+                 AND docs.tax_type IS DISTINCT FROM '彙加'
+                 AND NOT (docs.in_or_out = 'out'
+                          -- COALESCE so a NULL taxType (key absent) reads as
+                          -- "not zero-rate", entry-producing, matching how
+                          -- shouldCreateEntry treats an absent taxType.
+                          AND COALESCE(docs.tax_type IN ('零稅率', '免稅'), FALSE))
+               ELSE TRUE
+             END AS produces_entry
+        FROM docs
+    )
+    SELECT c.document_id,
+           c.kind,
+           CASE
+             WHEN NOT c.produces_entry THEN NULL
+             WHEN je.document_id IS NULL THEN 'new'
+             WHEN je.status = 'draft' AND doc.updated_at > je.updated_at THEN 'stale'
+             ELSE NULL
+           END AS freshness,
+           je.updated_at AS entry_updated_at
+      FROM classified c
+      JOIN documents doc ON doc.id = c.document_id
+      LEFT JOIN journal_entries je ON je.document_id = c.document_id
+  )`;
+}
+
+/**
+ * Freshness summary for a period's draft journal entries plus the run-state flag —
+ * the single query the period UI reads (and polls while a run is in flight). Rolls
+ * the shared `periodEntryFreshness` relation into counts:
+ *   MISSING = freshness 'new'   (confirmed entry-producing doc with no entry)
+ *   STALE   = freshness 'stale' (draft entry older than the doc's last edit)
+ * Set-based: transfers no document rows regardless of period size, so it scales to
+ * ~10k-doc periods.
  */
 export async function getPeriodEntryStatus(
   periodId: string,
@@ -332,54 +389,14 @@ export async function getPeriodEntryStatus(
   }
 
   const result = await db.execute(sql`
-    WITH docs AS (
-      SELECT i.document_id,
-             i.in_or_out,
-             i.extracted_data->>'taxType' AS tax_type,
-             'invoice'::text AS kind
-        FROM invoices i
-       WHERE i.tax_filing_period_id = ${periodId}
-         AND i.status = 'confirmed'
-      UNION ALL
-      SELECT a.document_id,
-             a.in_or_out,
-             a.extracted_data->>'taxType' AS tax_type,
-             'allowance'::text AS kind
-        FROM allowances a
-       WHERE a.tax_filing_period_id = ${periodId}
-         AND a.status = 'confirmed'
-    ),
-    classified AS (
-      SELECT docs.document_id,
-             CASE
-               WHEN docs.kind = 'invoice' THEN
-                 docs.tax_type IS DISTINCT FROM '作廢'
-                 AND docs.tax_type IS DISTINCT FROM '彙加'
-                 AND NOT (docs.in_or_out = 'out'
-                          -- COALESCE so a NULL taxType (key absent) reads as
-                          -- "not zero-rate", entry-producing, matching how
-                          -- shouldCreateEntry treats an absent taxType.
-                          AND COALESCE(docs.tax_type IN ('零稅率', '免稅'), FALSE))
-               ELSE TRUE
-             END AS produces_entry
-        FROM docs
-    )
     SELECT
       (SELECT voucher_generation_status
          FROM tax_filing_periods
         WHERE id = ${periodId}) AS generation_status,
-      count(*) FILTER (
-        WHERE c.produces_entry AND je.document_id IS NULL
-      ) AS missing,
-      count(*) FILTER (
-        WHERE c.produces_entry
-          AND je.status = 'draft'
-          AND doc.updated_at > je.updated_at
-      ) AS stale,
-      max(je.updated_at) AS last_generated
-    FROM classified c
-    JOIN documents doc ON doc.id = c.document_id
-    LEFT JOIN journal_entries je ON je.document_id = c.document_id
+      count(*) FILTER (WHERE w.freshness = 'new')   AS missing,
+      count(*) FILTER (WHERE w.freshness = 'stale') AS stale,
+      max(w.entry_updated_at) AS last_generated
+    FROM ${periodEntryFreshness(periodId)} w
   `);
 
   const row = (
@@ -401,6 +418,32 @@ export async function getPeriodEntryStatus(
   };
 }
 
+/**
+ * Just the period's run-state flag — an O(1) single-row read, no confirmed-row
+ * scan. The period UI polls THIS while a run is in flight (to keep the button
+ * disabled and the spinner live across reloads / tabs / staff); the heavier
+ * `getPeriodEntryStatus` count is fetched only off the polling path (on load and
+ * once a run finishes), so poll cost stays constant regardless of period size.
+ */
+export async function getPeriodGenerationStatus(
+  periodId: string,
+  options?: JournalEntryServiceOptions,
+): Promise<VoucherGenerationStatus> {
+  const { supabase } = await resolveAuth(options);
+  const { data, error } = await supabase
+    .from("tax_filing_periods")
+    .select("voucher_generation_status")
+    .eq("id", periodId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) {
+    throw new Error(
+      `getPeriodGenerationStatus: period ${periodId} not found or not accessible`,
+    );
+  }
+  return (data.voucher_generation_status ?? "idle") as VoucherGenerationStatus;
+}
+
 export type GeneratePeriodResult = {
   /** new draft entries created */
   generated: number;
@@ -417,8 +460,8 @@ type DraftEntryItem = {
   computed: ComputedEntry;
 };
 
-type EntryMeta = { id: string; status: string; updated_at: string | null };
-type WorkKind = "new" | "stale" | "skip";
+// A document the SQL `periodEntryFreshness` relation flagged for (re)generation.
+type WorkItem = { documentId: string; kind: "invoice" | "allowance"; freshness: "new" | "stale" };
 
 // `now()` minus the stale-run window: a 'running' flag older than this is treated
 // as a crashed/timed-out run and may be reclaimed (the batch is idempotent).
@@ -429,7 +472,6 @@ const STALE_RUN_GUARD = sql`now() - interval '15 minutes'`;
 // Postgres' 65,535 bind-parameter cap.
 const NEW_ENTRY_CHUNK = 400;
 const LINE_INSERT_CHUNK = 1000;
-const CONFIRMED_PAGE = 1000;
 
 function errorReason(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -445,83 +487,22 @@ function assertBalanced(computed: ComputedEntry, documentId: string): void {
   }
 }
 
-// Decide whether a document needs work. `new` (no entry) and `stale` (draft
-// entry older than the doc's last edit) get (re)generated; everything else
-// `skip`s — including posted entries, whose edits route through Phase 9.
-function classify(
-  documentId: string,
-  docUpdatedAt: Map<string, string | null>,
-  entryByDoc: Map<string, EntryMeta>,
-): WorkKind {
-  const entry = entryByDoc.get(documentId);
-  if (!entry) return "new";
-  if (entry.status !== "draft") return "skip";
-  const docTs = docUpdatedAt.get(documentId);
-  if (docTs && entry.updated_at && new Date(docTs) > new Date(entry.updated_at)) {
-    return "stale";
-  }
-  return "skip";
-}
-
-async function loadConfirmedRows<T>(
-  supabase: SupabaseClient<Database>,
-  table: "invoices" | "allowances",
-  periodId: string,
-): Promise<T[]> {
-  const out: T[] = [];
-  // Offset-paginate until a short (incl. empty) page. Guaranteed to terminate:
-  // `from` advances by CONFIRMED_PAGE each iteration, the period's confirmed set
-  // is fixed during the run (mutex held; the batch writes only journal_entries),
-  // and a finite table always yields a non-full page once `from` passes the end.
-  for (let from = 0; ; from += CONFIRMED_PAGE) {
-    const { data, error } = await (supabase.from(table) as ReturnType<SupabaseClient<Database>["from"]>)
-      .select("*")
-      .eq("tax_filing_period_id", periodId)
-      .eq("status", "confirmed")
-      .order("id", { ascending: true })
-      .range(from, from + CONFIRMED_PAGE - 1);
-    if (error) throw error;
-    const batch = (data ?? []) as unknown as T[];
-    out.push(...batch);
-    if (batch.length < CONFIRMED_PAGE) break;
-  }
-  return out;
-}
-
-// For the given document ids, fetch documents.updated_at (the freshness clock)
-// and any existing journal entry's meta. Chunked to stay under PostgREST's
-// URL-length limit for large periods.
-async function loadEntryState(
-  supabase: SupabaseClient<Database>,
-  documentIds: string[],
-): Promise<{ docUpdatedAt: Map<string, string | null>; entryByDoc: Map<string, EntryMeta> }> {
-  const docUpdatedAt = new Map<string, string | null>();
-  const entryByDoc = new Map<string, EntryMeta>();
-  if (documentIds.length === 0) return { docUpdatedAt, entryByDoc };
-
-  const docs = await chunkedIn<{ id: string; updated_at: string | null }>(
-    () => supabase.from("documents"),
-    "id, updated_at",
-    "id",
-    documentIds,
-  );
-  for (const d of docs) docUpdatedAt.set(d.id, d.updated_at);
-
-  const entries = await chunkedIn<{
-    document_id: string;
-    id: string;
-    status: string;
-    updated_at: string | null;
-  }>(
-    () => supabase.from("journal_entries"),
-    "document_id, id, status, updated_at",
-    "document_id",
-    documentIds,
-  );
-  for (const e of entries) {
-    entryByDoc.set(e.document_id, { id: e.id, status: e.status, updated_at: e.updated_at });
-  }
-  return { docUpdatedAt, entryByDoc };
+// Per-document work-list for the period: the shared `periodEntryFreshness` relation,
+// filtered to the docs that actually need work ('new' or 'stale'). The batch then
+// loads full row payload only for these, not the whole confirmed period. Computed
+// once at the start of a run — generating an invoice entry never bumps an allowance's
+// documents.updated_at, so every doc's freshness stays valid for the whole run.
+async function loadPeriodWorkList(periodId: string): Promise<WorkItem[]> {
+  const rows = (await db.execute(sql`
+    SELECT w.document_id, w.kind, w.freshness
+    FROM ${periodEntryFreshness(periodId)} w
+    WHERE w.freshness IS NOT NULL
+  `)) as unknown as Array<{ document_id: string; kind: string; freshness: string }>;
+  return rows.map((r) => ({
+    documentId: r.document_id,
+    kind: r.kind as WorkItem["kind"],
+    freshness: r.freshness as WorkItem["freshness"],
+  }));
 }
 
 // Bulk-insert brand-new draft entries: insert the entry headers (returning ids
@@ -591,28 +572,31 @@ async function regenerateStaleEntries(items: DraftEntryItem[], userId: string): 
   return total;
 }
 
+// Load full rows for only the work-set document_ids (chunked under PostgREST's
+// URL-length limit), keyed for freshness lookup. The work-list already encodes
+// `produces_entry`, so no `shouldCreateEntry` re-filter is needed here.
 async function processInvoices(
   supabase: SupabaseClient<Database>,
-  periodId: string,
+  work: WorkItem[],
   userId: string,
   result: GeneratePeriodResult,
 ): Promise<void> {
-  const rows = await loadConfirmedRows<InvoiceRow>(supabase, "invoices", periodId);
-  if (rows.length === 0) return;
-  const documentIds = rows
-    .map((r) => r.document_id)
-    .filter((d): d is string => Boolean(d));
-  const { docUpdatedAt, entryByDoc } = await loadEntryState(supabase, documentIds);
+  if (work.length === 0) return;
+  const freshnessByDoc = new Map(work.map((w) => [w.documentId, w.freshness]));
+  const rows = await chunkedIn<InvoiceRow>(
+    () => supabase.from("invoices"),
+    "*",
+    "document_id",
+    work.map((w) => w.documentId),
+  );
 
   const newItems: DraftEntryItem[] = [];
   const staleItems: DraftEntryItem[] = [];
   for (const row of rows) {
     const documentId = row.document_id;
-    if (!documentId) continue;
+    const freshness = documentId ? freshnessByDoc.get(documentId) : undefined;
+    if (!documentId || !freshness) continue;
     const invoice = rowToInvoice(row);
-    if (!shouldCreateEntry(invoice)) continue;
-    const kind = classify(documentId, docUpdatedAt, entryByDoc);
-    if (kind === "skip") continue;
     let computed: ComputedEntry;
     try {
       computed = computeEntryFromInvoice(invoice);
@@ -621,7 +605,7 @@ async function processInvoices(
       result.failures.push({ documentId, kind: "invoice", reason: errorReason(e) });
       continue;
     }
-    (kind === "new" ? newItems : staleItems).push({
+    (freshness === "new" ? newItems : staleItems).push({
       firmId: invoice.firm_id,
       clientId: invoice.client_id,
       documentId,
@@ -634,24 +618,25 @@ async function processInvoices(
 
 async function processAllowances(
   supabase: SupabaseClient<Database>,
-  periodId: string,
+  work: WorkItem[],
   userId: string,
   result: GeneratePeriodResult,
 ): Promise<void> {
-  const rows = await loadConfirmedRows<AllowanceRow>(supabase, "allowances", periodId);
-  if (rows.length === 0) return;
-  const documentIds = rows
-    .map((r) => r.document_id)
-    .filter((d): d is string => Boolean(d));
-  const { docUpdatedAt, entryByDoc } = await loadEntryState(supabase, documentIds);
+  if (work.length === 0) return;
+  const freshnessByDoc = new Map(work.map((w) => [w.documentId, w.freshness]));
+  const rows = await chunkedIn<AllowanceRow>(
+    () => supabase.from("allowances"),
+    "*",
+    "document_id",
+    work.map((w) => w.documentId),
+  );
 
   const newItems: DraftEntryItem[] = [];
   const staleItems: DraftEntryItem[] = [];
   for (const row of rows) {
     const documentId = row.document_id;
-    if (!documentId) continue;
-    const kind = classify(documentId, docUpdatedAt, entryByDoc);
-    if (kind === "skip") continue;
+    const freshness = documentId ? freshnessByDoc.get(documentId) : undefined;
+    if (!documentId || !freshness) continue;
     const allowance = rowToAllowance(row);
     let computed: ComputedEntry;
     try {
@@ -671,7 +656,7 @@ async function processAllowances(
       result.failures.push({ documentId, kind: "allowance", reason: errorReason(e) });
       continue;
     }
-    (kind === "new" ? newItems : staleItems).push({
+    (freshness === "new" ? newItems : staleItems).push({
       firmId: allowance.firm_id,
       clientId: allowance.client_id,
       documentId,
@@ -740,8 +725,23 @@ export async function generateDraftEntriesByPeriod(
 
   const result: GeneratePeriodResult = { generated: 0, regenerated: 0, failures: [] };
   try {
-    await processInvoices(supabase, periodId, userId, result);
-    await processAllowances(supabase, periodId, userId, result);
+    // One SQL work-list for the whole period, computed up front. Invoices first
+    // (self-contained), then allowances (mirror the now-existing invoice entries) —
+    // generating an invoice entry doesn't bump any allowance's documents.updated_at,
+    // so the allowance freshness values captured here stay valid.
+    const work = await loadPeriodWorkList(periodId);
+    await processInvoices(
+      supabase,
+      work.filter((w) => w.kind === "invoice"),
+      userId,
+      result,
+    );
+    await processAllowances(
+      supabase,
+      work.filter((w) => w.kind === "allowance"),
+      userId,
+      result,
+    );
   } finally {
     await db
       .update(taxFilingPeriodsTable)

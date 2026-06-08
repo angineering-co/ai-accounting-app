@@ -112,7 +112,7 @@ function naturalAmount(cls: AccountClass, debit: number, credit: number): number
   }
 }
 
-type AccountTotals = Map<string, { debit: number; credit: number }>;
+export type AccountTotals = Map<string, { debit: number; credit: number }>;
 
 function buildSection(totals: AccountTotals, cls: AccountClass): ReportSection {
   const rows: ReportRow[] = [];
@@ -160,7 +160,7 @@ function aggregateBookedLines(
   return totals;
 }
 
-function buildIncomeStatementFromTotals(
+export function buildIncomeStatementFromTotals(
   totals: AccountTotals,
   fromDate: string,
   toDate: string,
@@ -229,6 +229,17 @@ export function computeBalanceSheet(input: ComputeBsInput): BalanceSheet {
     (entryDate) => entryDate <= asOfDate,
   );
 
+  return buildBalanceSheetFromTotals(totals, asOfDate);
+}
+
+// Builds the balance sheet from pre-aggregated account totals (lines summed for
+// entries with entry_date <= asOfDate, drafts excluded). Phase 5's SQL read path
+// feeds totals straight from a `SUM ... GROUP BY account_code` query; the pure
+// `computeBalanceSheet` above feeds the same totals from in-memory entries+lines.
+export function buildBalanceSheetFromTotals(
+  totals: AccountTotals,
+  asOfDate: string,
+): BalanceSheet {
   // Hard-skip any stale 3440 balance so it doesn't double-count with the synthetic row.
   totals.delete(SYNTHETIC_NET_INCOME_CODE);
 
@@ -297,55 +308,53 @@ interface GetAccountLedgerInput {
   asOfDate: string;
 }
 
-// Mirrors `aggregateBookedLines` filter contract: client match, status !== "draft",
-// entry_date <= asOfDate. Both posted and reversed entries are included — the matching
-// reversal entry is itself `posted` with flipped sides, so the pair cancels in the running
-// balance (see comment at line 130 above).
-export function getAccountLedger(input: GetAccountLedgerInput): AccountLedger {
-  const { entries, lines, clientId, accountCode, asOfDate } = input;
+// One already-filtered line+entry pair feeding the ledger: drafts excluded,
+// entry_date <= asOfDate, account_code matched. `description` is pre-resolved
+// (line description falling back to the entry's), `status` is the entry's.
+export interface LedgerSourceRow {
+  lineId: string;
+  entryId: string;
+  voucherNo: string;
+  entryDate: string; // YYYY-MM-DD
+  status: "posted" | "reversed";
+  lineNumber: number;
+  debit: number;
+  credit: number;
+  description: string | null;
+}
+
+// Sorts the source rows and accumulates the running balance in the account's
+// natural direction. Phase 5's SQL read path passes rows straight from a joined
+// `journal_entry_lines`/`journal_entries` query; `getAccountLedger` below derives
+// the same rows from in-memory entries+lines.
+//
+// voucher_no encodes YYYYMMDD-NNNNN, so a single ascending string compare gives
+// chronological order with deterministic per-day tiebreaking. Safe because drafts
+// (the only entries with null voucher_no) are already excluded. Tiebreak on
+// line_number so multiple lines in one entry hitting the same account stay stable.
+export function buildLedgerFromRows(
+  accountCode: string,
+  sourceRows: LedgerSourceRow[],
+): AccountLedger {
   const cls = classifyAccount(accountCode);
 
-  const entryMap = new Map<string, JournalEntry>();
-  for (const e of entries) {
-    if (e.client_id !== clientId) continue;
-    if (e.status === "draft") continue;
-    if (e.entry_date > asOfDate) continue;
-    entryMap.set(e.id, e);
-  }
-
-  type Pending = { entry: JournalEntry; line: JournalEntryLine };
-  const pending: Pending[] = [];
-  for (const l of lines) {
-    if (l.account_code !== accountCode) continue;
-    const entry = entryMap.get(l.journal_entry_id);
-    if (!entry) continue;
-    pending.push({ entry, line: l });
-  }
-
-  // voucher_no encodes YYYYMMDD-NNNNN, so a single ascending string compare gives
-  // chronological order with deterministic per-day tiebreaking. Safe here because
-  // drafts (the only entries with null voucher_no) are already filtered out above.
-  // Tiebreak on line_number so multiple lines in one entry hitting the same account
-  // (e.g. a posted-edit split into multiple sub-lines) stay in a stable order.
-  pending.sort((a, b) => {
-    const av = a.entry.voucher_no ?? "";
-    const bv = b.entry.voucher_no ?? "";
-    if (av !== bv) return av < bv ? -1 : 1;
-    return a.line.line_number - b.line.line_number;
+  const sorted = [...sourceRows].sort((a, b) => {
+    if (a.voucherNo !== b.voucherNo) return a.voucherNo < b.voucherNo ? -1 : 1;
+    return a.lineNumber - b.lineNumber;
   });
 
   let running = 0;
-  const rows: LedgerRow[] = pending.map(({ entry, line }) => {
-    running += naturalAmount(cls, line.debit, line.credit);
+  const rows: LedgerRow[] = sorted.map((r) => {
+    running += naturalAmount(cls, r.debit, r.credit);
     return {
-      lineId: line.id,
-      entryId: entry.id,
-      voucherNo: entry.voucher_no ?? "",
-      entryDate: entry.entry_date,
-      status: entry.status === "reversed" ? "reversed" : "posted",
-      description: line.description ?? entry.description ?? null,
-      debit: line.debit,
-      credit: line.credit,
+      lineId: r.lineId,
+      entryId: r.entryId,
+      voucherNo: r.voucherNo,
+      entryDate: r.entryDate,
+      status: r.status,
+      description: r.description,
+      debit: r.debit,
+      credit: r.credit,
       runningBalance: running,
     };
   });
@@ -357,4 +366,40 @@ export function getAccountLedger(input: GetAccountLedgerInput): AccountLedger {
     rows,
     closingBalance: rows.length === 0 ? 0 : rows[rows.length - 1].runningBalance,
   };
+}
+
+// Mirrors `aggregateBookedLines` filter contract: client match, status !== "draft",
+// entry_date <= asOfDate. Both posted and reversed entries are included — the matching
+// reversal entry is itself `posted` with flipped sides, so the pair cancels in the running
+// balance (see comment at line 130 above).
+export function getAccountLedger(input: GetAccountLedgerInput): AccountLedger {
+  const { entries, lines, clientId, accountCode, asOfDate } = input;
+
+  const entryMap = new Map<string, JournalEntry>();
+  for (const e of entries) {
+    if (e.client_id !== clientId) continue;
+    if (e.status === "draft") continue;
+    if (e.entry_date > asOfDate) continue;
+    entryMap.set(e.id, e);
+  }
+
+  const sourceRows: LedgerSourceRow[] = [];
+  for (const l of lines) {
+    if (l.account_code !== accountCode) continue;
+    const entry = entryMap.get(l.journal_entry_id);
+    if (!entry) continue;
+    sourceRows.push({
+      lineId: l.id,
+      entryId: entry.id,
+      voucherNo: entry.voucher_no ?? "",
+      entryDate: entry.entry_date,
+      status: entry.status === "reversed" ? "reversed" : "posted",
+      lineNumber: l.line_number,
+      debit: l.debit,
+      credit: l.credit,
+      description: l.description ?? entry.description ?? null,
+    });
+  }
+
+  return buildLedgerFromRows(accountCode, sourceRows);
 }

@@ -647,7 +647,12 @@ export default function PeriodDetailPage({
         </TabsContent>
 
         <TabsContent value="reports" className="mt-6 space-y-6">
-          <PeriodVoucherGeneration periodId={period.id} />
+          <PeriodVoucherGeneration
+            periodId={period.id}
+            firmId={firmId}
+            clientId={clientId}
+            periodYYYMM={periodYYYMM}
+          />
           <ReportGeneration
             client={client}
             period={rocPeriod}

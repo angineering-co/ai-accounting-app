@@ -12,9 +12,8 @@ import {
 
 const hasDbEnv = Boolean(
   process.env.NEXT_PUBLIC_SUPABASE_URL &&
-    process.env.SUPABASE_SERVICE_ROLE_KEY &&
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY &&
-    process.env.DATABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY && // getServiceClient (fixture setup)
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, // getAnonClient (portal user)
 );
 
 async function insertPostedEntry(
@@ -92,58 +91,68 @@ describe.skipIf(!hasDbEnv)("journal_entries client-scoped RLS (portal isolation)
     await service.auth.admin.deleteUser(portalUserId);
   });
 
+  // PostgREST returns a DB/RLS error as `{ data: null, error }` rather than throwing,
+  // so every query asserts `error` is null first — otherwise a "cannot read" assertion
+  // could pass because the query errored, not because RLS filtered the rows.
   it("clients: portal user sees only their own client (basis of assertClientAccess)", async () => {
-    const { data: b } = await asPortal
+    const { data: b, error: errB } = await asPortal
       .from("clients")
       .select("id")
       .eq("id", clientBId)
       .maybeSingle();
+    expect(errB).toBeNull();
     expect(b).toBeNull();
 
-    const { data: a } = await asPortal
+    const { data: a, error: errA } = await asPortal
       .from("clients")
       .select("id")
       .eq("id", clientAId)
       .maybeSingle();
+    expect(errA).toBeNull();
     expect(a?.id).toBe(clientAId);
   });
 
   it("journal_entries: portal user cannot read a sibling client's entries", async () => {
-    const { data: bRows } = await asPortal
+    const { data: bRows, error: errRows } = await asPortal
       .from("journal_entries")
       .select("id")
       .eq("client_id", clientBId);
+    expect(errRows).toBeNull();
     expect(bRows ?? []).toEqual([]);
 
-    const { data: bById } = await asPortal
+    const { data: bById, error: errById } = await asPortal
       .from("journal_entries")
       .select("id")
       .eq("id", entryBId)
       .maybeSingle();
+    expect(errById).toBeNull();
     expect(bById).toBeNull();
   });
 
   it("journal_entries: portal user can read their own client's entries", async () => {
-    const { data: aRows } = await asPortal
+    const { data: aRows, error: errRows } = await asPortal
       .from("journal_entries")
       .select("id")
       .eq("client_id", clientAId);
+    expect(errRows).toBeNull();
     expect((aRows ?? []).map((r) => r.id)).toContain(entryAId);
   });
 
   it("journal_entry_lines: portal user cannot read a sibling client's lines", async () => {
-    const { data: bLines } = await asPortal
+    const { data: bLines, error: errLines } = await asPortal
       .from("journal_entry_lines")
       .select("id")
       .eq("journal_entry_id", entryBId);
+    expect(errLines).toBeNull();
     expect(bLines ?? []).toEqual([]);
   });
 
   it("journal_entry_lines: portal user can read their own client's lines", async () => {
-    const { data: aLines } = await asPortal
+    const { data: aLines, error: errLines } = await asPortal
       .from("journal_entry_lines")
       .select("id")
       .eq("journal_entry_id", entryAId);
+    expect(errLines).toBeNull();
     expect((aLines ?? []).length).toBeGreaterThan(0);
   });
 });

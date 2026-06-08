@@ -6,8 +6,7 @@ import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, ArrowLeft, Lock, Unlock, Plus, FileText, BookOpen } from "lucide-react";
-import Link from "next/link";
+import { Loader2, ArrowLeft, Lock, Unlock, Plus, FileText } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { InvoiceTable } from "@/components/invoice-table";
 import { AllowanceTable } from "@/components/allowance-table";
@@ -542,18 +541,9 @@ export default function PeriodDetailPage({
           {/* Invoices Section */}
           <Card>
             <CardHeader className="pb-3">
-              <div className="flex items-start justify-between gap-2">
-                <CardTitle className="text-lg">
-                  發票 ({invoiceTotalCount})
-                </CardTitle>
-                <Link
-                  href={`/firm/${firmId}/client/${clientId}/voucher`}
-                  className="inline-flex items-center gap-1 text-base text-muted-foreground hover:text-foreground"
-                >
-                  <BookOpen className="size-4" />
-                  已 confirmed 之發票會產生 draft 傳票 →
-                </Link>
-              </div>
+              <CardTitle className="text-lg">
+                發票 ({invoiceTotalCount})
+              </CardTitle>
               <StatusFilterBar
                 activeStatus={invoiceStatusFilter}
                 onStatusChange={handleInvoiceStatusFilterChange}
@@ -590,18 +580,9 @@ export default function PeriodDetailPage({
           {/* Allowances Section */}
           <Card>
             <CardHeader className="pb-3">
-              <div className="flex items-start justify-between gap-2">
-                <CardTitle className="text-lg">
-                  折讓 ({allowanceTotalCount})
-                </CardTitle>
-                <Link
-                  href={`/firm/${firmId}/client/${clientId}/voucher`}
-                  className="inline-flex items-center gap-1 text-base text-muted-foreground hover:text-foreground"
-                >
-                  <BookOpen className="size-4" />
-                  已 confirmed 之折讓會產生 draft 傳票 →
-                </Link>
-              </div>
+              <CardTitle className="text-lg">
+                折讓 ({allowanceTotalCount})
+              </CardTitle>
               <StatusFilterBar
                 activeStatus={allowanceStatusFilter}
                 onStatusChange={handleAllowanceStatusFilterChange}

@@ -140,7 +140,7 @@ export const journal_entries = pgTable("journal_entries", {
 			name: "journal_entries_reverses_entry_id_fkey"
 		}),
 	unique("journal_entries_document_id_key").on(table.document_id),
-	pgPolicy("Users can manage journal_entries in their firm", { as: "permissive", for: "all", to: ["public"], using: sql`((firm_id = get_auth_user_firm_id()) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`, withCheck: sql`((firm_id = get_auth_user_firm_id()) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`  }),
+	pgPolicy("Users can manage journal_entries in their firm", { as: "permissive", for: "all", to: ["public"], using: sql`(((firm_id = get_auth_user_firm_id()) AND ((get_auth_user_client_id() IS NULL) OR (client_id = get_auth_user_client_id()))) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`, withCheck: sql`(((firm_id = get_auth_user_firm_id()) AND ((get_auth_user_client_id() IS NULL) OR (client_id = get_auth_user_client_id()))) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`  }),
 	check("journal_entries_status_check", sql`status = ANY (ARRAY['draft'::text, 'posted'::text, 'reversed'::text])`),
 	check("journal_entries_voucher_type_check", sql`voucher_type = ANY (ARRAY['收入'::text, '支出'::text, '轉帳'::text])`),
 	check("voucher_no_required_when_booked", sql`(status = 'draft'::text) OR (voucher_no IS NOT NULL)`),
@@ -166,9 +166,9 @@ export const journal_entry_lines = pgTable("journal_entry_lines", {
 		}).onDelete("cascade"),
 	pgPolicy("Users can manage journal_entry_lines via parent entry", { as: "permissive", for: "all", to: ["public"], using: sql`(EXISTS ( SELECT 1
    FROM journal_entries e
-  WHERE ((e.id = journal_entry_lines.journal_entry_id) AND ((e.firm_id = get_auth_user_firm_id()) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text)))))`, withCheck: sql`(EXISTS ( SELECT 1
+  WHERE ((e.id = journal_entry_lines.journal_entry_id) AND (((e.firm_id = get_auth_user_firm_id()) AND ((get_auth_user_client_id() IS NULL) OR (e.client_id = get_auth_user_client_id()))) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text)))))`, withCheck: sql`(EXISTS ( SELECT 1
    FROM journal_entries e
-  WHERE ((e.id = journal_entry_lines.journal_entry_id) AND ((e.firm_id = get_auth_user_firm_id()) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text)))))`  }),
+  WHERE ((e.id = journal_entry_lines.journal_entry_id) AND (((e.firm_id = get_auth_user_firm_id()) AND ((get_auth_user_client_id() IS NULL) OR (e.client_id = get_auth_user_client_id()))) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text)))))`  }),
 	check("debit_credit_xor", sql`(debit > 0) <> (credit > 0)`),
 	check("journal_entry_lines_credit_check", sql`credit >= 0`),
 	check("journal_entry_lines_debit_check", sql`debit >= 0`),

@@ -62,6 +62,7 @@ import { RecordStateCard } from "@/components/record-state-card";
 import { VoucherBatchPostDialog } from "@/components/voucher-batch-post-dialog";
 import { VoucherEditDialog } from "@/components/voucher-edit-dialog";
 import { VoucherAuditHistory } from "@/components/voucher-audit-history";
+import { FilePreview } from "@/components/file-preview";
 
 const DOC_TYPE_LABEL: Record<string, string> = {
   invoice: "發票",
@@ -153,6 +154,7 @@ export default function VoucherDetailPage({
   const isPosted = entry.status === "posted";
   const isReversed = entry.status === "reversed";
   const isReversalVoucher = entry.reverses_entry_id != null;
+  const hasPreview = !!document?.file_url;
 
   const handleDelete = async () => {
     setIsDeleting(true);
@@ -176,6 +178,12 @@ export default function VoucherDetailPage({
         <h1 className="text-3xl font-bold tracking-tight">傳票詳情</h1>
       </div>
 
+      <div
+        className={cn(
+          "grid grid-cols-1 gap-4 items-start",
+          hasPreview && "lg:grid-cols-2",
+        )}
+      >
       <Card
         className={cn(
           isDraft && "border-dashed bg-muted/30",
@@ -378,6 +386,25 @@ export default function VoucherDetailPage({
           </div>
         </CardContent>
       </Card>
+
+      {hasPreview && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-xl">原始文件</CardTitle>
+            <CardDescription className="text-sm">
+              對照分錄與原始憑證內容是否相符。
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <FilePreview
+              storagePath={document?.file_url}
+              bucketName="documents"
+              className="h-[70vh] min-h-[500px]"
+            />
+          </CardContent>
+        </Card>
+      )}
+      </div>
 
       <VoucherBatchPostDialog
         clientId={clientId}

@@ -48,3 +48,83 @@ export async function createDocument(
   if (error) throw error;
   return document.id;
 }
+
+/**
+ * Create a childless `doc_type='other'` document — the NON_VAT container for
+ * files that are not 統一發票 / 折讓單 (receipts, statements, etc). Uploaded from
+ * the `/documents` page; periodless, OCR skipped. The original filename is not
+ * persisted (the `documents` table has no filename column); the file is
+ * identified by its preview + upload date until the editable-fields work lands.
+ *
+ * `doc_date` is a today placeholder, mirroring `createInvoice` / `createAllowance`
+ * (which set it before OCR fills the real value); `other` docs have no OCR so it
+ * stays the upload date.
+ */
+export async function createOtherDocument(
+  input: {
+    firm_id: string;
+    client_id: string;
+    storage_path: string;
+  },
+  options?: DocumentServiceOptions,
+): Promise<string> {
+  return createDocument(
+    {
+      firm_id: input.firm_id,
+      client_id: input.client_id,
+      doc_date: new Date().toISOString().slice(0, 10),
+      type: "NON_VAT",
+      doc_type: "other",
+      file_url: input.storage_path,
+      ocr_status: null,
+    },
+    options,
+  );
+}
+
+/**
+ * Soft-delete an `other` document (CTI parent records the physical fact via
+ * `status`) and remove its storage object. Guarded to `doc_type='other'` so this
+ * never touches a VAT document that still has a subtable. RLS confines the row to
+ * the caller's firm (and the proxy confines a portal client to their own client).
+ */
+export async function deleteOtherDocument(
+  documentId: string,
+  options?: DocumentServiceOptions,
+): Promise<void> {
+  const supabase = options?.supabaseClient ?? (await createClient());
+
+  const { data: doc, error: fetchError } = await supabase
+    .from("documents")
+    .select("doc_type, file_url")
+    .eq("id", documentId)
+    .single();
+
+  if (fetchError) throw fetchError;
+  if (!doc) throw new Error("Document not found");
+  if (doc.doc_type !== "other") {
+    throw new Error("deleteOtherDocument only handles doc_type='other'");
+  }
+
+  const { error } = await supabase
+    .from("documents")
+    .update({ status: "deleted" })
+    .eq("id", documentId);
+
+  if (error) throw error;
+
+  // `other` files are post-5.6 canonical keys — remove verbatim, no toDocumentsKey.
+  if (doc.file_url) {
+    const { error: storageError } = await supabase.storage
+      .from("documents")
+      .remove([doc.file_url]);
+
+    if (storageError) {
+      // The row is already soft-deleted; a dangling object is recoverable, so log not throw.
+      console.error(
+        `Failed to delete storage object ${doc.file_url}:`,
+        storageError,
+      );
+    }
+  }
+}

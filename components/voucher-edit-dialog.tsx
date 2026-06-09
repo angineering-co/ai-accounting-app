@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -58,10 +58,12 @@ import {
   type JournalEntry,
   type JournalEntryLine,
 } from "@/lib/domain/journal-entry";
-import { useVoucherDemoStore } from "@/lib/dev/use-voucher-demo-store";
+import { editEntryAction } from "@/lib/services/voucher";
 
 interface VoucherEditDialogProps {
+  clientId: string;
   entry: JournalEntry;
+  lines: JournalEntryLine[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved?: () => void;
@@ -107,26 +109,23 @@ const ACCOUNT_OPTIONS = ACCOUNT_LIST.map((s) => {
 });
 
 export function VoucherEditDialog({
+  clientId,
   entry,
+  lines,
   open,
   onOpenChange,
   onSaved,
 }: VoucherEditDialogProps) {
-  const store = useVoucherDemoStore();
   const mode: "draft" | "posted" = entry.status === "posted" ? "posted" : "draft";
   const schema = useMemo(() => buildEditFormSchema(mode), [mode]);
 
   const initialLines: JournalEntryLine[] = useMemo(
-    () =>
-      [...store.lines.filter((l) => l.journal_entry_id === entry.id)].sort(
-        (a, b) => a.line_number - b.line_number,
-      ),
-    [store.lines, entry.id],
+    () => [...lines].sort((a, b) => a.line_number - b.line_number),
+    [lines],
   );
 
-  const form = useForm<EditFormValues>({
-    resolver: zodResolver(schema),
-    defaultValues: {
+  const defaultValues: EditFormValues = useMemo(
+    () => ({
       voucher_type: entry.voucher_type,
       entry_date: entry.entry_date,
       description: entry.description ?? "",
@@ -137,8 +136,21 @@ export function VoucherEditDialog({
         description: l.description ?? "",
       })),
       reason: "",
-    },
+    }),
+    [entry, initialLines],
+  );
+
+  const form = useForm<EditFormValues>({
+    resolver: zodResolver(schema),
+    defaultValues,
   });
+
+  // The dialog stays mounted across opens, so re-seed the form from the latest
+  // entry/lines each time it opens (after a save the parent re-fetches and these
+  // props change — without this a second edit would show stale values).
+  useEffect(() => {
+    if (open) form.reset(defaultValues);
+  }, [open, defaultValues, form]);
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -153,28 +165,17 @@ export function VoucherEditDialog({
   const { debit: debitTotal, credit: creditTotal } = sumLines(numericLines);
   const isBalanced = debitTotal === creditTotal && debitTotal > 0;
 
-  const onSubmit = (values: EditFormValues) => {
-    const newLines = values.lines.map((l, i) => ({
-      line_number: i + 1,
+  const onSubmit = async (values: EditFormValues) => {
+    const newLines = values.lines.map((l) => ({
       account_code: l.account_code,
       debit: l.debit,
       credit: l.credit,
       description: l.description ? l.description : null,
     }));
 
-    if (mode === "draft") {
-      store.saveDraftEntry(
-        entry.id,
-        {
-          voucher_type: values.voucher_type,
-          entry_date: values.entry_date,
-          description: values.description ? values.description : null,
-        },
-        newLines,
-      );
-      toast.success("草稿已儲存");
-    } else {
-      store.editPostedEntry(
+    try {
+      await editEntryAction(
+        clientId,
         entry.id,
         {
           voucher_type: values.voucher_type,
@@ -183,10 +184,13 @@ export function VoucherEditDialog({
         },
         newLines,
         values.reason ?? "",
-        store.userId,
       );
-      toast.success("已更新並寫入審計軌跡");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "儲存失敗");
+      return;
     }
+
+    toast.success(mode === "posted" ? "已更新並寫入審計軌跡" : "草稿已儲存");
     onOpenChange(false);
     onSaved?.();
   };
@@ -504,8 +508,15 @@ export function VoucherEditDialog({
               >
                 取消
               </Button>
-              <Button type="submit" disabled={!isBalanced}>
-                {mode === "posted" ? "儲存修改並寫入審計軌跡" : "儲存草稿"}
+              <Button
+                type="submit"
+                disabled={!isBalanced || form.formState.isSubmitting}
+              >
+                {form.formState.isSubmitting
+                  ? "儲存中…"
+                  : mode === "posted"
+                    ? "儲存修改並寫入審計軌跡"
+                    : "儲存草稿"}
               </Button>
             </DialogFooter>
           </form>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import useSWR from "swr";
 import { History } from "lucide-react";
 import { format } from "date-fns";
 
@@ -21,12 +21,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-import { useVoucherDemoStore } from "@/lib/dev/use-voucher-demo-store";
+import { listEntryAuditTrails } from "@/lib/services/voucher";
 import type { AuditAction } from "@/lib/domain/audit-trail";
 import { accountLabel } from "@/lib/data/accounts";
 import { formatNTD } from "@/lib/utils";
 
 interface VoucherAuditHistoryProps {
+  clientId: string;
   entryId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -41,17 +42,15 @@ const ACTION_LABEL: Record<AuditAction, string> = {
 };
 
 export function VoucherAuditHistory({
+  clientId,
   entryId,
   open,
   onOpenChange,
 }: VoucherAuditHistoryProps) {
-  const store = useVoucherDemoStore();
-  const trails = useMemo(
-    () =>
-      store.auditTrails
-        .filter((t) => t.entity_table === "journal_entries" && t.entity_id === entryId)
-        .sort((a, b) => b.actor_at.getTime() - a.actor_at.getTime()),
-    [store.auditTrails, entryId],
+  // Fetch only while open; the service already returns rows newest-first.
+  const { data: trails, isLoading } = useSWR(
+    open ? ["entry-audit-trails", clientId, entryId] : null,
+    () => listEntryAuditTrails(clientId, entryId),
   );
 
   return (
@@ -67,7 +66,11 @@ export function VoucherAuditHistory({
           </DialogDescription>
         </DialogHeader>
 
-        {trails.length === 0 ? (
+        {isLoading || !trails ? (
+          <div className="rounded-md border border-dashed p-6 text-center text-base text-muted-foreground">
+            載入中…
+          </div>
+        ) : trails.length === 0 ? (
           <div className="rounded-md border border-dashed p-6 text-center text-base text-muted-foreground">
             目前沒有審計紀錄。
           </div>

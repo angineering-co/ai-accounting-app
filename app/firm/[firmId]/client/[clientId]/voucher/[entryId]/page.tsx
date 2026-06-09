@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import useSWR from "swr";
 
+import { toast } from "sonner";
+
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -24,6 +26,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -42,9 +54,14 @@ import {
 import { cn, formatNTD } from "@/lib/utils";
 
 import { accountLabel } from "@/lib/data/accounts";
-import { getVoucherDetail } from "@/lib/services/voucher";
+import {
+  deleteDraftEntryAction,
+  getVoucherDetail,
+} from "@/lib/services/voucher";
 import { RecordStateCard } from "@/components/record-state-card";
 import { VoucherBatchPostDialog } from "@/components/voucher-batch-post-dialog";
+import { VoucherEditDialog } from "@/components/voucher-edit-dialog";
+import { VoucherAuditHistory } from "@/components/voucher-audit-history";
 
 const DOC_TYPE_LABEL: Record<string, string> = {
   invoice: "發票",
@@ -96,6 +113,10 @@ export default function VoucherDetailPage({
   const { firmId, clientId, entryId } = use(params);
   const router = useRouter();
   const [postOpen, setPostOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { data: detail, isLoading, error, mutate } = useSWR(
     ["voucher-detail", clientId, entryId],
     () => getVoucherDetail(clientId, entryId),
@@ -132,6 +153,19 @@ export default function VoucherDetailPage({
   const isPosted = entry.status === "posted";
   const isReversed = entry.status === "reversed";
   const isReversalVoucher = entry.reverses_entry_id != null;
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await deleteDraftEntryAction(clientId, entry.id);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "刪除失敗");
+      setIsDeleting(false);
+      return;
+    }
+    toast.success("草稿已刪除");
+    router.push(`/firm/${firmId}/client/${clientId}/voucher`);
+  };
 
   return (
     <div className="space-y-4">
@@ -305,30 +339,26 @@ export default function VoucherDetailPage({
           <div className="flex flex-wrap gap-2 pt-2">
             {isDraft && (
               <>
-                <DisabledAction
-                  icon={<Edit className="size-4 mr-1" />}
-                  label="編輯"
-                  reason="編輯功能將於 Phase 9 開放"
-                />
+                <Button onClick={() => setEditOpen(true)}>
+                  <Edit className="size-4 mr-1" />
+                  編輯
+                </Button>
                 <Button onClick={() => setPostOpen(true)}>
                   <Send className="size-4 mr-1" />
                   過帳
                 </Button>
-                <DisabledAction
-                  variant="outline"
-                  icon={<Trash2 className="size-4 mr-1" />}
-                  label="刪除草稿"
-                  reason="刪除功能將於 Phase 9 開放"
-                />
+                <Button variant="outline" onClick={() => setDeleteOpen(true)}>
+                  <Trash2 className="size-4 mr-1" />
+                  刪除草稿
+                </Button>
               </>
             )}
             {isPosted && (
               <>
-                <DisabledAction
-                  icon={<Edit className="size-4 mr-1" />}
-                  label="編輯（in-place）"
-                  reason="編輯功能將於 Phase 9 開放"
-                />
+                <Button onClick={() => setEditOpen(true)}>
+                  <Edit className="size-4 mr-1" />
+                  編輯（in-place）
+                </Button>
                 {!isReversalVoucher && (
                   <DisabledAction
                     variant="destructive"
@@ -340,12 +370,10 @@ export default function VoucherDetailPage({
               </>
             )}
             {!isDraft && (
-              <DisabledAction
-                variant="outline"
-                icon={<History className="size-4 mr-1" />}
-                label="審計歷史"
-                reason="審計歷史將於過帳 / 編輯功能上線後開放"
-              />
+              <Button variant="outline" onClick={() => setAuditOpen(true)}>
+                <History className="size-4 mr-1" />
+                審計歷史
+              </Button>
             )}
           </div>
         </CardContent>
@@ -367,6 +395,45 @@ export default function VoucherDetailPage({
         onOpenChange={setPostOpen}
         onPosted={() => void mutate()}
       />
+
+      <VoucherEditDialog
+        clientId={clientId}
+        entry={entry}
+        lines={lines}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        onSaved={() => void mutate()}
+      />
+
+      <VoucherAuditHistory
+        clientId={clientId}
+        entryId={entry.id}
+        open={auditOpen}
+        onOpenChange={setAuditOpen}
+      />
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>刪除這張草稿傳票？</AlertDialogTitle>
+            <AlertDialogDescription>
+              此草稿尚未過帳，刪除後將一併移除其所有分錄，且無法復原。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>保留草稿</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isDeleting}
+              onClick={(e) => {
+                e.preventDefault();
+                void handleDelete();
+              }}
+            >
+              {isDeleting ? "刪除中…" : "刪除草稿"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

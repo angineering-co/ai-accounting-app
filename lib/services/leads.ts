@@ -20,37 +20,42 @@ export interface LeadRecord {
  * firm-scoped, so staff and clients should not see them. Uses the admin
  * client to bypass RLS (the `leads` table has no SELECT policy).
  */
-export async function listLeads(limit = 200): Promise<LeadRecord[]> {
-  const authed = await createClient();
-  const {
-    data: { user },
-  } = await authed.auth.getUser();
-  if (!user) return [];
+export async function listLeads(limit = 15): Promise<LeadRecord[]> {
+  try {
+    const authed = await createClient();
+    const {
+      data: { user },
+    } = await authed.auth.getUser();
+    if (!user) return [];
 
-  const { data: profile } = await authed
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
+    const { data: profile } = await authed
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
 
-  if (!profile || !["admin", "super_admin"].includes(profile.role ?? "")) {
+    if (!profile || !["admin", "super_admin"].includes(profile.role ?? "")) {
+      return [];
+    }
+
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("leads")
+      .select("id, lead_code, path, status, data, created_at, updated_at")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error("listLeads failed:", error);
+      return [];
+    }
+
+    return (data ?? []).map((row) => ({
+      ...row,
+      data: (row.data ?? {}) as Record<string, unknown>,
+    }));
+  } catch (err) {
+    console.error("listLeads unexpected error:", err);
     return [];
   }
-
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("leads")
-    .select("id, lead_code, path, status, data, created_at, updated_at")
-    .order("created_at", { ascending: false })
-    .limit(limit);
-
-  if (error) {
-    console.error("listLeads failed:", error);
-    return [];
-  }
-
-  return (data ?? []).map((row) => ({
-    ...row,
-    data: (row.data ?? {}) as Record<string, unknown>,
-  }));
 }

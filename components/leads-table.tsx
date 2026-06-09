@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import {
   Table,
@@ -62,9 +62,7 @@ function formatValue(value: unknown): string {
 export function LeadsTable({ leads }: { leads: LeadRecord[] }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  const sorted = useMemo(() => leads, [leads]);
-
-  if (sorted.length === 0) {
+  if (leads.length === 0) {
     return (
       <p className="text-base text-muted-foreground">目前沒有申請名單。</p>
     );
@@ -94,7 +92,7 @@ export function LeadsTable({ leads }: { leads: LeadRecord[] }) {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {sorted.map((lead) => {
+        {leads.map((lead) => {
           const isOpen = expanded.has(lead.id);
           const data = lead.data;
           const contactName = (data.contactName as string) ?? "—";

@@ -67,7 +67,9 @@ export default async function DashboardPage({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <LeadsTable leads={leads} />
+            <div className="max-h-96 overflow-auto">
+              <LeadsTable leads={leads} />
+            </div>
           </CardContent>
         </Card>
       )}

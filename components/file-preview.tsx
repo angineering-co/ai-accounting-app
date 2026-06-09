@@ -117,7 +117,9 @@ export function FilePreview({
   return (
     <div
       className={cn(
-        "relative w-full overflow-hidden rounded-md border bg-muted/30",
+        // Default height so inner fill/h-full elements don't collapse to 0 when no
+        // height is passed; tailwind-merge lets callers override via className (h-[75vh] etc).
+        "relative w-full h-96 overflow-hidden rounded-md border bg-muted/30",
         className,
       )}
     >

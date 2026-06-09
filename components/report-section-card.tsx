@@ -70,6 +70,7 @@ export function ReportSectionCard({
                       {href ? (
                         <Link
                           href={href}
+                          prefetch={false}
                           className="text-primary hover:underline"
                         >
                           {row.accountCode}

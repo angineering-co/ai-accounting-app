@@ -34,13 +34,6 @@ export function isStaffRole(
 
 type CallerProfile = { role: string | null; firm_id: string | null };
 
-// Result of the firm-staff + firm-scope client check. Discriminated so callers
-// that want distinct user-facing messages (e.g. line.ts) can map the reason,
-// while the throwing wrapper below collapses them for the common case.
-export type StaffClientAccess =
-  | { ok: true; role: string; firm_id: string | null }
-  | { ok: false; reason: "not_staff" | "not_found" | "wrong_firm" };
-
 // Single home for the caller profile read. Explicit read (holds under the
 // service-role test client, which bypasses RLS). A genuine DB error throws; a
 // missing row resolves to null.
@@ -71,17 +64,21 @@ export async function assertStaffRole(
   return profile;
 }
 
-// Result-returning firm-staff + firm-scope client check. super_admin is
-// firm-exempt; other staff require their firm to own the client. Uses an
-// EXPLICIT firm_id compare (not RLS) so it holds under a service-role client.
-export async function checkStaffCanAccessClient(
+// Firm-staff + firm-scope client gate. super_admin is firm-exempt; other staff
+// require their firm to own the client. Uses an EXPLICIT firm_id compare (not
+// RLS) so it holds under a service-role client. A non-staff caller throws
+// "權限不足"; a missing / cross-firm client collapses to one "not accessible"
+// message (a firm boundary, not a role problem). Both firm_ids must be non-null
+// before they can match, so an unassociated staff member and an unassociated
+// client never pass (matches lib/db/rls.ts::assertCallerCanAccessClient).
+export async function assertStaffCanAccessClient(
   supabase: SupabaseClient<Database>,
   userId: string,
   clientId: string,
-): Promise<StaffClientAccess> {
+): Promise<void> {
   const profile = await loadCallerProfile(supabase, userId);
   if (!profile || !isStaffRole(profile.role)) {
-    return { ok: false, reason: "not_staff" };
+    throw new Error("權限不足");
   }
   const { data: client, error } = await supabase
     .from("clients")
@@ -89,25 +86,15 @@ export async function checkStaffCanAccessClient(
     .eq("id", clientId)
     .maybeSingle();
   if (error) throw error;
-  if (!client) return { ok: false, reason: "not_found" };
-  if (profile.role !== "super_admin" && client.firm_id !== profile.firm_id) {
-    return { ok: false, reason: "wrong_firm" };
+  if (!client) {
+    throw new Error(`client ${clientId} not found or not accessible`);
   }
-  return { ok: true, role: profile.role, firm_id: profile.firm_id };
-}
-
-// Throwing wrapper over checkStaffCanAccessClient for the common case. not_staff
-// surfaces as "權限不足"; a not_found / wrong_firm client collapses to a single
-// "not accessible" message (the caller's firm boundary, not a role problem).
-export async function assertStaffCanAccessClient(
-  supabase: SupabaseClient<Database>,
-  userId: string,
-  clientId: string,
-): Promise<void> {
-  const result = await checkStaffCanAccessClient(supabase, userId, clientId);
-  if (result.ok) return;
-  if (result.reason === "not_staff") throw new Error("權限不足");
-  throw new Error(`client ${clientId} not found or not accessible`);
+  if (
+    profile.role !== "super_admin" &&
+    (!profile.firm_id || !client.firm_id || client.firm_id !== profile.firm_id)
+  ) {
+    throw new Error(`client ${clientId} not found or not accessible`);
+  }
 }
 
 // RLS-bounded existence read of a client row — NO role gate (a portal

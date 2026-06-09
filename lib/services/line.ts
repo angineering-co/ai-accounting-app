@@ -3,7 +3,7 @@
 import { createHmac } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { checkStaffCanAccessClient } from "@/lib/services/authz";
+import { assertStaffCanAccessClient } from "@/lib/services/authz";
 import type { Json } from "@/supabase/database.types";
 
 // ---------------------------------------------------------------------------
@@ -228,12 +228,12 @@ async function authorizeAdminForClient(
   } = await authed.auth.getUser();
   if (!user) return { authorized: false, error: "未登入" };
 
-  const result = await checkStaffCanAccessClient(authed, user.id, clientId);
-  if (result.ok) return { authorized: true };
-  return {
-    authorized: false,
-    error: result.reason === "not_found" ? "找不到客戶" : "權限不足",
-  };
+  try {
+    await assertStaffCanAccessClient(authed, user.id, clientId);
+    return { authorized: true };
+  } catch {
+    return { authorized: false, error: "權限不足" };
+  }
 }
 
 export async function generateBindingCode(

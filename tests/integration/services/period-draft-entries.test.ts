@@ -536,6 +536,36 @@ describe.skipIf(!hasDbEnv)("Period draft entries — freshness + batch generatio
     await expect(generateDraftEntriesByPeriod(periodId, opts())).rejects.toThrow(/進行中/);
   });
 
+  it("rejects a non-staff (portal client-role) caller", async () => {
+    const periodId = await createPeriod();
+    const inv = await seedConfirmedInvoice(periodId, "in", {
+      totalSales: 1_000,
+      tax: 50,
+      totalAmount: 1_050,
+      deductible: true,
+      account: "6113 旅費",
+    });
+    // Demote the fixture caller to the portal client role — draft-entry
+    // generation produces ledger data, so a client-role user must be denied even
+    // for their own client (mirrors the post-journal-entries staff gate).
+    await supabase
+      .from("profiles")
+      .update({ role: "client" })
+      .eq("id", fixture.userId);
+    try {
+      await expect(
+        generateDraftEntriesByPeriod(periodId, opts()),
+      ).rejects.toThrow(/權限不足/);
+      // The gate fires before the mutex claim and any write → nothing generated.
+      expect(await getEntryWithLines(supabase, inv.document_id)).toBeNull();
+    } finally {
+      await supabase
+        .from("profiles")
+        .update({ role: "admin" })
+        .eq("id", fixture.userId);
+    }
+  });
+
   it("reclaims a stale 'running' flag from a crashed run and completes", async () => {
     const periodId = await createPeriod();
     const inv = await seedConfirmedInvoice(periodId, "in", {

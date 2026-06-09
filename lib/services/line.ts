@@ -3,6 +3,7 @@
 import { createHmac } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { assertStaffCanAccessClient } from "@/lib/services/authz";
 import type { Json } from "@/supabase/database.types";
 
 // ---------------------------------------------------------------------------
@@ -227,26 +228,12 @@ async function authorizeAdminForClient(
   } = await authed.auth.getUser();
   if (!user) return { authorized: false, error: "未登入" };
 
-  const { data: profile } = await authed
-    .from("profiles")
-    .select("firm_id, role")
-    .eq("id", user.id)
-    .single();
-  if (!profile || !["admin", "staff", "super_admin"].includes(profile.role ?? "")) {
+  try {
+    await assertStaffCanAccessClient(authed, user.id, clientId);
+    return { authorized: true };
+  } catch {
     return { authorized: false, error: "權限不足" };
   }
-
-  const { data: clientRecord } = await authed
-    .from("clients")
-    .select("firm_id")
-    .eq("id", clientId)
-    .single();
-  if (!clientRecord) return { authorized: false, error: "找不到客戶" };
-  if (profile.role !== "super_admin" && clientRecord.firm_id !== profile.firm_id) {
-    return { authorized: false, error: "權限不足" };
-  }
-
-  return { authorized: true };
 }
 
 export async function generateBindingCode(

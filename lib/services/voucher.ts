@@ -13,6 +13,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@/lib/db/drizzle";
+import { assertClientReadable } from "@/lib/services/authz";
 import type { Database } from "@/supabase/database.types";
 import {
   journalEntrySchema,
@@ -38,15 +39,7 @@ async function assertClientAccess(
   clientId: string,
 ): Promise<SupabaseClient<Database>> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("clients")
-    .select("id")
-    .eq("id", clientId)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) {
-    throw new Error(`client ${clientId} not found or not accessible`);
-  }
+  await assertClientReadable(supabase, clientId);
   return supabase;
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -145,12 +145,18 @@ export function VoucherEditDialog({
     defaultValues,
   });
 
-  // The dialog stays mounted across opens, so re-seed the form from the latest
-  // entry/lines each time it opens (after a save the parent re-fetches and these
-  // props change — without this a second edit would show stale values).
+  // Re-seed only when the dialog switches to a DIFFERENT entry, not on every
+  // defaultValues change: a background SWR revalidation (e.g. window refocus)
+  // changes the `lines` prop, and resetting on that would wipe the staff's
+  // in-progress edits. Keying on entry.id also preserves unsubmitted input across
+  // an accidental close + reopen of the same voucher.
+  const seededEntryId = useRef<string | null>(null);
   useEffect(() => {
-    if (open) form.reset(defaultValues);
-  }, [open, defaultValues, form]);
+    if (open && seededEntryId.current !== entry.id) {
+      form.reset(defaultValues);
+      seededEntryId.current = entry.id;
+    }
+  }, [open, entry.id, defaultValues, form]);
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -273,6 +279,9 @@ export function VoucherEditDialog({
                           <Button
                             type="button"
                             variant="outline"
+                            // A posted voucher's number encodes this date, so it's
+                            // frozen once posted (correct via reverse + re-book).
+                            disabled={mode === "posted"}
                             className={cn(
                               "justify-start text-left font-normal",
                               !field.value && "text-muted-foreground",

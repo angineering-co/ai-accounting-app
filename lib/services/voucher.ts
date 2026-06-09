@@ -1,15 +1,16 @@
 "use server";
 
-// GL read path (Phase 5). Server Actions the voucher list / detail / report pages
-// call directly via `useSWR`. Reads are firm-scoped by RLS through `createClient()`;
-// the Drizzle aggregates bypass RLS, so each is gated by an RLS-bounded `clients`
-// read first (`assertClientAccess`) — the same firm-scope boundary the period-batch
-// helpers in `journal-entry.ts` use.
+// GL Server Actions the voucher list / detail / report pages call directly via
+// `useSWR`. Reads (list / detail / audit trail / reports) are firm-scoped by RLS
+// through `createClient()`; the Drizzle aggregates bypass RLS, so each is gated by
+// an RLS-bounded `clients` read first (`assertClientAccess`) — the same firm-scope
+// boundary the helpers in `journal-entry.ts` use.
 //
-// Mostly read-only. The thin edit / delete Server Action wrappers (Phase 9) live at
-// the bottom of this file: they delegate to the non-'use server' helpers in
-// `journal-entry.ts` (which can't be 'use server' themselves — they take an injected
-// userId for tests/composition). Reverse lands in Phase 10.
+// The edit / delete wrappers at the bottom (Phase 9) are the write surface: thin
+// 'use server' entry points delegating to the non-'use server' helpers in
+// `journal-entry.ts` (those can't be 'use server' themselves — they take an injected
+// userId for tests/composition, which a public endpoint must not accept). Reverse
+// lands in Phase 10.
 
 import { sql } from "drizzle-orm";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -350,7 +351,10 @@ export async function listEntryAuditTrails(
 ): Promise<AuditTrail[]> {
   await assertClientAccess(clientId);
 
-  const rows = (await db.execute(sql`
+  // db.execute returns the postgres-js RowList; auditTrailSchema.array().parse
+  // accepts it as `unknown` and validates each row (incl. the `before` jsonb), so
+  // no cast is needed.
+  const rows = await db.execute(sql`
     SELECT a.id,
            a.firm_id,
            a.entity_table,
@@ -366,7 +370,7 @@ export async function listEntryAuditTrails(
        AND a.entity_id = ${entryId}
        AND e.client_id = ${clientId}
      ORDER BY a.actor_at DESC
-  `)) as unknown as unknown[];
+  `);
 
   return auditTrailSchema.array().parse(rows);
 }

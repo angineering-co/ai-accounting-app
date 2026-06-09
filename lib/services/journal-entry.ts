@@ -30,8 +30,11 @@ import {
   type ExtractedInvoiceData,
   type ExtractedAllowanceData,
 } from "@/lib/domain/models";
+import { z } from "zod";
 import {
+  ACCOUNT_CODE_REGEX,
   isLinesBalanced,
+  VOUCHER_TYPE,
   type JournalEntry,
   type VoucherType,
 } from "@/lib/domain/journal-entry";
@@ -946,6 +949,34 @@ export type EditEntryLine = {
   description: string | null;
 };
 
+// editEntry / editEntryAction are reachable as a Server Action, so the inputs must
+// be validated server-side — a caller can bypass the form's client-side rules and
+// post arbitrary JSON. The DB CHECKs catch debit/credit XOR + non-negativity, but a
+// malformed entry_date or non-integer amount should fail loud at the boundary
+// (parse-first convention, like updateInvoiceSchema). An absent optional key is
+// preserved (Zod doesn't inject `undefined`), so `"description" in patch` still
+// distinguishes "clear it" (null) from "leave it" (absent).
+const editEntryPatchSchema = z.object({
+  voucher_type: z.enum(VOUCHER_TYPE).optional(),
+  entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期格式錯誤 (YYYY-MM-DD)").optional(),
+  description: z.string().nullable().optional(),
+});
+
+const editEntryLinesSchema = z
+  .array(
+    z
+      .object({
+        account_code: z.string().regex(ACCOUNT_CODE_REGEX, "科目代碼為 4–6 位數字"),
+        debit: z.number().int().nonnegative(),
+        credit: z.number().int().nonnegative(),
+        description: z.string().nullable(),
+      })
+      .refine((l) => (l.debit > 0) !== (l.credit > 0), {
+        message: "借方與貸方只能擇一為正",
+      }),
+  )
+  .min(2, "至少 2 行");
+
 /**
  * Edit a journal entry's header + lines in place, inside one Drizzle transaction.
  * A SINGLE path for both draft and posted entries — the only difference is the
@@ -958,9 +989,12 @@ export type EditEntryLine = {
  * `assertStaffCanAccessClient` is the role + firm boundary and the in-transaction
  * `client_id = clientId` filter row-scopes the entry (a foreign id → "找不到傳票").
  *
- * Guards (all before any write): entry must exist under the client; `reversed` is
- * immutable; the entry_date's fiscal year — both the current one and, if the edit
- * moves the date, the target one — must be open; the new lines must balance.
+ * Guards (all before any write): inputs parse (Zod); entry must exist under the
+ * client; a `reversed` entry or a reversal voucher (`reverses_entry_id` set) is
+ * immutable; a posted voucher's `entry_date` can't change (its voucher_no is
+ * derived from the booked date — move the date via reverse + re-book instead); the
+ * entry_date's fiscal year — current and, for drafts, the target — must be open;
+ * the new lines must balance.
  */
 export async function editEntry(
   clientId: string,
@@ -973,7 +1007,9 @@ export async function editEntry(
   const { supabase, userId } = await resolveAuth(options);
   await assertStaffCanAccessClient(supabase, userId, clientId);
 
-  if (!isLinesBalanced(newLines)) {
+  const parsedPatch = editEntryPatchSchema.parse(patch);
+  const parsedLines = editEntryLinesSchema.parse(newLines);
+  if (!isLinesBalanced(parsedLines)) {
     throw new Error("借貸不平衡，無法儲存");
   }
 
@@ -986,6 +1022,7 @@ export async function editEntry(
         voucher_type: journalEntriesTable.voucher_type,
         entry_date: journalEntriesTable.entry_date,
         description: journalEntriesTable.description,
+        reverses_entry_id: journalEntriesTable.reverses_entry_id,
       })
       .from(journalEntriesTable)
       .where(
@@ -1001,6 +1038,18 @@ export async function editEntry(
     if (entry.status === "reversed") {
       throw new Error("已沖銷的傳票不可編輯");
     }
+    // A reversal voucher (status='posted', reverses_entry_id set) auto-offsets its
+    // original — distinct row from the reversed original above. Editing its lines
+    // would break that offset, so it's immutable.
+    if (entry.reverses_entry_id != null) {
+      throw new Error("沖銷分錄不可編輯");
+    }
+    const isPosted = entry.status === "posted";
+    // A posted voucher's number encodes its booked date (YYYYMMDD-NNNNN), so the
+    // date is frozen once posted — correct it via reverse + re-book, not in place.
+    if (isPosted && parsedPatch.entry_date && parsedPatch.entry_date !== entry.entry_date) {
+      throw new Error("已過帳的傳票不可修改記帳日期");
+    }
 
     // Fiscal-year guard: reject if the entry sits in — or the edit would move it
     // into — a closed year. Editing a closed-year book is forbidden either way.
@@ -1010,12 +1059,10 @@ export async function editEntry(
       .where(eq(fiscalYearClosesTable.client_id, clientId));
     const closedYears = new Set(closedRows.map((r) => r.year));
     const oldYear = Number(entry.entry_date.slice(0, 4));
-    const newYear = Number((patch.entry_date ?? entry.entry_date).slice(0, 4));
+    const newYear = Number((parsedPatch.entry_date ?? entry.entry_date).slice(0, 4));
     if (closedYears.has(oldYear) || closedYears.has(newYear)) {
       throw new Error("該年度已關帳，無法編輯");
     }
-
-    const isPosted = entry.status === "posted";
 
     // Snapshot the pre-edit state BEFORE mutating, for the audit `before`. Only
     // posted edits are audited, so the read is skipped for drafts.
@@ -1050,11 +1097,13 @@ export async function editEntry(
     await tx
       .update(journalEntriesTable)
       .set({
-        voucher_type: patch.voucher_type ?? entry.voucher_type,
-        entry_date: patch.entry_date ?? entry.entry_date,
+        voucher_type: parsedPatch.voucher_type ?? entry.voucher_type,
+        entry_date: parsedPatch.entry_date ?? entry.entry_date,
         // `null` clears the description; only an absent key keeps the old value.
         description:
-          "description" in patch ? (patch.description ?? null) : entry.description,
+          "description" in parsedPatch
+            ? (parsedPatch.description ?? null)
+            : entry.description,
         updated_at: sql`now()`,
       })
       .where(eq(journalEntriesTable.id, entryId));
@@ -1064,7 +1113,7 @@ export async function editEntry(
       .where(eq(journalEntryLinesTable.journal_entry_id, entryId));
 
     await tx.insert(journalEntryLinesTable).values(
-      newLines.map((line, idx) => ({
+      parsedLines.map((line, idx) => ({
         journal_entry_id: entryId,
         line_number: idx + 1,
         account_code: line.account_code,

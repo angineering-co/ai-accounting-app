@@ -46,8 +46,11 @@ describe.skipIf(!hasDbEnv)("editEntry / deleteDraftEntry — in-place edit + aud
     { account_code: "5102", debit: 2_000, credit: 0, description: "差旅" },
     { account_code: "1112", debit: 0, credit: 2_000, description: null },
   ];
+  // Two lines (clears the min-2 rule) whose totals don't match: 1500 Dr vs 0 Cr.
+  // Each line still passes the debit/credit XOR, so this isolates the balance check.
   const UNBALANCED: EditEntryLine[] = [
     { account_code: "1111", debit: 1_000, credit: 0, description: null },
+    { account_code: "5102", debit: 500, credit: 0, description: null },
   ];
 
   // Unique voucher_no suffix per seeded posted entry (the client+voucher_no unique
@@ -242,9 +245,11 @@ describe.skipIf(!hasDbEnv)("editEntry / deleteDraftEntry — in-place edit + aud
     }
   });
 
-  it("rejects moving an entry INTO a closed year via entry_date patch", async () => {
+  it("rejects moving a DRAFT into a closed year via entry_date patch", async () => {
+    // Posted vouchers can't change date at all (covered below); the move-into-a-
+    // closed-year guard is reachable only for drafts.
     const closedYear = 2041;
-    const id = await seedPostedEntry("2042-03-01", BALANCED);
+    const id = await seedDraftEntry("2042-03-01", BALANCED);
     await supabase.from("fiscal_year_closes").insert({
       firm_id: fixture.firmId,
       client_id: fixture.clientId,
@@ -285,6 +290,62 @@ describe.skipIf(!hasDbEnv)("editEntry / deleteDraftEntry — in-place edit + aud
     await expect(
       editEntry(fixture.clientId, id, {}, NEW_LINES, "x", opts()),
     ).rejects.toThrow(/已沖銷/);
+  });
+
+  it("rejects changing entry_date on a posted voucher (number is date-derived)", async () => {
+    const id = await seedPostedEntry("2026-02-10", BALANCED);
+    await expect(
+      editEntry(fixture.clientId, id, { entry_date: "2026-02-11" }, NEW_LINES, "x", opts()),
+    ).rejects.toThrow(/不可修改記帳日期/);
+    expect(await getAuditTrails(id)).toHaveLength(0);
+  });
+
+  it("rejects editing a reversal voucher (reverses_entry_id set)", async () => {
+    const original = await seedPostedEntry("2026-02-11", BALANCED);
+    // A reversal voucher: posted, with reverses_entry_id pointing at the original.
+    vnoCounter += 1;
+    const { data, error } = await supabase
+      .from("journal_entries")
+      .insert({
+        firm_id: fixture.firmId,
+        client_id: fixture.clientId,
+        voucher_type: "支出",
+        entry_date: "2026-02-12",
+        status: "posted",
+        voucher_no: `20260212-${String(vnoCounter).padStart(5, "0")}`,
+        reverses_entry_id: original,
+        posted_by: fixture.userId,
+        posted_at: new Date().toISOString(),
+        created_by: fixture.userId,
+      })
+      .select("id")
+      .single();
+    if (error) throw error;
+    await insertLines(data.id, BALANCED);
+
+    await expect(
+      editEntry(fixture.clientId, data.id, {}, NEW_LINES, "x", opts()),
+    ).rejects.toThrow(/沖銷分錄不可編輯/);
+  });
+
+  it("rejects malformed input server-side (bad entry_date, non-integer amount)", async () => {
+    const id = await seedDraftEntry("2026-02-13", BALANCED);
+    await expect(
+      editEntry(fixture.clientId, id, { entry_date: "2026/02/13" }, NEW_LINES, "", opts()),
+    ).rejects.toThrow();
+    await expect(
+      editEntry(
+        fixture.clientId,
+        id,
+        {},
+        [
+          { account_code: "1111", debit: 10.5, credit: 0, description: null },
+          { account_code: "4101", debit: 0, credit: 10.5, description: null },
+        ],
+        "",
+        opts(),
+      ),
+    ).rejects.toThrow();
   });
 
   it("draft edit: replaces lines + header, writes NO audit row, tolerates empty reason", async () => {

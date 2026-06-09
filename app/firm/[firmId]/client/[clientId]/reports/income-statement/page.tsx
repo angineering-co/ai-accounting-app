@@ -8,17 +8,9 @@ import useSWR from "swr";
 import { AmountCell } from "@/components/amount-cell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { ReportPeriodSelector } from "@/components/report-period-selector";
 import { RecordStateCard } from "@/components/record-state-card";
-import { type ReportSection } from "@/lib/services/financial-statements";
+import { ReportSectionCard } from "@/components/report-section-card";
 import { getIncomeStatement } from "@/lib/services/voucher";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { formatDateToISO } from "@/lib/utils";
@@ -29,72 +21,6 @@ function defaultRange(): { fromDate: string; toDate: string } {
     fromDate: formatDateToISO(p.startDate),
     toDate: formatDateToISO(p.endDate),
   };
-}
-
-function SectionCard({
-  title,
-  section,
-  subtotalLabel,
-}: {
-  title: string;
-  section: ReportSection;
-  subtotalLabel?: string;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base flex items-center justify-between">
-          <span>{title}</span>
-          <AmountCell amount={section.subtotal} />
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-32">科目代碼</TableHead>
-              <TableHead>科目名稱</TableHead>
-              <TableHead className="text-right">金額</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {section.rows.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={3}
-                  className="text-center py-6 text-sm text-muted-foreground"
-                >
-                  尚無資料
-                </TableCell>
-              </TableRow>
-            ) : (
-              section.rows.map((row) => (
-                <TableRow key={row.accountCode}>
-                  <TableCell className="font-mono text-base">
-                    {row.accountCode}
-                  </TableCell>
-                  <TableCell className="text-base">{row.accountName}</TableCell>
-                  <TableCell className="text-right">
-                    <AmountCell amount={row.amount} />
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-            {section.rows.length > 0 && (
-              <TableRow className="bg-muted/40">
-                <TableCell colSpan={2} className="font-medium text-base">
-                  {subtotalLabel ?? `${title}小計`}
-                </TableCell>
-                <TableCell className="text-right">
-                  <AmountCell amount={section.subtotal} />
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
-  );
 }
 
 function SubtotalRow({ label, amount }: { label: string; amount: number }) {
@@ -113,7 +39,7 @@ export default function IncomeStatementPage({
 }: {
   params: Promise<{ firmId: string; clientId: string }>;
 }) {
-  const { clientId } = use(params);
+  const { firmId, clientId } = use(params);
   const router = useRouter();
 
   const [{ fromDate, toDate }, setRange] = useState(defaultRange);
@@ -145,6 +71,9 @@ export default function IncomeStatementPage({
     is.nonOperatingIncome.rows.length > 0 ||
     is.nonOperatingExpense.rows.length > 0 ||
     is.incomeTax.rows.length > 0;
+
+  const accountHref = (code: string) =>
+    `/firm/${firmId}/client/${clientId}/reports/account/${code}?asOf=${toDate}`;
 
   return (
     <div className="space-y-4">
@@ -182,15 +111,39 @@ export default function IncomeStatementPage({
         </Card>
       )}
 
-      <SectionCard title="營業收入" section={is.operatingRevenue} />
-      <SectionCard title="營業成本" section={is.cogs} />
+      <ReportSectionCard
+        title="營業收入"
+        section={is.operatingRevenue}
+        linkBuilder={accountHref}
+      />
+      <ReportSectionCard
+        title="營業成本"
+        section={is.cogs}
+        linkBuilder={accountHref}
+      />
       <SubtotalRow label="營業毛利" amount={is.grossProfit} />
-      <SectionCard title="營業費用" section={is.opex} />
+      <ReportSectionCard
+        title="營業費用"
+        section={is.opex}
+        linkBuilder={accountHref}
+      />
       <SubtotalRow label="營業淨利" amount={is.operatingIncome} />
-      <SectionCard title="業外收入" section={is.nonOperatingIncome} />
-      <SectionCard title="業外損失" section={is.nonOperatingExpense} />
+      <ReportSectionCard
+        title="業外收入"
+        section={is.nonOperatingIncome}
+        linkBuilder={accountHref}
+      />
+      <ReportSectionCard
+        title="業外損失"
+        section={is.nonOperatingExpense}
+        linkBuilder={accountHref}
+      />
       <SubtotalRow label="稅前淨利" amount={is.preTaxIncome} />
-      <SectionCard title="所得稅費用" section={is.incomeTax} />
+      <ReportSectionCard
+        title="所得稅費用"
+        section={is.incomeTax}
+        linkBuilder={accountHref}
+      />
 
       <Card className="bg-primary/5 border-primary/40">
         <CardContent className="flex items-center justify-between py-6">

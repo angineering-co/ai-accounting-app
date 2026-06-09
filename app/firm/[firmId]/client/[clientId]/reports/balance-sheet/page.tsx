@@ -1,7 +1,6 @@
 "use client";
 
 import { use, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowLeft } from "lucide-react";
 import useSWR from "swr";
@@ -9,115 +8,12 @@ import useSWR from "swr";
 import { AmountCell } from "@/components/amount-cell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { ReportPeriodSelector } from "@/components/report-period-selector";
 import { RecordStateCard } from "@/components/record-state-card";
-import {
-  SYNTHETIC_NET_INCOME_CODE,
-  type ReportSection,
-} from "@/lib/services/financial-statements";
+import { ReportSectionCard } from "@/components/report-section-card";
+import { SYNTHETIC_NET_INCOME_CODE } from "@/lib/services/financial-statements";
 import { getBalanceSheet } from "@/lib/services/voucher";
 import { formatDateToISO, formatNTD } from "@/lib/utils";
-
-function SectionCard({
-  title,
-  section,
-  highlightSyntheticRow,
-  linkBuilder,
-}: {
-  title: string;
-  section: ReportSection;
-  highlightSyntheticRow?: boolean;
-  linkBuilder?: (accountCode: string) => string | null;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base flex items-center justify-between">
-          <span>{title}</span>
-          <AmountCell amount={section.subtotal} />
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-32">科目代碼</TableHead>
-              <TableHead>科目名稱</TableHead>
-              <TableHead className="text-right">金額</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {section.rows.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={3}
-                  className="text-center py-6 text-sm text-muted-foreground"
-                >
-                  尚無資料
-                </TableCell>
-              </TableRow>
-            ) : (
-              section.rows.map((row) => {
-                const synthetic =
-                  highlightSyntheticRow &&
-                  row.accountCode === SYNTHETIC_NET_INCOME_CODE;
-                const href = linkBuilder?.(row.accountCode) ?? null;
-                return (
-                  <TableRow
-                    key={row.accountCode}
-                    className={synthetic ? "bg-muted/30" : undefined}
-                  >
-                    <TableCell className="font-mono text-base">
-                      {href ? (
-                        <Link
-                          href={href}
-                          className="text-primary hover:underline"
-                        >
-                          {row.accountCode}
-                        </Link>
-                      ) : (
-                        row.accountCode
-                      )}
-                    </TableCell>
-                    <TableCell className="text-base">
-                      {row.accountName}
-                      {synthetic && (
-                        <span className="ml-2 text-sm text-muted-foreground">
-                          (合成,即時計算)
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <AmountCell amount={row.amount} />
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-            {section.rows.length > 0 && (
-              <TableRow className="bg-muted/40">
-                <TableCell colSpan={2} className="font-medium text-base">
-                  {title}合計
-                </TableCell>
-                <TableCell className="text-right">
-                  <AmountCell amount={section.subtotal} />
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
-  );
-}
 
 export default function BalanceSheetPage({
   params,
@@ -214,22 +110,25 @@ export default function BalanceSheetPage({
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:items-start">
-        <SectionCard
+        <ReportSectionCard
           title="資產"
           section={bs.assets}
           linkBuilder={accountHref}
+          subtotalSuffix="合計"
         />
         <div className="flex flex-col gap-4">
-          <SectionCard
+          <ReportSectionCard
             title="負債"
             section={bs.liabilities}
             linkBuilder={accountHref}
+            subtotalSuffix="合計"
           />
-          <SectionCard
+          <ReportSectionCard
             title="權益"
             section={bs.equity}
             highlightSyntheticRow
             linkBuilder={accountHref}
+            subtotalSuffix="合計"
           />
         </div>
       </div>

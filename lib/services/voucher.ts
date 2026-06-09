@@ -126,6 +126,7 @@ export interface VoucherDocument {
   doc_type: string;
   doc_date: string; // YYYY-MM-DD
   amount: number | null;
+  file_url: string | null; // storage_path of the uploaded file; null when none (e.g. electronic allowances)
 }
 
 export interface VoucherDetail {
@@ -173,7 +174,7 @@ export async function getVoucherDetail(
   if (entryRow.document_id) {
     const { data: docRow, error: docErr } = await supabase
       .from("documents")
-      .select("id, doc_type, doc_date, amount")
+      .select("id, doc_type, doc_date, amount, file_url")
       .eq("id", entryRow.document_id)
       .maybeSingle();
     if (docErr) throw docErr;
@@ -183,6 +184,7 @@ export async function getVoucherDetail(
           doc_type: docRow.doc_type,
           doc_date: docRow.doc_date,
           amount: docRow.amount,
+          file_url: docRow.file_url,
         }
       : null;
   }

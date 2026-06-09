@@ -586,6 +586,52 @@ describe("computeEntryFromAllowance — malformed original entry", () => {
   });
 });
 
+describe("computeEntryFromAllowance — multi-expense / multi-revenue original (Phase 9 edit)", () => {
+  // editEntry lets staff split one expense line into several accounts. The
+  // allowance mirror cannot pick which split to halve, so it must fail loud
+  // (routing the caller to the §5.2.2 manual-account fallback) rather than
+  // silently mirroring the first and producing an unbalanced折讓.
+  it("throws when a deductible input original has >1 non-tax Dr (expense) line", () => {
+    const split: ComputedEntry = {
+      voucher_type: "支出",
+      entry_date: "2026-01-15",
+      description: null,
+      lines: [
+        { account_code: "5101", debit: 6_000, credit: 0, description: null }, // 60% 銷管
+        { account_code: "5404", debit: 4_000, credit: 0, description: null }, // 40% 製造
+        { account_code: ACCT_INPUT_TAX, debit: 500, credit: 0, description: null },
+        { account_code: ACCT_BANK, debit: 0, credit: 10_500, description: null },
+      ],
+    };
+    expect(() =>
+      computeEntryFromAllowance(
+        makeAllowance({ in_or_out: "in", extracted_data: { amount: 1_000, taxAmount: 50 } }),
+        split,
+      ),
+    ).toThrow(/exactly 1 expense \(Dr\) line, got 2/);
+  });
+
+  it("throws when an output original has >1 non-tax Cr (revenue) line", () => {
+    const split: ComputedEntry = {
+      voucher_type: "收入",
+      entry_date: "2026-01-15",
+      description: null,
+      lines: [
+        { account_code: ACCT_BANK, debit: 21_000, credit: 0, description: null },
+        { account_code: ACCT_REVENUE, debit: 0, credit: 12_000, description: null },
+        { account_code: "4102", debit: 0, credit: 8_000, description: null }, // split revenue
+        { account_code: ACCT_OUTPUT_TAX, debit: 0, credit: 1_000, description: null },
+      ],
+    };
+    expect(() =>
+      computeEntryFromAllowance(
+        makeAllowance({ in_or_out: "out", extracted_data: { amount: 100, taxAmount: 5 } }),
+        split,
+      ),
+    ).toThrow(/exactly 1 revenue \(Cr\) line, got 2/);
+  });
+});
+
 describe("computeEntryFromAllowance — entry_date fallback", () => {
   it("falls back to created_at when extracted date is missing", () => {
     const originalEntry = computeEntryFromInvoice(

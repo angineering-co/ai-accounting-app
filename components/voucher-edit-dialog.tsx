@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -58,10 +58,12 @@ import {
   type JournalEntry,
   type JournalEntryLine,
 } from "@/lib/domain/journal-entry";
-import { useVoucherDemoStore } from "@/lib/dev/use-voucher-demo-store";
+import { editEntryAction } from "@/lib/services/voucher";
 
 interface VoucherEditDialogProps {
+  clientId: string;
   entry: JournalEntry;
+  lines: JournalEntryLine[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved?: () => void;
@@ -107,26 +109,23 @@ const ACCOUNT_OPTIONS = ACCOUNT_LIST.map((s) => {
 });
 
 export function VoucherEditDialog({
+  clientId,
   entry,
+  lines,
   open,
   onOpenChange,
   onSaved,
 }: VoucherEditDialogProps) {
-  const store = useVoucherDemoStore();
   const mode: "draft" | "posted" = entry.status === "posted" ? "posted" : "draft";
   const schema = useMemo(() => buildEditFormSchema(mode), [mode]);
 
   const initialLines: JournalEntryLine[] = useMemo(
-    () =>
-      [...store.lines.filter((l) => l.journal_entry_id === entry.id)].sort(
-        (a, b) => a.line_number - b.line_number,
-      ),
-    [store.lines, entry.id],
+    () => [...lines].sort((a, b) => a.line_number - b.line_number),
+    [lines],
   );
 
-  const form = useForm<EditFormValues>({
-    resolver: zodResolver(schema),
-    defaultValues: {
+  const defaultValues: EditFormValues = useMemo(
+    () => ({
       voucher_type: entry.voucher_type,
       entry_date: entry.entry_date,
       description: entry.description ?? "",
@@ -137,8 +136,27 @@ export function VoucherEditDialog({
         description: l.description ?? "",
       })),
       reason: "",
-    },
+    }),
+    [entry, initialLines],
+  );
+
+  const form = useForm<EditFormValues>({
+    resolver: zodResolver(schema),
+    defaultValues,
   });
+
+  // Re-seed only when the dialog switches to a DIFFERENT entry, not on every
+  // defaultValues change: a background SWR revalidation (e.g. window refocus)
+  // changes the `lines` prop, and resetting on that would wipe the staff's
+  // in-progress edits. Keying on entry.id also preserves unsubmitted input across
+  // an accidental close + reopen of the same voucher.
+  const seededEntryId = useRef<string | null>(null);
+  useEffect(() => {
+    if (open && seededEntryId.current !== entry.id) {
+      form.reset(defaultValues);
+      seededEntryId.current = entry.id;
+    }
+  }, [open, entry.id, defaultValues, form]);
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -153,28 +171,41 @@ export function VoucherEditDialog({
   const { debit: debitTotal, credit: creditTotal } = sumLines(numericLines);
   const isBalanced = debitTotal === creditTotal && debitTotal > 0;
 
-  const onSubmit = (values: EditFormValues) => {
-    const newLines = values.lines.map((l, i) => ({
-      line_number: i + 1,
+  // Whether the substantive content (header + lines, ignoring the reason field)
+  // differs from what was loaded. A posted edit writes a permanent audit row, so a
+  // no-op (reason typed without any real change) must not be submittable —
+  // otherwise it pollutes the history.
+  const watchedVoucherType = form.watch("voucher_type");
+  const watchedEntryDate = form.watch("entry_date");
+  const watchedDescription = form.watch("description");
+  const hasContentChange = useMemo(() => {
+    if (watchedVoucherType !== defaultValues.voucher_type) return true;
+    if (watchedEntryDate !== defaultValues.entry_date) return true;
+    if ((watchedDescription ?? "") !== (defaultValues.description ?? "")) return true;
+    const base = defaultValues.lines;
+    if (watchedLines.length !== base.length) return true;
+    return watchedLines.some((l, i) => {
+      const b = base[i];
+      return (
+        l.account_code !== b.account_code ||
+        (Number(l.debit) || 0) !== b.debit ||
+        (Number(l.credit) || 0) !== b.credit ||
+        (l.description ?? "") !== (b.description ?? "")
+      );
+    });
+  }, [watchedVoucherType, watchedEntryDate, watchedDescription, watchedLines, defaultValues]);
+
+  const onSubmit = async (values: EditFormValues) => {
+    const newLines = values.lines.map((l) => ({
       account_code: l.account_code,
       debit: l.debit,
       credit: l.credit,
       description: l.description ? l.description : null,
     }));
 
-    if (mode === "draft") {
-      store.saveDraftEntry(
-        entry.id,
-        {
-          voucher_type: values.voucher_type,
-          entry_date: values.entry_date,
-          description: values.description ? values.description : null,
-        },
-        newLines,
-      );
-      toast.success("草稿已儲存");
-    } else {
-      store.editPostedEntry(
+    try {
+      await editEntryAction(
+        clientId,
         entry.id,
         {
           voucher_type: values.voucher_type,
@@ -183,10 +214,13 @@ export function VoucherEditDialog({
         },
         newLines,
         values.reason ?? "",
-        store.userId,
       );
-      toast.success("已更新並寫入審計軌跡");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "儲存失敗");
+      return;
     }
+
+    toast.success(mode === "posted" ? "已更新並寫入審計軌跡" : "草稿已儲存");
     onOpenChange(false);
     onSaved?.();
   };
@@ -269,6 +303,9 @@ export function VoucherEditDialog({
                           <Button
                             type="button"
                             variant="outline"
+                            // A posted voucher's number encodes this date, so it's
+                            // frozen once posted (correct via reverse + re-book).
+                            disabled={mode === "posted"}
                             className={cn(
                               "justify-start text-left font-normal",
                               !field.value && "text-muted-foreground",
@@ -496,7 +533,12 @@ export function VoucherEditDialog({
               />
             )}
 
-            <DialogFooter>
+            <DialogFooter className="items-center">
+              {mode === "posted" && !hasContentChange && (
+                <span className="text-sm text-muted-foreground mr-auto">
+                  尚未變更任何內容
+                </span>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -504,8 +546,19 @@ export function VoucherEditDialog({
               >
                 取消
               </Button>
-              <Button type="submit" disabled={!isBalanced}>
-                {mode === "posted" ? "儲存修改並寫入審計軌跡" : "儲存草稿"}
+              <Button
+                type="submit"
+                disabled={
+                  !isBalanced ||
+                  form.formState.isSubmitting ||
+                  (mode === "posted" && !hasContentChange)
+                }
+              >
+                {form.formState.isSubmitting
+                  ? "儲存中…"
+                  : mode === "posted"
+                    ? "儲存修改並寫入審計軌跡"
+                    : "儲存草稿"}
               </Button>
             </DialogFooter>
           </form>

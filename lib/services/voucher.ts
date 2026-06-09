@@ -1,12 +1,16 @@
 "use server";
 
-// GL read path (Phase 5). Server Actions the voucher list / detail / report pages
-// call directly via `useSWR`. Reads are firm-scoped by RLS through `createClient()`;
-// the Drizzle aggregates bypass RLS, so each is gated by an RLS-bounded `clients`
-// read first (`assertClientAccess`) — the same firm-scope boundary the period-batch
-// helpers in `journal-entry.ts` use.
+// GL Server Actions the voucher list / detail / report pages call directly via
+// `useSWR`. Reads (list / detail / audit trail / reports) are firm-scoped by RLS
+// through `createClient()`; the Drizzle aggregates bypass RLS, so each is gated by
+// an RLS-bounded `clients` read first (`assertClientAccess`) — the same firm-scope
+// boundary the helpers in `journal-entry.ts` use.
 //
-// Read-only: post / edit / reverse mutations and the audit trail land in later phases.
+// The edit / delete wrappers at the bottom (Phase 9) are the write surface: thin
+// 'use server' entry points delegating to the non-'use server' helpers in
+// `journal-entry.ts` (those can't be 'use server' themselves — they take an injected
+// userId for tests/composition, which a public endpoint must not accept). Reverse
+// lands in Phase 10.
 
 import { sql } from "drizzle-orm";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -15,6 +19,13 @@ import { createClient } from "@/lib/supabase/server";
 import { db } from "@/lib/db/drizzle";
 import { assertClientReadable } from "@/lib/services/authz";
 import type { Database } from "@/supabase/database.types";
+import {
+  editEntry,
+  deleteDraftEntry,
+  type EntryPatch,
+  type EditEntryLine,
+} from "@/lib/services/journal-entry";
+import { auditTrailSchema, type AuditTrail } from "@/lib/domain/audit-trail";
 import {
   journalEntrySchema,
   journalEntryLineSchema,
@@ -326,4 +337,68 @@ export async function getAccountLedger(
   }));
 
   return buildLedgerFromRows(accountCode, sourceRows);
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// 審計歷史讀取
+// ───────────────────────────────────────────────────────────────────────────
+
+// All audit-trail rows for one journal entry, newest first. The JOIN to
+// journal_entries row-scopes to `clientId` (Drizzle bypasses RLS, so the
+// assertClientAccess gate + this client_id filter are the boundary, mirroring
+// the read aggregates above). v1 only audits journal_entries.
+export async function listEntryAuditTrails(
+  clientId: string,
+  entryId: string,
+): Promise<AuditTrail[]> {
+  await assertClientAccess(clientId);
+
+  // db.execute returns the postgres-js RowList; auditTrailSchema.array().parse
+  // accepts it as `unknown` and validates each row (incl. the `before` jsonb), so
+  // no cast is needed.
+  const rows = await db.execute(sql`
+    SELECT a.id,
+           a.firm_id,
+           a.entity_table,
+           a.entity_id,
+           a.action,
+           a.before,
+           a.reason,
+           a.actor_id,
+           a.actor_at
+      FROM audit_trails a
+      JOIN journal_entries e ON e.id = a.entity_id
+     WHERE a.entity_table = 'journal_entries'
+       AND a.entity_id = ${entryId}
+       AND e.client_id = ${clientId}
+     ORDER BY a.actor_at DESC
+  `);
+
+  return auditTrailSchema.array().parse(rows);
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// 傳票編輯 / 刪除 (Phase 9) — 薄 Server Action 包裝，委派給 journal-entry.ts
+// ───────────────────────────────────────────────────────────────────────────
+
+// Edit a draft or posted entry's header + lines in place. A posted edit writes a
+// mandatory audit_trails row (reason required); a draft edit does not. The helper
+// resolves auth from cookies (no injected options here) and enforces the firm /
+// client / fiscal-year guards.
+export async function editEntryAction(
+  clientId: string,
+  entryId: string,
+  patch: EntryPatch,
+  newLines: EditEntryLine[],
+  reason: string,
+): Promise<void> {
+  await editEntry(clientId, entryId, patch, newLines, reason);
+}
+
+// Delete a draft entry (lines cascade). Rejects posted / reversed entries.
+export async function deleteDraftEntryAction(
+  clientId: string,
+  entryId: string,
+): Promise<void> {
+  await deleteDraftEntry(clientId, entryId);
 }

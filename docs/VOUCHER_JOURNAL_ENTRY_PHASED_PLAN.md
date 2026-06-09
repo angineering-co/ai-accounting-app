@@ -14,6 +14,7 @@
 > - ✅ Phase 7 完成（分錄產生改為**期別層級批次** `generateDraftEntriesByPeriod`，取代 confirm 時派發、修補匯入缺口；freshness 徽章 + 單一執行 mutex；PR #213）
 > - ✅ Phase 5 讀取路徑切換完成（傳票 / 詳情 / 報表頁從 `useVoucherDemoStore` 切到真實 DB service；journal_entries/lines RLS 收斂為 firm + client；new/stale/missing 判定收斂為單一 SQL；PR #214 / #215 / #217）
 > - ✅ Phase 8 完成（`postJournalEntries` Drizzle 交易：no-gap 連號賦號 + status flip；列表批次過帳 + 詳情單筆過帳接真實 service；256/256 測試綠，新增 8）
+> - ✅ Phase 9 完成（`editEntry` / `deleteDraftEntry` Drizzle 交易：草稿 / 已過帳單一編輯路徑，已過帳寫 audit_trails（before 快照 + 原因必填），fiscal-year guard 含搬入已關帳年度；`listEntryAuditTrails` 讀取；編輯 dialog / 審計 viewer / 詳情頁切真實 service；折讓鏡像對多科目原分錄改 fail loud；272/272 測試綠，新增 13。**範圍調整：編輯 confirmed 發票 / 折讓不連動 editPostedEntry，草稿產生由期別批次按鈕負責，本階段只處理直接編輯帳本**）
 >
 > **注意：Phase 5 schema / migrations 已落地，讀取路徑也已切到真實 DB（傳票 / 詳情 / 報表頁不再讀 `useVoucherDemoStore`）。demo store 目前僅剩尚未遷移的編輯 / 沖銷 / 審計 dialog 暫用，待 Phase 9 / 10 接真實 service 時一併清理。**
 >
@@ -463,32 +464,36 @@
 
 ---
 
-## Phase 9 — `edit_posted_entry` RPC + audit_trails 必填寫入路徑（in-place edit）
+## ✅ Phase 9 — `editEntry` + audit_trails 必填寫入路徑（in-place edit）
 
-**目標**：phase 2 已建好的「編輯 posted」dialog 從 store mutation 切到真 RPC。**早於 reverse**（依使用者要求）：in-place edit 處理高頻 OCR / key-in 錯。**Invoice 與 allowance 兩條編輯連動路徑都要處理**。
+**狀態**：完成（branch `phase-9-edit-posted-entry`）。
 
-**改動**：
-- Migration `<ts>_create_edit_posted_entry_rpc.sql`：取舊 row + lines snapshot → UPDATE entry header（`voucher_no` / `posted_at` / `posted_by` / `created_*` 不可改）→ DELETE + INSERT lines → INSERT audit_trails row（`action='updated'`、before 必填、reason 必填、actor_id = userId）。**fiscal_year_closes guard**。
-- `lib/services/journal-entry.ts`：加 `editPostedEntry(id, patch, reason, userId)`
-- `lib/services/audit-trail.ts`：補 `getStateAfter(auditRow)` helper（§3.9）
-- `lib/services/invoice.ts::updateInvoice`：當員工編輯一張 confirmed invoice 對應的 entry 已 posted（§5.6.1 路徑 B1b）→ dispatch 至 `editPostedEntry`，連動 in-place update entry
-- `lib/services/allowance.ts::updateAllowance`：**鏡像 invoice 的派發邏輯** — confirmed allowance 對應 entry 已 posted 時，連動 editPostedEntry
-- `components/invoice-review-dialog.tsx`：當對應 entry='posted' 時加 reason 欄位 + 警示條：「⚠️ 此發票已過帳為傳票 X，修改將連動更新該傳票並留下審計記錄」
-- `components/allowance-review-dialog.tsx`：**同樣加 reason 欄位 + 警示條**（鏡像 invoice review dialog）
-- 把 phase 2 的 voucher edit dialog（posted 模式）+ audit history viewer 從 store 切到真 service
-- **`lib/services/journal-entry-generation.ts` 強化**：editPostedEntry 開放後,staff 可將原 entry 之單一費用 / 收入 line 拆成多 lines（如 60% 銷管 / 40% 製造）。此時 `extractInputInvoiceRoles` / `extractOutputInvoiceRoles` 之 `.find(...)` 會 silently 撿第一個,導致折讓鏡像不平衡。改為 `.filter(...)` + 嚴格 `length === 1` 檢查;若 multi-expense 則 throw,caller 觸發「請手動指定折讓對應之科目」UI（§5.2.2 fallback 路徑同款）。see TODO comments in `extractInputInvoiceRoles` / `extractOutputInvoiceRoles`
+**目標**：phase 2 已建好的「編輯」dialog + 審計歷史 viewer 從 in-memory demo store 切到真實 service。**早於 reverse**（依使用者要求）：in-place edit 處理高頻 OCR / key-in 錯。
 
-**驗證**：
-- Integration test：
-  - editPostedEntry → audit_trails before snapshot 等於改前 row state
-  - 連續多次 edit → 每筆 audit before = 前一筆 audit 的「after」（透過 getStateAfter 推導）—— **chain 完整性**
-  - **Multi-expense 編輯 → 對應折讓 confirm/regenerate 觸發 "請手動指定" UI**（驗證 §5.2.2 fallback;此 case 唯一能由 Phase 9 之 edit RPC 產生）
-  - 已關帳年度拒絕（guard）
-  - 透過 invoice 編輯路徑連動觸發 editPostedEntry → audit_trails 正確
-  - **同上 for allowance 編輯路徑**
-- 手動：編輯 posted entry → reason 必填 → 提交後 voucher_no 不變、變更歷史可展開
+> **範圍調整（依使用者要求）**：原計畫的「路徑 2 連動」——編輯 confirmed invoice / allowance 時 dispatch 至 `editPostedEntry`——**整個移除**。草稿產生 / 重生由期別批次按鈕（`generateDraftEntriesByPeriod`）負責，已過帳分錄只透過「直接編輯帳本」（voucher edit dialog）改動。`updateInvoice` / `updateAllowance` 本就不派發任何分錄邏輯（Phase 7 修訂後的現況），review dialog 也不加 reason 欄位 / 警示條。故本階段**不動** `invoice.ts` / `allowance.ts` / `invoice-review-dialog.tsx` / `allowance-review-dialog.tsx`。
 
-**退出條件**：路徑 1（直接改帳本）+ 路徑 2 連動（改 invoice / 改 allowance 連動 entry）皆通過 §5.6.1 決策表 B1b。
+**已交付**：
+- `lib/services/journal-entry.ts`：`editEntry(clientId, entryId, patch, newLines, reason, options?)` + `deleteDraftEntry(...)`（**不**標 `'use server'`，沿用注入式 userId）。依 Phase 6.5 方向以 **Drizzle `db.transaction()`** 實作：
+  - `editEntry` 為**單一路徑**同時處理草稿與已過帳——`.for("update")` 鎖定 row（`client_id` 收斂）、拒絕 `reversed`、UPDATE header（`voucher_no` / `posted_*` / `created_*` 不可改；description 可清為 null）、整批 DELETE + INSERT lines；**僅當 locked status 為 posted** 才 INSERT audit_trails（`action='updated'`、`before` 快照經 `beforeSnapshotSchema` 驗證、reason trim 後必填、actor_id = userId），草稿編輯不留審計
+  - **fiscal_year_closes guard** 同時擋「目前 entry_date 年度」與「patch 搬移後的目標年度」已關帳
+  - `deleteDraftEntry` 僅草稿可刪（lines 隨 FK cascade），已過帳 / 已沖銷拒絕
+- `lib/services/voucher.ts`：`listEntryAuditTrails(clientId, entryId)` 讀取（JOIN journal_entries 收斂 client scope，`auditTrailSchema` 解析）+ `editEntryAction` / `deleteDraftEntryAction` 薄 `'use server'` 包裝（委派核心 helper，由 cookie 解析 auth）；header 註解由「read-only」更新為含編輯 / 刪除
+- `components/voucher-edit-dialog.tsx`：移除 `useVoucherDemoStore`，改吃 `clientId` / `lines` props、呼叫 `editEntryAction`、開啟時 `form.reset` 重新載入最新值、送出中 disable
+- `components/voucher-audit-history.tsx`：改用 SWR 讀 `listEntryAuditTrails`（僅開啟時抓）
+- `app/firm/[firmId]/client/[clientId]/voucher/[entryId]/page.tsx`：啟用編輯 /（in-place）編輯 / 刪除草稿 / 審計歷史按鈕；刪除走 AlertDialog 確認（取消文案「保留草稿」肯定未變更狀態）
+- `lib/services/journal-entry-generation.ts`：`extractInputInvoiceRoles` / `extractOutputInvoiceRoles` 由 `.find` 改 `.filter` + 嚴格 `length === 1`；原分錄費用 / 收入被拆成多科目時 **fail loud**（由 caller 走 §5.2.2「請手動指定科目」退路），避免靜默撿第一個產生不平衡折讓鏡像
+- `tests/integration/services/edit-entry.test.ts`（新，11 cases）+ `journal-entry-generation.test.ts`（新增 2 cases）
+
+> **`getStateAfter` 未實作**：原計畫的 §3.9 helper 唯一消費端是審計 viewer 的 before→after diff，但現行 viewer 僅渲染 `before` 快照、無 after 消費端，且跨 reversed 等非 edit trail 重建 after 複雜度高、收益低。chain 完整性改於整合測試內直接斷言（第 n 筆 edit 的 before = 第 n-1 筆 edit 寫入的狀態），不落地未被使用的 production helper。
+
+**驗證紀錄**：
+- Integration test：posted 編輯寫 before 快照 / 連續編輯 chain 完整性 / 已關帳拒絕 / 搬入已關帳年度拒絕 / 空白原因拒絕 / 不平衡拒絕 / 已沖銷拒絕 / 草稿編輯不留審計 / 刪除草稿 / 刪除已過帳拒絕 / 跨 client row-scope；折讓鏡像對多費用 / 多收入原分錄 fail loud
+- `npm run lint` 0 error；`npm run test:run` 272/272 全綠（新增 13）；`npm run build` 通過
+- 既有 invoice / allowance review / 期別頁 / TET_U 匯出不退步（未動相關檔案）
+
+**保留**：`lib/dev/use-voucher-demo-store.ts` 僅剩 `voucher-reverse-dialog.tsx` 依賴（Phase 10 接真實 service 時一併清理）。
+
+**退出條件（達成）**：路徑 1（直接改帳本）通過 §5.6.1 決策表 B1b 的「直接編輯」部分；audit_trails before 快照與 chain 完整性經整合測試驗證；UI 三處（編輯 dialog / 審計 viewer / 詳情頁按鈕）從 store 接到真實交易。
 
 ---
 

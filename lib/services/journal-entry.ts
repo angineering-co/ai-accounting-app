@@ -13,6 +13,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { db, type Tx } from "@/lib/db/drizzle";
 import {
+  audit_trails as auditTrailsTable,
   fiscal_year_closes as fiscalYearClosesTable,
   journal_entries as journalEntriesTable,
   journal_entry_lines as journalEntryLinesTable,
@@ -29,7 +30,15 @@ import {
   type ExtractedInvoiceData,
   type ExtractedAllowanceData,
 } from "@/lib/domain/models";
-import type { VoucherType } from "@/lib/domain/journal-entry";
+import { z } from "zod";
+import {
+  ACCOUNT_CODE_REGEX,
+  isLinesBalanced,
+  VOUCHER_TYPE,
+  type JournalEntry,
+  type VoucherType,
+} from "@/lib/domain/journal-entry";
+import { beforeSnapshotSchema } from "@/lib/domain/audit-trail";
 import {
   type ComputedEntry,
   computeDefaultEntryFromAllowance,
@@ -918,5 +927,276 @@ export async function postJournalEntries(
     }
 
     return results;
+  });
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// In-place edit (§5.6.1 B1b) + draft delete
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Header fields a staff edit may change. `voucher_no` / `posted_*` / `created_*`
+ * stay immutable — a posted voucher keeps its permanent number and posting metadata. */
+export type EntryPatch = Partial<
+  Pick<JournalEntry, "voucher_type" | "entry_date" | "description">
+>;
+
+/** A replacement line. `line_number` is assigned by position, so callers pass the
+ * lines in display order without numbering them. */
+export type EditEntryLine = {
+  account_code: string;
+  debit: number;
+  credit: number;
+  description: string | null;
+};
+
+// editEntry / editEntryAction are reachable as a Server Action, so the inputs must
+// be validated server-side — a caller can bypass the form's client-side rules and
+// post arbitrary JSON. The DB CHECKs catch debit/credit XOR + non-negativity, but a
+// malformed entry_date or non-integer amount should fail loud at the boundary
+// (parse-first convention, like updateInvoiceSchema). An absent optional key is
+// preserved (Zod doesn't inject `undefined`), so `"description" in patch` still
+// distinguishes "clear it" (null) from "leave it" (absent).
+const editEntryPatchSchema = z.object({
+  voucher_type: z.enum(VOUCHER_TYPE).optional(),
+  entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期格式錯誤 (YYYY-MM-DD)").optional(),
+  description: z.string().nullable().optional(),
+});
+
+const editEntryLinesSchema = z
+  .array(
+    z
+      .object({
+        account_code: z.string().regex(ACCOUNT_CODE_REGEX, "科目代碼為 4–6 位數字"),
+        debit: z.number().int().nonnegative(),
+        credit: z.number().int().nonnegative(),
+        description: z.string().nullable(),
+      })
+      .refine((l) => (l.debit > 0) !== (l.credit > 0), {
+        message: "借方與貸方只能擇一為正",
+      }),
+  )
+  .min(2, "至少 2 行");
+
+/**
+ * Edit a journal entry's header + lines in place, inside one Drizzle transaction.
+ * A SINGLE path for both draft and posted entries — the only difference is the
+ * audit trail, which is written iff the locked entry is `posted` (a posted edit
+ * is a permanent change to a numbered voucher, so §3.9 makes the `before`
+ * snapshot + reason mandatory; draft edits are pre-posting scratch and are not
+ * audited, matching the demo store and `upsertDraftEntry`).
+ *
+ * Authorization mirrors `postJournalEntries`: the Drizzle writes bypass RLS, so
+ * `assertStaffCanAccessClient` is the role + firm boundary and the in-transaction
+ * `client_id = clientId` filter row-scopes the entry (a foreign id → "找不到傳票").
+ *
+ * Guards (all before any write): inputs parse (Zod); entry must exist under the
+ * client; a `reversed` entry or a reversal voucher (`reverses_entry_id` set) is
+ * immutable; a posted voucher's `entry_date` can't change (its voucher_no is
+ * derived from the booked date — move the date via reverse + re-book instead); the
+ * entry_date's fiscal year — current and, for drafts, the target — must be open;
+ * the new lines must balance.
+ */
+export async function editEntry(
+  clientId: string,
+  entryId: string,
+  patch: EntryPatch,
+  newLines: EditEntryLine[],
+  reason: string,
+  options?: JournalEntryServiceOptions,
+): Promise<void> {
+  const { supabase, userId } = await resolveAuth(options);
+  await assertStaffCanAccessClient(supabase, userId, clientId);
+
+  const parsedPatch = editEntryPatchSchema.parse(patch);
+  const parsedLines = editEntryLinesSchema.parse(newLines);
+  if (!isLinesBalanced(parsedLines)) {
+    throw new Error("借貸不平衡，無法儲存");
+  }
+
+  await db.transaction(async (tx) => {
+    const [entry] = await tx
+      .select({
+        id: journalEntriesTable.id,
+        firm_id: journalEntriesTable.firm_id,
+        status: journalEntriesTable.status,
+        voucher_type: journalEntriesTable.voucher_type,
+        entry_date: journalEntriesTable.entry_date,
+        description: journalEntriesTable.description,
+        reverses_entry_id: journalEntriesTable.reverses_entry_id,
+      })
+      .from(journalEntriesTable)
+      .where(
+        and(
+          eq(journalEntriesTable.id, entryId),
+          eq(journalEntriesTable.client_id, clientId),
+        ),
+      )
+      .for("update")
+      .limit(1);
+
+    if (!entry) throw new Error("找不到傳票");
+    if (entry.status === "reversed") {
+      throw new Error("已沖銷的傳票不可編輯");
+    }
+    // A reversal voucher (status='posted', reverses_entry_id set) auto-offsets its
+    // original — distinct row from the reversed original above. Editing its lines
+    // would break that offset, so it's immutable.
+    if (entry.reverses_entry_id != null) {
+      throw new Error("沖銷分錄不可編輯");
+    }
+    const isPosted = entry.status === "posted";
+    // A posted voucher's number encodes its booked date (YYYYMMDD-NNNNN), so the
+    // date is frozen once posted — correct it via reverse + re-book, not in place.
+    if (isPosted && parsedPatch.entry_date && parsedPatch.entry_date !== entry.entry_date) {
+      throw new Error("已過帳的傳票不可修改記帳日期");
+    }
+
+    // Fiscal-year guard: reject if the entry sits in — or the edit would move it
+    // into — a closed year. Editing a closed-year book is forbidden either way.
+    const closedRows = await tx
+      .select({ year: fiscalYearClosesTable.gregorian_year })
+      .from(fiscalYearClosesTable)
+      .where(eq(fiscalYearClosesTable.client_id, clientId));
+    const closedYears = new Set(closedRows.map((r) => r.year));
+    const oldYear = Number(entry.entry_date.slice(0, 4));
+    const newYear = Number((parsedPatch.entry_date ?? entry.entry_date).slice(0, 4));
+    if (closedYears.has(oldYear) || closedYears.has(newYear)) {
+      throw new Error("該年度已關帳，無法編輯");
+    }
+
+    // The next header values (only the editable fields). `null` description clears
+    // it; an absent key keeps the old value.
+    const nextVoucherType = parsedPatch.voucher_type ?? entry.voucher_type;
+    const nextEntryDate = parsedPatch.entry_date ?? entry.entry_date;
+    const nextDescription =
+      "description" in parsedPatch ? (parsedPatch.description ?? null) : entry.description;
+
+    // Snapshot the pre-edit state BEFORE mutating, for the audit `before`. Only
+    // posted edits are audited, so the read is skipped for drafts.
+    let before: ReturnType<typeof beforeSnapshotSchema.parse> | null = null;
+    if (isPosted) {
+      const reasonText = reason.trim();
+      if (!reasonText) throw new Error("修改已過帳傳票必須填寫原因");
+
+      const oldLines = await tx
+        .select({
+          line_number: journalEntryLinesTable.line_number,
+          account_code: journalEntryLinesTable.account_code,
+          debit: journalEntryLinesTable.debit,
+          credit: journalEntryLinesTable.credit,
+          description: journalEntryLinesTable.description,
+        })
+        .from(journalEntryLinesTable)
+        .where(eq(journalEntryLinesTable.journal_entry_id, entryId))
+        .orderBy(journalEntryLinesTable.line_number);
+
+      // A posted edit writes a permanent audit row, so reject a no-op (a reason
+      // typed without changing anything) rather than pollute the history. Compare
+      // the next header + lines against the current ones positionally.
+      const headerUnchanged =
+        nextVoucherType === entry.voucher_type &&
+        nextEntryDate === entry.entry_date &&
+        (nextDescription ?? null) === (entry.description ?? null);
+      const linesUnchanged =
+        oldLines.length === parsedLines.length &&
+        parsedLines.every(
+          (l, i) =>
+            oldLines[i].account_code === l.account_code &&
+            oldLines[i].debit === l.debit &&
+            oldLines[i].credit === l.credit &&
+            (oldLines[i].description ?? null) === (l.description ?? null),
+        );
+      if (headerUnchanged && linesUnchanged) {
+        throw new Error("內容未變更，無需記錄修改");
+      }
+
+      before = beforeSnapshotSchema.parse({
+        entry: {
+          voucher_type: entry.voucher_type,
+          entry_date: entry.entry_date,
+          description: entry.description,
+        },
+        lines: oldLines,
+      });
+    }
+
+    // Header patch (only the editable fields) + replace lines wholesale.
+    await tx
+      .update(journalEntriesTable)
+      .set({
+        voucher_type: nextVoucherType,
+        entry_date: nextEntryDate,
+        description: nextDescription,
+        updated_at: sql`now()`,
+      })
+      .where(eq(journalEntriesTable.id, entryId));
+
+    await tx
+      .delete(journalEntryLinesTable)
+      .where(eq(journalEntryLinesTable.journal_entry_id, entryId));
+
+    await tx.insert(journalEntryLinesTable).values(
+      parsedLines.map((line, idx) => ({
+        journal_entry_id: entryId,
+        line_number: idx + 1,
+        account_code: line.account_code,
+        debit: line.debit,
+        credit: line.credit,
+        description: line.description,
+      })),
+    );
+
+    if (isPosted) {
+      await tx.insert(auditTrailsTable).values({
+        firm_id: entry.firm_id,
+        entity_table: "journal_entries",
+        entity_id: entryId,
+        action: "updated",
+        before,
+        reason: reason.trim(),
+        actor_id: userId,
+      });
+    }
+  });
+}
+
+/**
+ * Delete a DRAFT journal entry (lines cascade via the FK). Posted / reversed
+ * entries are immutable bookkeeping records — they are unwound through reverse
+ * (Phase 10), never deleted — so this rejects any non-draft status. Same
+ * firm-scope + row-scope boundary as `editEntry`.
+ */
+export async function deleteDraftEntry(
+  clientId: string,
+  entryId: string,
+  options?: JournalEntryServiceOptions,
+): Promise<void> {
+  const { supabase, userId } = await resolveAuth(options);
+  await assertStaffCanAccessClient(supabase, userId, clientId);
+
+  await db.transaction(async (tx) => {
+    const [entry] = await tx
+      .select({
+        id: journalEntriesTable.id,
+        status: journalEntriesTable.status,
+      })
+      .from(journalEntriesTable)
+      .where(
+        and(
+          eq(journalEntriesTable.id, entryId),
+          eq(journalEntriesTable.client_id, clientId),
+        ),
+      )
+      .for("update")
+      .limit(1);
+
+    if (!entry) throw new Error("找不到傳票");
+    if (entry.status !== "draft") {
+      throw new Error("僅草稿可刪除，已過帳 / 已沖銷的傳票請改用沖銷");
+    }
+
+    await tx
+      .delete(journalEntriesTable)
+      .where(eq(journalEntriesTable.id, entryId));
   });
 }

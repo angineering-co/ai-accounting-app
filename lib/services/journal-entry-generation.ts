@@ -270,21 +270,24 @@ function extractInputInvoiceRoles(originalEntry: ComputedEntry): InputInvoiceRol
       `original input invoice entry must have exactly 1 Cr (settlement) line, got ${crLines.length}`,
     );
   }
-  const taxLine = drLines.find((l) => l.account_code === ACCT_INPUT_TAX);
-  // Phase 9 TODO: when edit_posted_entry RPC lets staff split an expense across
-  // multiple accounts (e.g. 60% 銷管 / 40% 製造), this `.find` will silently pick
-  // the first, producing an unbalanced allowance mirror. Switch to
-  // `.filter(...)` + strict length check then; caller falls back to manual
-  // account prompt (§5.2.2). Not added now because there's no edit path that
-  // can produce multi-expense lines yet (Phase 7 confirm produces exactly 1).
-  const expenseLine = drLines.find((l) => l.account_code !== ACCT_INPUT_TAX);
-  if (!expenseLine) {
-    throw new Error("original input invoice entry missing expense (Dr) line");
+  const hasSeparateTaxLine = drLines.some((l) => l.account_code === ACCT_INPUT_TAX);
+  // editEntry (Phase 9) lets staff split one expense across multiple accounts
+  // (e.g. 60% 銷管 / 40% 製造). A `.find` here would silently pick the first and
+  // produce an unbalanced allowance mirror, so require EXACTLY one non-tax Dr
+  // line and fail loud otherwise — the caller then routes to the §5.2.2
+  // manual-account fallback instead of writing a broken折讓.
+  const expenseLines = drLines.filter((l) => l.account_code !== ACCT_INPUT_TAX);
+  if (expenseLines.length !== 1) {
+    throw new Error(
+      `original input invoice entry must have exactly 1 expense (Dr) line, got ` +
+        `${expenseLines.length} — a staff edit likely split the expense across ` +
+        `multiple accounts; the allowance cannot mirror it automatically.`,
+    );
   }
   return {
-    expenseAccount: expenseLine.account_code,
+    expenseAccount: expenseLines[0].account_code,
     settlementAccount: crLines[0].account_code,
-    hasSeparateTaxLine: !!taxLine,
+    hasSeparateTaxLine,
   };
 }
 
@@ -301,14 +304,19 @@ function extractOutputInvoiceRoles(originalEntry: ComputedEntry): OutputInvoiceR
       `original output invoice entry must have exactly 1 Dr (settlement) line, got ${drLines.length}`,
     );
   }
-  // Phase 9 TODO: see matching note in extractInputInvoiceRoles — strict
-  // length check belongs in the edit-RPC PR, not here.
-  const revenueLine = crLines.find((l) => l.account_code !== ACCT_OUTPUT_TAX);
-  if (!revenueLine) {
-    throw new Error("original output invoice entry missing revenue (Cr) line");
+  // See matching note in extractInputInvoiceRoles: a staff edit can split revenue
+  // across accounts, so require EXACTLY one non-tax Cr line rather than `.find`-ing
+  // the first — multi-revenue fails loud into the §5.2.2 manual-account fallback.
+  const revenueLines = crLines.filter((l) => l.account_code !== ACCT_OUTPUT_TAX);
+  if (revenueLines.length !== 1) {
+    throw new Error(
+      `original output invoice entry must have exactly 1 revenue (Cr) line, got ` +
+        `${revenueLines.length} — a staff edit likely split revenue across ` +
+        `multiple accounts; the allowance cannot mirror it automatically.`,
+    );
   }
   return {
-    revenueAccount: revenueLine.account_code,
+    revenueAccount: revenueLines[0].account_code,
     settlementAccount: drLines[0].account_code,
   };
 }

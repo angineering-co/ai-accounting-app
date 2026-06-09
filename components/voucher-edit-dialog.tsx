@@ -171,6 +171,30 @@ export function VoucherEditDialog({
   const { debit: debitTotal, credit: creditTotal } = sumLines(numericLines);
   const isBalanced = debitTotal === creditTotal && debitTotal > 0;
 
+  // Whether the substantive content (header + lines, ignoring the reason field)
+  // differs from what was loaded. A posted edit writes a permanent audit row, so a
+  // no-op (reason typed without any real change) must not be submittable —
+  // otherwise it pollutes the history.
+  const watchedVoucherType = form.watch("voucher_type");
+  const watchedEntryDate = form.watch("entry_date");
+  const watchedDescription = form.watch("description");
+  const hasContentChange = useMemo(() => {
+    if (watchedVoucherType !== defaultValues.voucher_type) return true;
+    if (watchedEntryDate !== defaultValues.entry_date) return true;
+    if ((watchedDescription ?? "") !== (defaultValues.description ?? "")) return true;
+    const base = defaultValues.lines;
+    if (watchedLines.length !== base.length) return true;
+    return watchedLines.some((l, i) => {
+      const b = base[i];
+      return (
+        l.account_code !== b.account_code ||
+        (Number(l.debit) || 0) !== b.debit ||
+        (Number(l.credit) || 0) !== b.credit ||
+        (l.description ?? "") !== (b.description ?? "")
+      );
+    });
+  }, [watchedVoucherType, watchedEntryDate, watchedDescription, watchedLines, defaultValues]);
+
   const onSubmit = async (values: EditFormValues) => {
     const newLines = values.lines.map((l) => ({
       account_code: l.account_code,
@@ -509,7 +533,12 @@ export function VoucherEditDialog({
               />
             )}
 
-            <DialogFooter>
+            <DialogFooter className="items-center">
+              {mode === "posted" && !hasContentChange && (
+                <span className="text-sm text-muted-foreground mr-auto">
+                  尚未變更任何內容
+                </span>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -519,7 +548,11 @@ export function VoucherEditDialog({
               </Button>
               <Button
                 type="submit"
-                disabled={!isBalanced || form.formState.isSubmitting}
+                disabled={
+                  !isBalanced ||
+                  form.formState.isSubmitting ||
+                  (mode === "posted" && !hasContentChange)
+                }
               >
                 {form.formState.isSubmitting
                   ? "儲存中…"

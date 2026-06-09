@@ -357,7 +357,7 @@ export default function VoucherDetailPage({
               <>
                 <Button onClick={() => setEditOpen(true)}>
                   <Edit className="size-4 mr-1" />
-                  編輯（in-place）
+                  編輯
                 </Button>
                 {!isReversalVoucher && (
                   <DisabledAction

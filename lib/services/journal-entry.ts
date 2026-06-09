@@ -1064,6 +1064,13 @@ export async function editEntry(
       throw new Error("該年度已關帳，無法編輯");
     }
 
+    // The next header values (only the editable fields). `null` description clears
+    // it; an absent key keeps the old value.
+    const nextVoucherType = parsedPatch.voucher_type ?? entry.voucher_type;
+    const nextEntryDate = parsedPatch.entry_date ?? entry.entry_date;
+    const nextDescription =
+      "description" in parsedPatch ? (parsedPatch.description ?? null) : entry.description;
+
     // Snapshot the pre-edit state BEFORE mutating, for the audit `before`. Only
     // posted edits are audited, so the read is skipped for drafts.
     let before: ReturnType<typeof beforeSnapshotSchema.parse> | null = null;
@@ -1083,6 +1090,26 @@ export async function editEntry(
         .where(eq(journalEntryLinesTable.journal_entry_id, entryId))
         .orderBy(journalEntryLinesTable.line_number);
 
+      // A posted edit writes a permanent audit row, so reject a no-op (a reason
+      // typed without changing anything) rather than pollute the history. Compare
+      // the next header + lines against the current ones positionally.
+      const headerUnchanged =
+        nextVoucherType === entry.voucher_type &&
+        nextEntryDate === entry.entry_date &&
+        (nextDescription ?? null) === (entry.description ?? null);
+      const linesUnchanged =
+        oldLines.length === parsedLines.length &&
+        parsedLines.every(
+          (l, i) =>
+            oldLines[i].account_code === l.account_code &&
+            oldLines[i].debit === l.debit &&
+            oldLines[i].credit === l.credit &&
+            (oldLines[i].description ?? null) === (l.description ?? null),
+        );
+      if (headerUnchanged && linesUnchanged) {
+        throw new Error("內容未變更，無需記錄修改");
+      }
+
       before = beforeSnapshotSchema.parse({
         entry: {
           voucher_type: entry.voucher_type,
@@ -1097,13 +1124,9 @@ export async function editEntry(
     await tx
       .update(journalEntriesTable)
       .set({
-        voucher_type: parsedPatch.voucher_type ?? entry.voucher_type,
-        entry_date: parsedPatch.entry_date ?? entry.entry_date,
-        // `null` clears the description; only an absent key keeps the old value.
-        description:
-          "description" in parsedPatch
-            ? (parsedPatch.description ?? null)
-            : entry.description,
+        voucher_type: nextVoucherType,
+        entry_date: nextEntryDate,
+        description: nextDescription,
         updated_at: sql`now()`,
       })
       .where(eq(journalEntriesTable.id, entryId));

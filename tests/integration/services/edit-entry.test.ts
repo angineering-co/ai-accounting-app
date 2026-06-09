@@ -348,6 +348,21 @@ describe.skipIf(!hasDbEnv)("editEntry / deleteDraftEntry — in-place edit + aud
     ).rejects.toThrow();
   });
 
+  it("rejects a no-op posted edit (reason filled, nothing actually changed)", async () => {
+    const id = await seedPostedEntry("2026-02-14", BALANCED, { description: "原摘要" });
+    await expect(
+      editEntry(
+        fixture.clientId,
+        id,
+        { voucher_type: "支出", description: "原摘要" }, // identical header
+        BALANCED, // identical lines
+        "想改但其實沒改",
+        opts(),
+      ),
+    ).rejects.toThrow(/內容未變更/);
+    expect(await getAuditTrails(id)).toHaveLength(0);
+  });
+
   it("draft edit: replaces lines + header, writes NO audit row, tolerates empty reason", async () => {
     const id = await seedDraftEntry("2026-02-06", BALANCED);
     await editEntry(

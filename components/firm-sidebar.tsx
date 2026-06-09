@@ -9,6 +9,7 @@ import {
   BookOpen,
   Scale,
   TrendingUp,
+  FolderOpen,
 } from "lucide-react";
 import {
   Sidebar,
@@ -52,6 +53,11 @@ export function FirmSidebar() {
           title: "傳票",
           url: `/firm/${firmId}/client/${clientId}/voucher`,
           icon: BookOpen,
+        },
+        {
+          title: "其他文件",
+          url: `/firm/${firmId}/client/${clientId}/documents`,
+          icon: FolderOpen,
         },
         {
           title: "損益表",

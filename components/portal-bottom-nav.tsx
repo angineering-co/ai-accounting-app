@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
-import { Home, LogOut, Settings } from "lucide-react";
+import { FolderOpen, Home, LogOut, Settings } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 export function PortalBottomNav() {
@@ -24,6 +24,7 @@ export function PortalBottomNav() {
 
   const portalHome = `/firm/${firmId}/client/${clientId}/portal`;
   const isHome = pathname === portalHome;
+  const isDocuments = pathname.startsWith(`${portalHome}/documents`);
   const isSettings = pathname.startsWith(`${portalHome}/settings`);
 
   return (
@@ -41,6 +42,18 @@ export function PortalBottomNav() {
         >
           <Home className="h-5 w-5" />
           <span>首頁</span>
+        </Link>
+
+        <Link
+          href={`${portalHome}/documents`}
+          className={`flex flex-col items-center gap-1 px-4 py-2 text-sm font-medium transition-colors ${
+            isDocuments
+              ? "text-emerald-600"
+              : "text-slate-500 active:text-emerald-600"
+          }`}
+        >
+          <FolderOpen className="h-5 w-5" />
+          <span>其他文件</span>
         </Link>
 
         <Link

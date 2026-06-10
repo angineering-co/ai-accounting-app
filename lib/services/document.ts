@@ -356,6 +356,12 @@ async function loadDocumentForReclassify(
  * toggle, so repeated clicks settle on the same value). The extraction prompt
  * is biased by `in_or_out`, so if OCR already ran the subtable is reset to
  * `uploaded` to be re-extracted by the period's「AI 提取」action.
+ *
+ * NOT wired to the review dialog: that surface already edits direction as a
+ * field (進銷項 select, saved on 確認). This action is for a list-level quick
+ * flip that skips the full form — a row menu, or the PR-2 classifier「套用建議」
+ * hint chips. Intentionally retained unwired until that surface lands; do not
+ * remove as dead code.
  */
 export async function switchInOrOut(
   documentId: string,

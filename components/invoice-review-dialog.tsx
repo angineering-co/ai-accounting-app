@@ -72,6 +72,7 @@ import {
 } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { ImportedInvoicePreview } from "@/components/imported-invoice-preview";
+import { ReclassifyDocumentActions } from "@/components/reclassify-document-actions";
 import {
   Popover,
   PopoverContent,
@@ -153,6 +154,9 @@ interface InvoiceReviewDialogProps {
   onPrevious?: () => void;
   isLocked?: boolean;
   onNavigateToConflict?: (invoiceId: string) => void;
+  // Fired after a successful reclassify (convert type / move to 其他文件); the
+  // invoice leaves this list, so the parent should close the dialog and refresh.
+  onReclassified?: () => void;
 }
 
 export function InvoiceReviewDialog({
@@ -164,6 +168,7 @@ export function InvoiceReviewDialog({
   onPrevious,
   isLocked = false,
   onNavigateToConflict,
+  onReclassified,
 }: InvoiceReviewDialogProps) {
   const [rotation, setRotation] = useState(0);
   const [zoom, setZoom] = useState(1);
@@ -650,6 +655,18 @@ export function InvoiceReviewDialog({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, isExcelImport, onNext, onPrevious, form, handleSave]);
+
+  // Reclassify (convert type / move to 其他文件) is blocked by the same downstream
+  // commitments the server guards against; surface the reason as a tooltip.
+  const reclassifyDisabledReason = isLocked
+    ? "此發票已鎖定，無法重新分類"
+    : isExcelImport
+      ? "匯入的電子發票無法重新分類"
+      : localConfirmed || invoice?.status === "confirmed"
+        ? "請先取消確認再重新分類"
+        : invoice?.status === "processing"
+          ? "文件正在解析中，請稍候"
+          : null;
 
   const isPdf = invoice?.filename.toLowerCase().endsWith(".pdf");
 
@@ -1453,7 +1470,20 @@ export function InvoiceReviewDialog({
             )}
 
             {/* Sticky action buttons */}
-            <div className="pt-3 border-t mt-auto shrink-0 flex flex-col sm:flex-row gap-2">
+            <div className="pt-3 border-t mt-auto shrink-0 space-y-2">
+              {invoice && (
+                <ReclassifyDocumentActions
+                  documentId={invoice.document_id}
+                  docType="invoice"
+                  inOrOut={invoice.in_or_out}
+                  disabledReason={reclassifyDisabledReason}
+                  onReclassified={() => {
+                    onOpenChange(false);
+                    onReclassified?.();
+                  }}
+                />
+              )}
+              <div className="flex flex-col sm:flex-row gap-2">
               <TooltipProvider>
                 <Tooltip delayDuration={0}>
                   <TooltipTrigger asChild>
@@ -1506,6 +1536,7 @@ export function InvoiceReviewDialog({
                   )}
                 </Tooltip>
               </TooltipProvider>
+              </div>
             </div>
           </div>
         </div>

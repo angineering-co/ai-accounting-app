@@ -222,6 +222,7 @@ export default function InvoicePage({
         isOpen={!!reviewingInvoice}
         onOpenChange={(open) => !open && setReviewingInvoice(null)}
         onSuccess={() => void mutate()}
+        onReclassified={() => void mutate()}
       />
 
       <AllowanceReviewDialog
@@ -229,6 +230,7 @@ export default function InvoicePage({
         isOpen={!!reviewingAllowance}
         onOpenChange={(open) => !open && setReviewingAllowance(null)}
         onSuccess={() => void mutate()}
+        onReclassified={() => void mutate()}
       />
 
       <Dialog

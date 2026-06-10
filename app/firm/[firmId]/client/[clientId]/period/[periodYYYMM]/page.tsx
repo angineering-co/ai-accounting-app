@@ -675,6 +675,7 @@ export default function PeriodDetailPage({
         onPrevious={handleReviewPrevious}
         isLocked={isLocked}
         onNavigateToConflict={handleNavigateToConflict}
+        onReclassified={refreshAll}
       />
 
       <InvoiceDeleteDialog
@@ -699,6 +700,7 @@ export default function PeriodDetailPage({
         onNext={handleAllowanceReviewNext}
         onPrevious={handleAllowanceReviewPrevious}
         isLocked={isLocked}
+        onReclassified={refreshAll}
       />
     </div>
   );

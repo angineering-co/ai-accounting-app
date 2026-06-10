@@ -60,6 +60,7 @@ import {
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ImportedAllowancePreview } from "@/components/imported-allowance-preview";
+import { ReclassifyDocumentActions } from "@/components/reclassify-document-actions";
 import Image from "next/image";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -134,6 +135,9 @@ interface AllowanceReviewDialogProps {
   onNext?: () => void;
   onPrevious?: () => void;
   isLocked?: boolean;
+  // Fired after a successful reclassify (convert type / move to 其他文件); the
+  // allowance leaves this list, so the parent should close the dialog and refresh.
+  onReclassified?: () => void;
 }
 
 export function AllowanceReviewDialog({
@@ -144,6 +148,7 @@ export function AllowanceReviewDialog({
   onNext,
   onPrevious,
   isLocked = false,
+  onReclassified,
 }: AllowanceReviewDialogProps) {
   const [excelDownloadUrl, setExcelDownloadUrl] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -412,6 +417,18 @@ export function AllowanceReviewDialog({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, previewText, isExcelImport, onNext, onPrevious, form, handleSave]);
+
+  // Reclassify (convert type / move to 其他文件) is blocked by the same downstream
+  // commitments the server guards against; surface the reason as a tooltip.
+  const reclassifyDisabledReason = isLocked
+    ? "此折讓已鎖定，無法重新分類"
+    : isExcelImport
+      ? "匯入的資料無法重新分類"
+      : allowance?.status === "confirmed"
+        ? "請先取消確認再重新分類"
+        : allowance?.status === "processing"
+          ? "文件正在解析中，請稍候"
+          : null;
 
   const isPdf = allowance?.filename?.toLowerCase().endsWith(".pdf");
 
@@ -983,6 +1000,21 @@ export function AllowanceReviewDialog({
             </form>
           </Form>
         </div>
+
+        {allowance && (
+          <div className="border-t pt-3">
+            <ReclassifyDocumentActions
+              documentId={allowance.document_id}
+              docType="allowance"
+              inOrOut={allowance.in_or_out}
+              disabledReason={reclassifyDisabledReason}
+              onReclassified={() => {
+                onOpenChange(false);
+                onReclassified?.();
+              }}
+            />
+          </div>
+        )}
 
         <DialogFooter className="flex flex-col sm:flex-row gap-2">
           <TooltipProvider>

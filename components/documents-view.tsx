@@ -87,7 +87,11 @@ export function DocumentsView({ firmId, clientId }: DocumentsViewProps) {
     maxFiles: 10,
     maxFileSize: 50 * 1024 * 1024,
     getStorageKey: (file) => {
-      const ext = file.name.split(".").pop();
+      // lastIndexOf, not split('.').pop(): an extension-less name like "myfile"
+      // would otherwise yield "myfile" as the "extension". Leading-dot files
+      // (".env") have dotIdx === 0 and correctly get no extension.
+      const dotIdx = file.name.lastIndexOf(".");
+      const ext = dotIdx > 0 ? file.name.slice(dotIdx + 1) : null;
       return `${crypto.randomUUID()}${ext ? `.${ext}` : ""}`;
     },
   });

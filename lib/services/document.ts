@@ -101,6 +101,7 @@ export async function renameOtherDocument(
     .from("documents")
     .select("doc_type")
     .eq("id", documentId)
+    .eq("status", "active")
     .single();
 
   if (fetchError) throw fetchError;
@@ -133,6 +134,7 @@ export async function deleteOtherDocument(
     .from("documents")
     .select("doc_type, file_url")
     .eq("id", documentId)
+    .eq("status", "active")
     .single();
 
   if (fetchError) throw fetchError;

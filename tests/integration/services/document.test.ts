@@ -135,6 +135,30 @@ describe.skipIf(!hasDbEnv)("createOtherDocument / deleteOtherDocument", () => {
     expect(data?.filename).toBe("改後的名稱.pdf");
   });
 
+  it("won't rename a soft-deleted document", async () => {
+    const documentId = await createOtherDocument(
+      {
+        firm_id: fixture.firmId,
+        client_id: fixture.clientId,
+        storage_path: `${fixture.firmId}/${fixture.clientId}/other/gone.pdf`,
+        filename: "原名.pdf",
+      },
+      { supabaseClient: supabase, userId: fixture.userId },
+    );
+    await deleteOtherDocument(documentId, { supabaseClient: supabase });
+
+    await expect(
+      renameOtherDocument(documentId, "新名.pdf", { supabaseClient: supabase }),
+    ).rejects.toThrow();
+
+    const { data } = await supabase
+      .from("documents")
+      .select("filename")
+      .eq("id", documentId)
+      .single();
+    expect(data?.filename).toBe("原名.pdf");
+  });
+
   it("soft-deletes an 'other' document (status -> deleted)", async () => {
     const documentId = await createOtherDocument(
       {

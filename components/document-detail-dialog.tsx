@@ -47,21 +47,30 @@ export function DocumentDetailDialog({
   onRenamed,
 }: DocumentDetailDialogProps) {
   const [name, setName] = useState("");
+  // Last-saved value. `document.filename` (the prop) can't be the dirty baseline:
+  // after a rename we mutate() the list, but `selected` in the parent is its own
+  // state and still holds the pre-rename row, so the button would never disable.
+  const [baseline, setBaseline] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
   // Reload the editable name whenever the dialog opens on a (different) document.
   useEffect(() => {
-    if (isOpen) setName(document?.filename ?? "");
+    if (isOpen) {
+      const current = document?.filename ?? "";
+      setName(current);
+      setBaseline(current);
+    }
   }, [isOpen, document]);
 
   const trimmed = name.trim();
-  const isDirty = !!document && trimmed !== "" && trimmed !== (document.filename ?? "");
+  const isDirty = trimmed !== "" && trimmed !== baseline;
 
   const handleSave = async () => {
     if (!document || !isDirty) return;
     setIsSaving(true);
     try {
       await renameOtherDocument(document.id, trimmed);
+      setBaseline(trimmed);
       toast.success("檔名已更新");
       await onRenamed?.();
     } catch (error) {

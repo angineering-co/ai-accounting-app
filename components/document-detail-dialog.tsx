@@ -74,7 +74,12 @@ export function DocumentDetailDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-5xl">
+      <DialogContent
+        className="w-[95vw] max-w-5xl"
+        // Don't auto-focus (and select) the filename input on open — the dialog
+        // is for viewing first; renaming is opt-in.
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>文件詳情</DialogTitle>
           <DialogDescription>其他文件（非發票 / 折讓）。</DialogDescription>

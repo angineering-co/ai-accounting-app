@@ -2,9 +2,20 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { ArrowLeftRight, FolderInput, Loader2 } from "lucide-react";
+import {
+  ArrowLeftRight,
+  ChevronDown,
+  FolderInput,
+  Loader2,
+} from "lucide-react";
 import { convertDocType, convertToOther } from "@/lib/services/document";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,18 +41,22 @@ interface ReclassifyDocumentActionsProps {
   docType: SubVatType;
   // Carried onto the new subtable when converting type; direction itself is unchanged.
   inOrOut: "in" | "out";
-  // Set when the document can't be reclassified (locked period / confirmed / processing).
-  // The message also surfaces as a tooltip on the disabled buttons.
+  // Set when the document can't be reclassified (locked period / confirmed / processing /
+  // unsaved edits). The message also surfaces as a tooltip on the disabled trigger.
   disabledReason?: string | null;
   // Called after a successful convert — the parent should close the dialog and refresh lists.
   onReclassified: () => void;
 }
 
-// Firm-side manual re-classification, surfaced inside the invoice/allowance review
-// dialog because it acts on the subtable entity (PR-1b). Two actions:
+// Firm-side manual re-classification, surfaced as a 「重新分類」 menu in the
+// invoice/allowance review dialog header (PR-1b). These are document-level
+// (what kind of document this is) and deliberately separated from the form's
+// field-level editing and 儲存/確認 footer. Two actions:
 //   - convert type: 發票 ↔ 折讓單 (carries direction + period, re-OCRs as the new type)
 //   - move to 其他文件: drop the subtable, leave the period list
-// Both discard the current extraction, so each is behind a confirm step.
+// Both discard the current extraction, so each is behind a confirm step. The
+// caller gates on unsaved edits (disable-while-dirty) so a convert never seeds
+// the new subtable from stale persisted state.
 export function ReclassifyDocumentActions({
   documentId,
   docType,
@@ -87,49 +102,42 @@ export function ReclassifyDocumentActions({
     }
   };
 
-  const buttons = (
-    <div className="flex items-center gap-2">
-      <span className="text-sm text-muted-foreground shrink-0">重新分類</span>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={disabled}
-        onClick={() => setPending("convert")}
-      >
-        <ArrowLeftRight className="mr-1.5 h-3.5 w-3.5" />
-        轉為{targetNoun}
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={disabled}
-        onClick={() => setPending("other")}
-      >
-        <FolderInput className="mr-1.5 h-3.5 w-3.5" />
-        移為其他文件
-      </Button>
-    </div>
+  const trigger = (
+    <Button type="button" variant="outline" size="sm" disabled={disabled}>
+      重新分類
+      <ChevronDown className="ml-1.5 h-3.5 w-3.5" />
+    </Button>
   );
 
   return (
     <>
-      {disabled ? (
-        <TooltipProvider>
-          <Tooltip delayDuration={0}>
-            {/* Disabled buttons don't emit hover events, so anchor the tooltip on a wrapper. */}
-            <TooltipTrigger asChild>
-              <div className="w-fit">{buttons}</div>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{disabledReason}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      ) : (
-        buttons
-      )}
+      <DropdownMenu>
+        {disabled ? (
+          <TooltipProvider>
+            <Tooltip delayDuration={0}>
+              {/* Disabled triggers don't emit hover events, so anchor on a wrapper. */}
+              <TooltipTrigger asChild>
+                <span className="inline-flex">{trigger}</span>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{disabledReason}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : (
+          <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+        )}
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={() => setPending("convert")}>
+            <ArrowLeftRight className="mr-2 h-4 w-4" />
+            轉為{targetNoun}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setPending("other")}>
+            <FolderInput className="mr-2 h-4 w-4" />
+            移為其他文件
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <AlertDialog
         open={pending !== null}

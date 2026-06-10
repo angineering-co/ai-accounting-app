@@ -666,7 +666,9 @@ export function InvoiceReviewDialog({
         ? "請先取消確認再重新分類"
         : invoice?.status === "processing"
           ? "文件正在解析中，請稍候"
-          : null;
+          : hasEdited
+            ? "請先儲存變更，再重新分類"
+            : null;
 
   const isPdf = invoice?.filename.toLowerCase().endsWith(".pdf");
 
@@ -705,32 +707,46 @@ export function InvoiceReviewDialog({
               請確認 AI 提取的資訊是否正確。您可以在此進行修改。
             </DialogDescription>
           </div>
-          {(onPrevious || onNext) && (
-            <div className="flex items-center gap-1">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={onPrevious}
-                disabled={!onPrevious}
-                title="上一筆 (↑)"
-              >
-                <ChevronUp className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={onNext}
-                disabled={!onNext}
-                title="下一筆 (↓)"
-              >
-                <ChevronDown className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
+          <div className="flex items-center gap-2 mr-8">
+            {invoice && (
+              <ReclassifyDocumentActions
+                documentId={invoice.document_id}
+                docType="invoice"
+                inOrOut={invoice.in_or_out}
+                disabledReason={reclassifyDisabledReason}
+                onReclassified={() => {
+                  onOpenChange(false);
+                  onReclassified?.();
+                }}
+              />
+            )}
+            {(onPrevious || onNext) && (
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={onPrevious}
+                  disabled={!onPrevious}
+                  title="上一筆 (↑)"
+                >
+                  <ChevronUp className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={onNext}
+                  disabled={!onNext}
+                  title="下一筆 (↓)"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </div>
         </DialogHeader>
 
         <div className="flex-1 flex flex-col md:flex-row gap-4 min-h-0 overflow-hidden py-4">
@@ -1470,20 +1486,7 @@ export function InvoiceReviewDialog({
             )}
 
             {/* Sticky action buttons */}
-            <div className="pt-3 border-t mt-auto shrink-0 space-y-2">
-              {invoice && (
-                <ReclassifyDocumentActions
-                  documentId={invoice.document_id}
-                  docType="invoice"
-                  inOrOut={invoice.in_or_out}
-                  disabledReason={reclassifyDisabledReason}
-                  onReclassified={() => {
-                    onOpenChange(false);
-                    onReclassified?.();
-                  }}
-                />
-              )}
-              <div className="flex flex-col sm:flex-row gap-2">
+            <div className="pt-3 border-t mt-auto shrink-0 flex flex-col sm:flex-row gap-2">
               <TooltipProvider>
                 <Tooltip delayDuration={0}>
                   <TooltipTrigger asChild>
@@ -1536,7 +1539,6 @@ export function InvoiceReviewDialog({
                   )}
                 </Tooltip>
               </TooltipProvider>
-              </div>
             </div>
           </div>
         </div>

@@ -83,6 +83,7 @@ function rowToInvoice(row: InvoiceRow): Invoice {
   const parsed = extractedInvoiceDataSchema.safeParse(row.extracted_data ?? undefined);
   return {
     id: row.id,
+    document_id: row.document_id,
     firm_id: row.firm_id,
     client_id: row.client_id,
     storage_path: row.storage_path,
@@ -107,6 +108,7 @@ function rowToAllowance(row: AllowanceRow): Allowance {
   const parsed = extractedAllowanceDataSchema.safeParse(row.extracted_data ?? undefined);
   return {
     id: row.id,
+    document_id: row.document_id,
     firm_id: row.firm_id,
     client_id: row.client_id,
     tax_filing_period_id: row.tax_filing_period_id,

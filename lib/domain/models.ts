@@ -152,6 +152,7 @@ export const extractedInvoiceDataSchema = z.object({
 
 export const invoiceSchema = z.object({
   id: z.string().uuid(),
+  document_id: z.string().uuid(), // CTI parent (documents.id); the reclassify actions key on this
   firm_id: z.string().uuid(),
   client_id: z.string().uuid(),
   storage_path: z.string().min(1),
@@ -240,6 +241,7 @@ export const extractedAllowanceDataSchema = z.object({
 
 export const allowanceSchema = z.object({
   id: z.string().uuid(),
+  document_id: z.string().uuid(), // CTI parent (documents.id); the reclassify actions key on this
   firm_id: z.string().uuid(),
   client_id: z.string().uuid(),
   tax_filing_period_id: z.string().uuid().nullable().optional(),

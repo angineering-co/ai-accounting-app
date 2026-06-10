@@ -4,8 +4,8 @@ import { createOtherDocument } from "@/lib/services/document";
 import {
   switchInOrOut,
   convertDocType,
-  demoteToOther,
-  promoteFromOther,
+  convertToOther,
+  convertDocToChild,
 } from "@/lib/services/document";
 import {
   cleanupTestFixture,
@@ -58,7 +58,7 @@ describe.skipIf(!hasDbEnv)("document re-classification actions", () => {
     return `${fixture.firmId}/${fixture.clientId}/other/${name}`;
   }
 
-  describe("promoteFromOther", () => {
+  describe("convertDocToChild", () => {
     it("turns an 'other' document into an invoice under the chosen period", async () => {
       const periodId = await makePeriod("11503");
       const documentId = await createOtherDocument(
@@ -71,7 +71,7 @@ describe.skipIf(!hasDbEnv)("document re-classification actions", () => {
         opts,
       );
 
-      await promoteFromOther(
+      await convertDocToChild(
         documentId,
         { docType: "invoice", inOrOut: "in", taxFilingPeriodId: periodId },
         opts,
@@ -114,7 +114,7 @@ describe.skipIf(!hasDbEnv)("document re-classification actions", () => {
         opts,
       );
 
-      await promoteFromOther(
+      await convertDocToChild(
         documentId,
         { docType: "allowance", inOrOut: "out", taxFilingPeriodId: periodId },
         opts,
@@ -150,7 +150,7 @@ describe.skipIf(!hasDbEnv)("document re-classification actions", () => {
       );
 
       await expect(
-        promoteFromOther(
+        convertDocToChild(
           documentId,
           {
             docType: "invoice",
@@ -234,7 +234,7 @@ describe.skipIf(!hasDbEnv)("document re-classification actions", () => {
     });
   });
 
-  describe("demoteToOther", () => {
+  describe("convertToOther", () => {
     it("drops the subtable and makes the document childless 'other'", async () => {
       const invoice = await createInvoice(
         {
@@ -247,7 +247,13 @@ describe.skipIf(!hasDbEnv)("document re-classification actions", () => {
         opts,
       );
 
-      await demoteToOther(invoice.document_id!, opts);
+      // A reviewed amount cached on the parent (synced from the subtable).
+      await supabase
+        .from("documents")
+        .update({ amount: 1200 })
+        .eq("id", invoice.document_id!);
+
+      await convertToOther(invoice.document_id!, opts);
 
       const { data: invRow } = await supabase
         .from("invoices")
@@ -258,7 +264,7 @@ describe.skipIf(!hasDbEnv)("document re-classification actions", () => {
 
       const { data: doc } = await supabase
         .from("documents")
-        .select("doc_type, type, ocr_status, filename")
+        .select("doc_type, type, ocr_status, filename, amount")
         .eq("id", invoice.document_id!)
         .single();
       expect(doc?.doc_type).toBe("other");
@@ -266,6 +272,8 @@ describe.skipIf(!hasDbEnv)("document re-classification actions", () => {
       expect(doc?.ocr_status).toBeNull();
       // Subtable filename is preserved onto the parent (now the source of truth).
       expect(doc?.filename).toBe("收據.pdf");
+      // The reviewed amount survives the convert — the user can still edit it.
+      expect(doc?.amount).toBe(1200);
     });
   });
 
@@ -315,12 +323,14 @@ describe.skipIf(!hasDbEnv)("document re-classification actions", () => {
 
       const { data: inv } = await supabase
         .from("invoices")
-        .select("in_or_out, status")
+        .select("in_or_out, status, extracted_data")
         .eq("id", invoice.id)
         .single();
       expect(inv?.in_or_out).toBe("out");
-      // Stale result is dropped back to the queue.
+      // Stale result is dropped back to the queue, and the opposite-direction
+      // extraction is cleared so no UI shows it while it waits.
       expect(inv?.status).toBe("uploaded");
+      expect(inv?.extracted_data).toBeNull();
 
       const { data: doc } = await supabase
         .from("documents")
@@ -376,7 +386,7 @@ describe.skipIf(!hasDbEnv)("document re-classification actions", () => {
         .update({ status: "confirmed" })
         .eq("id", invoice.id);
 
-      await expect(demoteToOther(invoice.document_id!, opts)).rejects.toThrow();
+      await expect(convertToOther(invoice.document_id!, opts)).rejects.toThrow();
 
       // Still an invoice — untouched.
       const { data: doc } = await supabase
@@ -385,6 +395,36 @@ describe.skipIf(!hasDbEnv)("document re-classification actions", () => {
         .eq("id", invoice.document_id!)
         .single();
       expect(doc?.doc_type).toBe("invoice");
+    });
+
+    it("blocks reclassify while the subtable is still processing", async () => {
+      const invoice = await createInvoice(
+        {
+          firm_id: fixture.firmId,
+          client_id: fixture.clientId,
+          storage_path: path("processing.pdf"),
+          filename: "p.pdf",
+          in_or_out: "in",
+        },
+        opts,
+      );
+      // OCR in flight: the worker owns this row as its write target.
+      await supabase
+        .from("invoices")
+        .update({ status: "processing" })
+        .eq("id", invoice.id);
+
+      await expect(convertToOther(invoice.document_id!, opts)).rejects.toThrow();
+      await expect(switchInOrOut(invoice.document_id!, "out", opts)).rejects.toThrow();
+
+      // Untouched — still an invoice, still processing.
+      const { data: inv } = await supabase
+        .from("invoices")
+        .select("status, in_or_out")
+        .eq("id", invoice.id)
+        .single();
+      expect(inv?.status).toBe("processing");
+      expect(inv?.in_or_out).toBe("in");
     });
 
     it("blocks convert when a journal entry exists for the document", async () => {

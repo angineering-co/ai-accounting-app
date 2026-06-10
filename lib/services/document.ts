@@ -287,6 +287,12 @@ async function assertNoDownstreamCommitment(
   if (subtableStatus === "confirmed") {
     throw new Error("文件已確認，請先取消確認再重新分類");
   }
+  // OCR in flight: the worker has this subtable as its write target. Re-classifying
+  // now (dropping/recreating the subtable, or resetting status) races the worker,
+  // which could write stale results back to the wrong row. Make the user wait.
+  if (subtableStatus === "processing") {
+    throw new Error("文件正在解析中，請稍候再試");
+  }
   const [entry] = await tx
     .select({ id: journalEntriesTable.id })
     .from(journalEntriesTable)
@@ -373,14 +379,20 @@ export async function switchInOrOut(
     if (sub.in_or_out === target) return; // already there — idempotent no-op
 
     // OCR already ran → the prompt used the old direction, so the result is
-    // stale: reset to 'uploaded' for re-extraction. Never extracted (still
-    // 'uploaded') → leave the status; it extracts under the new value.
+    // stale: reset to 'uploaded' and clear extracted_data so no UI shows the
+    // opposite-direction extraction while it waits for re-extraction. Never
+    // extracted (still 'uploaded') → leave the status; it extracts under the
+    // new value.
     const needsReextract = sub.extractedDataPresent;
     const table = docType === "invoice" ? invoicesTable : allowancesTable;
 
     await tx
       .update(table)
-      .set(needsReextract ? { in_or_out: target, status: "uploaded" } : { in_or_out: target })
+      .set(
+        needsReextract
+          ? { in_or_out: target, status: "uploaded", extracted_data: null }
+          : { in_or_out: target },
+      )
       .where(eq(table.id, sub.id));
 
     if (needsReextract) {
@@ -468,12 +480,14 @@ export async function convertDocType(
 }
 
 /**
- * Demote an invoice/allowance back to a childless `other` document: drop the
+ * Convert an invoice/allowance back to a childless `other` document: drop the
  * subtable and flip the parent to NON_VAT. The subtable owned the filename, so
  * copy it onto `documents` (the source of truth for `other`); clear the OCR
- * cache. No OCR — `other` documents are never extracted.
+ * cache. `documents.amount` is left as-is — it holds the value reviewed before
+ * the convert, and the user can still edit it on the `other` document. No OCR —
+ * `other` documents are never extracted.
  */
-export async function demoteToOther(
+export async function convertToOther(
   documentId: string,
   options?: DocumentServiceOptions,
 ): Promise<void> {
@@ -482,7 +496,7 @@ export async function demoteToOther(
   await db.transaction(async (tx) => {
     const doc = await loadDocumentForReclassify(tx, documentId);
     if (doc.doc_type !== "invoice" && doc.doc_type !== "allowance") {
-      throw new Error("demoteToOther only handles invoice/allowance documents");
+      throw new Error("convertToOther only handles invoice/allowance documents");
     }
     await assertCallerCanAccessFirm(tx, userId, doc.firm_id);
 
@@ -502,7 +516,6 @@ export async function demoteToOther(
         doc_type: "other",
         type: "NON_VAT",
         ocr_status: null,
-        amount: null,
         filename: sub.filename,
       })
       .where(eq(documentsTable.id, documentId));
@@ -510,12 +523,12 @@ export async function demoteToOther(
 }
 
 /**
- * Promote a childless `other` document into an invoice/allowance: create the
- * subtable (direction + period are caller-supplied — the period is chosen
+ * Convert a childless `other` document into an invoice/allowance child: create
+ * the subtable (direction + period are caller-supplied — the period is chosen
  * manually, never auto-derived) and flip the parent to VAT. The subtable lands
  * at `uploaded` for the period's「AI 提取」action to extract.
  */
-export async function promoteFromOther(
+export async function convertDocToChild(
   documentId: string,
   args: { docType: SubVatType; inOrOut: "in" | "out"; taxFilingPeriodId: string },
   options?: DocumentServiceOptions,
@@ -525,12 +538,12 @@ export async function promoteFromOther(
   await db.transaction(async (tx) => {
     const doc = await loadDocumentForReclassify(tx, documentId);
     if (doc.doc_type !== "other") {
-      throw new Error("promoteFromOther only handles doc_type='other'");
+      throw new Error("convertDocToChild only handles doc_type='other'");
     }
     await assertCallerCanAccessFirm(tx, userId, doc.firm_id);
     // No subtable yet, but guard against a stray journal entry on the parent.
     await assertNoDownstreamCommitment(tx, documentId, null);
-    if (!doc.file_url) throw new Error("文件無原始檔案，無法升級");
+    if (!doc.file_url) throw new Error("文件無原始檔案，無法轉換");
 
     const yearMonth = await resolveEditablePeriodYearMonth(
       tx,

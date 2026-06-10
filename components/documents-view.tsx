@@ -8,7 +8,7 @@ import { useOtherDocuments, type DocumentRow } from "@/hooks/use-other-documents
 import { useSupabaseUpload } from "@/hooks/use-supabase-upload";
 import { FilePreview } from "@/components/file-preview";
 import { DocumentDetailDialog } from "@/components/document-detail-dialog";
-import { PromoteDocumentDialog } from "@/components/promote-document-dialog";
+import { ConvertDocumentToChildDialog } from "@/components/convert-document-to-child-dialog";
 import { MobileUploadActions } from "@/components/mobile-upload-actions";
 import { TablePagination } from "@/components/table-pagination";
 import {
@@ -74,7 +74,7 @@ export function DocumentsView({ firmId, clientId, canManage = false }: Documents
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<DocumentRow | null>(null);
   const [toDelete, setToDelete] = useState<DocumentRow | null>(null);
-  const [toPromote, setToPromote] = useState<DocumentRow | null>(null);
+  const [toConvert, setToConvert] = useState<DocumentRow | null>(null);
   const [isProcessingUpload, setIsProcessingUpload] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -248,10 +248,10 @@ export function DocumentsView({ firmId, clientId, canManage = false }: Documents
                     type="button"
                     variant="ghost"
                     size="icon"
-                    aria-label="升級為發票 / 折讓"
-                    title="升級為發票 / 折讓"
+                    aria-label="轉為發票 / 折讓"
+                    title="轉為發票 / 折讓"
                     className="h-8 w-8 bg-white/80 text-slate-700 hover:bg-white hover:text-slate-900"
-                    onClick={() => setToPromote(doc)}
+                    onClick={() => setToConvert(doc)}
                   >
                     <ArrowUpCircle className="h-4 w-4" />
                   </Button>
@@ -290,12 +290,12 @@ export function DocumentsView({ firmId, clientId, canManage = false }: Documents
       />
 
       {canManage && (
-        <PromoteDocumentDialog
-          document={toPromote}
+        <ConvertDocumentToChildDialog
+          document={toConvert}
           clientId={clientId}
-          isOpen={!!toPromote}
-          onOpenChange={(open) => !open && setToPromote(null)}
-          onPromoted={async () => {
+          isOpen={!!toConvert}
+          onOpenChange={(open) => !open && setToConvert(null)}
+          onConverted={async () => {
             await mutate();
           }}
         />

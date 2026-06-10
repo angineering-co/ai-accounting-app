@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import useSWR from "swr";
 import { createClient } from "@/lib/supabase/client";
-import { promoteFromOther } from "@/lib/services/document";
+import { convertDocToChild } from "@/lib/services/document";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import type { DocumentRow } from "@/hooks/use-other-documents";
 import {
@@ -25,12 +25,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 
-interface PromoteDocumentDialogProps {
+interface ConvertDocumentToChildDialogProps {
   document: DocumentRow | null;
   clientId: string;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onPromoted?: () => void | Promise<void>;
+  onConverted?: () => void | Promise<void>;
 }
 
 type DocType = "invoice" | "allowance";
@@ -39,14 +39,14 @@ type InOrOut = "in" | "out";
 // Firm-only: turn an `other` document into an invoice/allowance. The period is
 // chosen manually (never auto-derived); on save the subtable is created and the
 // document leaves the `/documents` list. OCR runs when staff press the period's
-// 「AI 提取」action — promotion does not trigger it.
-export function PromoteDocumentDialog({
+// 「AI 提取」action — conversion does not trigger it.
+export function ConvertDocumentToChildDialog({
   document,
   clientId,
   isOpen,
   onOpenChange,
-  onPromoted,
-}: PromoteDocumentDialogProps) {
+  onConverted,
+}: ConvertDocumentToChildDialogProps) {
   const [docType, setDocType] = useState<DocType>("invoice");
   const [inOrOut, setInOrOut] = useState<InOrOut>("in");
   const [periodId, setPeriodId] = useState<string>("");
@@ -61,9 +61,9 @@ export function PromoteDocumentDialog({
     }
   }, [isOpen]);
 
-  const supabase = createClient();
-  const { data: periods } = useSWR(
-    isOpen ? ["promote-periods", clientId] : null,
+  const supabase = useMemo(() => createClient(), []);
+  const { data: periods, isLoading } = useSWR(
+    isOpen ? ["convert-doc-periods", clientId] : null,
     async () => {
       const { data, error } = await supabase
         .from("tax_filing_periods")
@@ -80,17 +80,17 @@ export function PromoteDocumentDialog({
     if (!document || !periodId) return;
     setIsSaving(true);
     try {
-      await promoteFromOther(document.id, {
+      await convertDocToChild(document.id, {
         docType,
         inOrOut,
         taxFilingPeriodId: periodId,
       });
-      toast.success(docType === "invoice" ? "已升級為發票" : "已升級為折讓");
-      await onPromoted?.();
+      toast.success(docType === "invoice" ? "已轉為發票" : "已轉為折讓");
+      await onConverted?.();
       onOpenChange(false);
     } catch (error) {
       console.error(error);
-      toast.error("升級失敗");
+      toast.error("變更失敗");
     } finally {
       setIsSaving(false);
     }
@@ -102,9 +102,9 @@ export function PromoteDocumentDialog({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>升級為發票 / 折讓</DialogTitle>
+          <DialogTitle>變更為發票 / 折讓</DialogTitle>
           <DialogDescription>
-            把「{document?.filename ?? "其他文件"}」歸入申報期別。升級後會離開其他文件列表。
+            把「{document?.filename ?? "其他文件"}」歸入申報期別。變更後會離開其他文件列表。
           </DialogDescription>
         </DialogHeader>
 
@@ -137,9 +137,17 @@ export function PromoteDocumentDialog({
 
           <div className="space-y-2">
             <Label className="text-sm text-muted-foreground">申報期別</Label>
-            <Select value={periodId} onValueChange={setPeriodId} disabled={!hasPeriods}>
+            <Select
+              value={periodId}
+              onValueChange={setPeriodId}
+              disabled={isLoading || !hasPeriods}
+            >
               <SelectTrigger>
-                <SelectValue placeholder={hasPeriods ? "選擇期別" : "尚無可用期別"} />
+                <SelectValue
+                  placeholder={
+                    isLoading ? "載入中..." : hasPeriods ? "選擇期別" : "尚無可用期別"
+                  }
+                />
               </SelectTrigger>
               <SelectContent>
                 {(periods ?? []).map((p) => (
@@ -149,9 +157,9 @@ export function PromoteDocumentDialog({
                 ))}
               </SelectContent>
             </Select>
-            {!hasPeriods && (
+            {!isLoading && !hasPeriods && (
               <p className="text-sm text-muted-foreground">
-                請先於期別頁建立申報期別，再回來升級此文件。
+                請先於期別頁建立申報期別，再回來變更此文件。
               </p>
             )}
           </div>
@@ -162,7 +170,7 @@ export function PromoteDocumentDialog({
             取消
           </Button>
           <Button onClick={handleSave} disabled={!periodId || isSaving}>
-            升級
+            變更
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -62,6 +62,7 @@ export const documents = pgTable("documents", {
 	created_by: uuid().notNull(),
 	created_at: timestamp({ withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 	updated_at: timestamp({ withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	filename: text(),
 }, (table) => [
 	index("documents_client_id_doc_date_idx").using("btree", table.client_id.asc().nullsLast().op("date_ops"), table.doc_date.asc().nullsLast().op("date_ops")),
 	index("documents_client_id_status_idx").using("btree", table.client_id.asc().nullsLast().op("uuid_ops"), table.status.asc().nullsLast().op("uuid_ops")),

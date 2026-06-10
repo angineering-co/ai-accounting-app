@@ -39,6 +39,12 @@ export interface FilePreviewProps {
   active?: boolean;
   /** Controls the height/sizing of the preview surface. */
   className?: string;
+  /**
+   * Skip the Phase 5.6 legacy-key remap (`toDocumentsKey`) and use `storagePath`
+   * verbatim. Periodless `other` documents are created post-5.6 in the canonical
+   * layout and have no period segment, so the bridge would throw on them.
+   */
+  rawStoragePath?: boolean;
 }
 
 // Inline preview surface for an uploaded document: fetches a (cached) signed URL and
@@ -53,6 +59,7 @@ export function FilePreview({
   initialPreviewUrl,
   active = true,
   className,
+  rawStoragePath = false,
 }: FilePreviewProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -79,7 +86,7 @@ export function FilePreview({
         const signedUrl = await getSignedPreviewUrl({
           bucketName,
           storagePath:
-            bucketName === "documents"
+            bucketName === "documents" && !rawStoragePath
               ? toDocumentsKey(storagePath)
               : storagePath,
           expiresInSeconds: 3600,
@@ -112,6 +119,7 @@ export function FilePreview({
     isInlinePreviewSupported,
     isImage,
     initialPreviewUrl,
+    rawStoragePath,
   ]);
 
   return (
@@ -143,11 +151,14 @@ export function FilePreview({
           unoptimized
         />
       ) : isPdf ? (
+        // No `sandbox`: the src is a cross-origin signed URL (Supabase storage
+        // domain), so it can't script our app anyway — and a sandboxed iframe
+        // makes Chrome block its built-in PDF viewer ("This page has been blocked
+        // by Chrome"). Removing it lets the PDF render inline.
         <iframe
           src={previewUrl}
           title={filename ?? "File Preview"}
           className="h-full w-full bg-white"
-          sandbox="allow-scripts allow-same-origin"
         />
       ) : (
         <div className="flex h-full w-full items-center justify-center text-base text-muted-foreground">

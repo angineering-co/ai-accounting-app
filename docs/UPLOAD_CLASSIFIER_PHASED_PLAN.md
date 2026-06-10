@@ -65,17 +65,17 @@
 
 **改動**（§5.4，皆事務所端、Drizzle 交易、非 PostgREST RPC）：
 - `lib/services/document.ts` 新增四個動作，皆以 `assertCallerCanAccessFirm` 守住「事務所員工專屬」（擋掉 client 角色）：
-  - `switchInOrOut(documentId, target: 'in'|'out')`：子表 `in_or_out` 設為明確 `target`（非 toggle，重複點收斂同值）。已 OCR 過（`extracted_data` 非空）則把子表退回 `status='uploaded'`（舊擷取結果已被舊方向帶偏而失效，§5.4）。
+  - `switchInOrOut(documentId, target: 'in'|'out')`：子表 `in_or_out` 設為明確 `target`（非 toggle，重複點收斂同值）。已 OCR 過（`extracted_data` 非空）則把子表退回 `status='uploaded'` 並清 `extracted_data`（舊擷取結果已被舊方向帶偏而失效，且清掉才不會在等待重擷取時於 UI 顯示反向結果，§5.4）。
   - `convertDocType(documentId, { docType, inOrOut })`（invoice↔allowance）：交易內刪原子表 + 建目標子表（`status='uploaded'`）+ 翻 `doc_type` + `ocr_status='pending'`。
-  - `demoteToOther(documentId)`：交易內刪子表 + 翻 `doc_type='other'` / `type='NON_VAT'`、清 `ocr_status` / `amount`、把子表 `filename` 抄回父表（`other` 的檔名以父表為準）。
-  - `promoteFromOther(documentId, { docType, inOrOut, taxFilingPeriodId })`：交易內建子表（`status='uploaded'`、**手動指定期別**、不 auto-derive；invoice 由期別帶出 `year_month`）+ 翻 `doc_type='VAT'`、清父表 `filename`。
-  - **Guard**：要求子表尚未 confirmed 且無對應 journal entry，否則擋下。
+  - `convertToOther(documentId)`：交易內刪子表 + 翻 `doc_type='other'` / `type='NON_VAT'`、清 `ocr_status`、把子表 `filename` 抄回父表（`other` 的檔名以父表為準）。**保留** 父表 `amount`（轉換前已審核的值，轉成 `other` 後仍可編輯），不再清空。
+  - `convertDocToChild(documentId, { docType, inOrOut, taxFilingPeriodId })`：交易內建子表（`status='uploaded'`、**手動指定期別**、不 auto-derive；invoice 由期別帶出 `year_month`）+ 翻 `doc_type='VAT'`、清父表 `filename`。
+  - **Guard**：要求子表尚未 confirmed、未在 `processing`（OCR 進行中，重分類會與 worker 競態）、且無對應 journal entry，否則擋下。
 - **OCR 觸發刻意延後（本 PR 不碰 pgmq）**：原設計讓這些動作「顯式重排 / 觸發 OCR」。經討論後決定 PR-1b **不直接入 pgmq 佇列**，改為把重分類後的子表停在 `status='uploaded'`（與新上傳同態），由期別頁既有的「AI 提取」按鈕統一擷取。好處是 PR-1b 完全不依賴 `pgmq_public`（本機 PostgREST 預設未開放該 schema），保持乾淨；代價是重分類後 OCR 不會自動跑，需員工再按一次期別的「AI 提取」。自動觸發留待後續（見下方 PR-2 追加）。
-- **UI 範圍（本階段只接 promote）**：事務所端 `/documents`（PR-1a 僅列 `doc_type='other'`）加上 promote 列操作（升級為發票 / 折讓，選 in/out + 期別）。`convert` / `demote` / `switch` 作用於 invoice / allowance 文件，這些尚未出現在 `/documents` 列表，**本 PR 只交付其服務層 + 測試，UI 接線留待後續**（屆時 firm `/documents` 擴充為列全 doc type，或在期別頁列操作上接）。
+- **UI 範圍（本階段只接 convertDocToChild）**：事務所端 `/documents`（PR-1a 僅列 `doc_type='other'`）加上「轉為發票 / 折讓」列操作（選 in/out + 期別）。`convertDocType` / `convertToOther` / `switchInOrOut` 作用於 invoice / allowance 文件，這些尚未出現在 `/documents` 列表，**本 PR 只交付其服務層 + 測試，UI 接線留待後續**（屆時 firm `/documents` 擴充為列全 doc type，或在期別頁列操作上接）。
 
 **驗證**：
-- `tests/integration/services/document-reclassify.test.ts`：promote 建子表（指定期別、`year_month` 帶出、`status='uploaded'`）翻 doc_type、清父表 filename；promote 跨客戶期別被擋；convert 刪原子表 / 建目標子表（`uploaded`）/ `ocr_status='pending'`、拒絕轉同型；demote 刪子表翻 other、抄回 filename、清 ocr/amount；switch 明確 target、已擷取者退回 `uploaded` 並 `ocr_status='pending'`、未擷取者維持、同值為 no-op；已 confirmed / 有 journal entry 時 guard 擋下且原狀不動。
-- 手動：把一份「其他文件」promote 成發票（選 in/out + 期別）→ 建子表、進期別頁、按期別「AI 提取」後 OCR 跑。
+- `tests/integration/services/document-reclassify.test.ts`：convertDocToChild 建子表（指定期別、`year_month` 帶出、`status='uploaded'`）翻 doc_type、清父表 filename；跨客戶期別被擋；convertDocType 刪原子表 / 建目標子表（`uploaded`）/ `ocr_status='pending'`、拒絕轉同型；convertToOther 刪子表翻 other、抄回 filename、清 ocr_status、保留 amount；switch 明確 target、已擷取者退回 `uploaded` 並清 `extracted_data` / `ocr_status='pending'`、未擷取者維持、同值為 no-op；已 confirmed / `processing` 中 / 有 journal entry 時 guard 擋下且原狀不動。
+- 手動：把一份「其他文件」轉成發票（選 in/out + 期別）→ 建子表、進期別頁、按期別「AI 提取」後 OCR 跑。
 - 不退步 smoke 同 PR-1a。
 
 **退出條件**：服務層 promote / convert / demote / switch 交易原子、guard 正確、整合測試綠燈；事務所能在 `/documents` 手動 promote；既有流程不退步。（convert / demote / switch 的 UI 接線與重分類自動觸發 OCR 列為後續。）

@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { FileText, Trash2 } from "lucide-react";
+import { ArrowUpCircle, FileText, Trash2 } from "lucide-react";
 import { createOtherDocument, deleteOtherDocument } from "@/lib/services/document";
 import { useOtherDocuments, type DocumentRow } from "@/hooks/use-other-documents";
 import { useSupabaseUpload } from "@/hooks/use-supabase-upload";
 import { FilePreview } from "@/components/file-preview";
 import { DocumentDetailDialog } from "@/components/document-detail-dialog";
+import { ConvertDocumentToChildDialog } from "@/components/convert-document-to-child-dialog";
 import { MobileUploadActions } from "@/components/mobile-upload-actions";
 import { TablePagination } from "@/components/table-pagination";
 import {
@@ -61,15 +62,19 @@ const formatUploadDate = (value: string | null) => {
 interface DocumentsViewProps {
   firmId: string;
   clientId: string;
+  // Firm staff get re-classification actions (PR-1b: promote `other` →
+  // invoice/allowance). Portal clients see browse / upload / delete only.
+  canManage?: boolean;
 }
 
 // Shared `/documents` surface for both firm staff and portal clients (PR-1a:
 // browse / upload / delete `other` documents — identical for both roles). Firm
 // management actions and classifier hints layer on in later PRs.
-export function DocumentsView({ firmId, clientId }: DocumentsViewProps) {
+export function DocumentsView({ firmId, clientId, canManage = false }: DocumentsViewProps) {
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<DocumentRow | null>(null);
   const [toDelete, setToDelete] = useState<DocumentRow | null>(null);
+  const [toConvert, setToConvert] = useState<DocumentRow | null>(null);
   const [isProcessingUpload, setIsProcessingUpload] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -237,16 +242,31 @@ export function DocumentsView({ firmId, clientId }: DocumentsViewProps) {
                   </p>
                 </div>
               </button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label="刪除文件"
-                className="absolute right-2 top-2 h-8 w-8 bg-white/80 text-destructive opacity-0 transition-opacity hover:bg-white hover:text-destructive group-hover:opacity-100"
-                onClick={() => setToDelete(doc)}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                {canManage && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="轉為發票 / 折讓"
+                    title="轉為發票 / 折讓"
+                    className="h-8 w-8 bg-white/80 text-slate-700 hover:bg-white hover:text-slate-900"
+                    onClick={() => setToConvert(doc)}
+                  >
+                    <ArrowUpCircle className="h-4 w-4" />
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="刪除文件"
+                  className="h-8 w-8 bg-white/80 text-destructive hover:bg-white hover:text-destructive"
+                  onClick={() => setToDelete(doc)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           ))}
         </div>
@@ -268,6 +288,18 @@ export function DocumentsView({ firmId, clientId }: DocumentsViewProps) {
           await mutate();
         }}
       />
+
+      {canManage && (
+        <ConvertDocumentToChildDialog
+          document={toConvert}
+          clientId={clientId}
+          isOpen={!!toConvert}
+          onOpenChange={(open) => !open && setToConvert(null)}
+          onConverted={async () => {
+            await mutate();
+          }}
+        />
+      )}
 
       <AlertDialog
         open={!!toDelete}

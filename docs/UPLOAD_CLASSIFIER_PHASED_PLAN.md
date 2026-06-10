@@ -1,8 +1,8 @@
 # 上傳分類器 / 文件管理 — 階段式實作計畫
 
 > **狀態追蹤**
-> - ⬜ PR-1a 未開始（「其他文件」上傳 + `/documents` 列表 + 文件詳情 / 預覽 dialog）
-> - ⬜ PR-1b 未開始（事務所端文件管理動作：promote / demote / convert / switch）
+> - ✅ PR-1a 已完成（「其他文件」上傳 + `/documents` 列表 + 文件詳情 / 預覽 dialog）
+> - 🚧 PR-1b 進行中（服務層 promote / demote / convert / switch + 整合測試全數完成；UI 本階段只接 promote，convert / demote / switch 僅服務層；OCR 觸發延後）
 > - ⬜ PR-2 未開始（分類器核心：migration + 純函式 + worker + hint UI）
 > - ⬜ PR-3 未開始（eval scaffold）
 > - ⬜ 後續步驟 A 未開始（桌機客戶維持 `/documents` only，不加期別頁第 5 張卡）
@@ -64,20 +64,21 @@
 **目標**：給事務所端「修正既有文件分類」的動作。這些動作日後是分類器不符的處理出口，但本身作為純手動管理也成立（員工發現分類錯誤即可手動修）。**仍無 schema、無分類器**。
 
 **改動**（§5.4，皆事務所端、Drizzle 交易、非 PostgREST RPC）：
-- `lib/services/document.ts` 新增：
-  - `switchInOrOut(documentId, target: 'in'|'out')`：子表 `in_or_out` 設為明確 `target`（非 toggle）；OCR 跑過則顯式重排擷取 job（擷取 prompt 被 `in_or_out` 帶偏，§5.4）。
-  - `convertDocType(documentId, { docType, inOrOut })`（invoice↔allowance）：交易內刪原子表 + 建目標子表 + 翻 `doc_type` + `ocr_status='pending'` + 顯式重排 OCR。
-  - `demoteToOther(documentId)`：交易內刪子表 + 翻 `doc_type='other'`。
-  - `promoteFromOther(documentId, { docType, inOrOut, taxFilingPeriodId })`：交易內建子表（**手動指定期別**，不 auto-derive）+ 翻 `doc_type` + 觸發 OCR。
-  - **Guard**：要求子表尚未 confirmed 且無對應 journal entry，否則擋下。
-- 把上述動作接到事務所端 `/documents` 列表的列操作（promote / convert / demote / switch）。
+- `lib/services/document.ts` 新增四個動作，皆以 `assertCallerCanAccessFirm` 守住「事務所員工專屬」（擋掉 client 角色）：
+  - `switchInOrOut(documentId, target: 'in'|'out')`：子表 `in_or_out` 設為明確 `target`（非 toggle，重複點收斂同值）。已 OCR 過（`extracted_data` 非空）則把子表退回 `status='uploaded'` 並清 `extracted_data`（舊擷取結果已被舊方向帶偏而失效，且清掉才不會在等待重擷取時於 UI 顯示反向結果，§5.4）。
+  - `convertDocType(documentId, { docType, inOrOut })`（invoice↔allowance）：交易內刪原子表 + 建目標子表（`status='uploaded'`）+ 翻 `doc_type` + `ocr_status='pending'`。
+  - `convertToOther(documentId)`：交易內刪子表 + 翻 `doc_type='other'` / `type='NON_VAT'`、清 `ocr_status`、把子表 `filename` 抄回父表（`other` 的檔名以父表為準）。**保留** 父表 `amount`（轉換前已審核的值，轉成 `other` 後仍可編輯），不再清空。
+  - `convertDocToChild(documentId, { docType, inOrOut, taxFilingPeriodId })`：交易內建子表（`status='uploaded'`、**手動指定期別**、不 auto-derive；invoice 由期別帶出 `year_month`）+ 翻 `doc_type='VAT'`、清父表 `filename`。
+  - **Guard**：要求子表尚未 confirmed、未在 `processing`（OCR 進行中，重分類會與 worker 競態）、且無對應 journal entry，否則擋下。
+- **OCR 觸發刻意延後（本 PR 不碰 pgmq）**：原設計讓這些動作「顯式重排 / 觸發 OCR」。經討論後決定 PR-1b **不直接入 pgmq 佇列**，改為把重分類後的子表停在 `status='uploaded'`（與新上傳同態），由期別頁既有的「AI 提取」按鈕統一擷取。好處是 PR-1b 完全不依賴 `pgmq_public`（本機 PostgREST 預設未開放該 schema），保持乾淨；代價是重分類後 OCR 不會自動跑，需員工再按一次期別的「AI 提取」。自動觸發留待後續（見下方 PR-2 追加）。
+- **UI 範圍（本階段只接 convertDocToChild）**：事務所端 `/documents`（PR-1a 僅列 `doc_type='other'`）加上「轉為發票 / 折讓」列操作（選 in/out + 期別）。`convertDocType` / `convertToOther` / `switchInOrOut` 作用於 invoice / allowance 文件，這些尚未出現在 `/documents` 列表，**本 PR 只交付其服務層 + 測試，UI 接線留待後續**（屆時 firm `/documents` 擴充為列全 doc type，或在期別頁列操作上接）。
 
 **驗證**：
-- Integration test（`lib/services/document.ts` 動作）：convert 刪原子表 / 建目標子表 / 重排 OCR；demote 刪子表翻 other；promote 建子表（指定期別）翻 doc_type；switch 用明確 target 兩次點擊狀態穩定；已 confirmed / 有 entry 時 guard 擋下。
-- 手動：把一份「其他文件」promote 成發票（選 in/out + 期別）→ 建子表、進期別頁、OCR 觸發；把走錯流程的折讓 convert；把收據 demote 回其他文件。
+- `tests/integration/services/document-reclassify.test.ts`：convertDocToChild 建子表（指定期別、`year_month` 帶出、`status='uploaded'`）翻 doc_type、清父表 filename；跨客戶期別被擋；convertDocType 刪原子表 / 建目標子表（`uploaded`）/ `ocr_status='pending'`、拒絕轉同型；convertToOther 刪子表翻 other、抄回 filename、清 ocr_status、保留 amount；switch 明確 target、已擷取者退回 `uploaded` 並清 `extracted_data` / `ocr_status='pending'`、未擷取者維持、同值為 no-op；已 confirmed / `processing` 中 / 有 journal entry 時 guard 擋下且原狀不動。
+- 手動：把一份「其他文件」轉成發票（選 in/out + 期別）→ 建子表、進期別頁、按期別「AI 提取」後 OCR 跑。
 - 不退步 smoke 同 PR-1a。
 
-**退出條件**：事務所能在 `/documents` 手動 promote / convert / demote / switch 文件；交易原子、guard 正確、OCR 在需要時重排；既有流程不退步。
+**退出條件**：服務層 promote / convert / demote / switch 交易原子、guard 正確、整合測試綠燈；事務所能在 `/documents` 手動 promote；既有流程不退步。（convert / demote / switch 的 UI 接線與重分類自動觸發 OCR 列為後續。）
 
 ---
 
@@ -95,6 +96,8 @@
   - per-period 檢查點 `components/period-classification-review.tsx`（§6.4）+ periodless `other` 粗提醒。
   - 審核 dialog `disagreed` 旗標（`invoice-review-dialog.tsx` / `allowance-review-dialog.tsx`，§6.5）。
 - **PR-1b 動作追加**：補上 `review_status='resolved'` + `resolution` 標記；新增 `resolveClassificationKeep`、`getPeriodPendingClassifications`（含 unclassified 分組）。
+- **PR-1b 動作 benchmark 寫回（重要、目前無處追蹤）**：`classifier_hint` 欄位上線後，promote / convert / demote / switch 這四個重分類動作**必須把員工最終採取的動作寫回 `classifier_hint`**（例如 `resolution` / `final_doc_type` / `final_in_or_out`），與分類器當初的 `verdict` 並存。如此每筆人工修正都成為一筆「AI 建議 vs 實際動作」的標註，自然累積出 benchmark 資料集（餵 PR-3 eval、§7 rollout gate）。**這是 PR-1b 服務動作在 PR-2 的必做追加**，現階段 PR-1b 動作尚未寫任何 hint（欄位還不存在），切勿遺漏。
+- **承接 PR-1b 延後項**：PR-2 既已導入分類佇列 / worker 與 pgmq 路徑，重分類動作的「自動觸發 / 重排 OCR」在此一併補上（promote / convert / switch 後直接入擷取佇列，不再只停 `uploaded`）；`convert` / `demote` / `switch` 的事務所端 UI 接線（隨 `/documents` 疊加 hint 一起，把列表擴為列全 doc type 並掛上列操作）亦在此完成。
 
 **驗證**：見設計提案 §10 全部手動情境（一致 / 不一致 / doc type 不符 / verdict='other' / direct-other genuine 與反向 / 客戶端無提示 / periodless 盲區提醒 / unclassified 重跑 / switch target / convert 重排 OCR / 延遲穩健 / dialog 旗標）+ 不退步 smoke。
 
@@ -107,6 +110,8 @@
 **目標**：建立分類器 eval 骨架，供日後「能否開放給客戶自我校正」的 rollout gate（§7）。
 
 **改動**：`tests/fixtures/classifier/{README.md, manifest.json, .gitignore}`、`tests/integration/document-classifier.eval.ts`（manifest 空時 skip）。
+
+**資料來源（與 PR-2 benchmark 寫回相連）**：除人工策劃的 fixture manifest 外，PR-2 讓重分類動作把員工最終動作寫回 `classifier_hint`（見 PR-2「動作 benchmark 寫回」），這批「AI 建議 vs 實際動作」標註即為線上實況 benchmark 的主要來源，供 §7 rollout gate 衡量分類器準度。
 
 **退出條件**：eval harness 可讀 manifest 跑 `classifyDocument` 並算 per-class precision/recall；manifest 空時 skip、不影響 CI。
 

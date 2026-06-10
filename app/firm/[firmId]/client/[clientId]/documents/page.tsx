@@ -8,5 +8,5 @@ export default async function DocumentsPage({
   params: Promise<{ firmId: string; clientId: string }>;
 }) {
   const { firmId, clientId } = await params;
-  return <DocumentsView firmId={firmId} clientId={clientId} />;
+  return <DocumentsView firmId={firmId} clientId={clientId} canManage />;
 }

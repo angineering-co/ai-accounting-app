@@ -96,6 +96,7 @@
   - per-period 檢查點 `components/period-classification-review.tsx`（§6.4）+ periodless `other` 粗提醒。
   - 審核 dialog `disagreed` 旗標（`invoice-review-dialog.tsx` / `allowance-review-dialog.tsx`，§6.5）。
 - **PR-1b 動作追加**：補上 `review_status='resolved'` + `resolution` 標記；新增 `resolveClassificationKeep`、`getPeriodPendingClassifications`（含 unclassified 分組）。
+- **PR-1b 動作 benchmark 寫回（重要、目前無處追蹤）**：`classifier_hint` 欄位上線後，promote / convert / demote / switch 這四個重分類動作**必須把員工最終採取的動作寫回 `classifier_hint`**（例如 `resolution` / `final_doc_type` / `final_in_or_out`），與分類器當初的 `verdict` 並存。如此每筆人工修正都成為一筆「AI 建議 vs 實際動作」的標註，自然累積出 benchmark 資料集（餵 PR-3 eval、§7 rollout gate）。**這是 PR-1b 服務動作在 PR-2 的必做追加**，現階段 PR-1b 動作尚未寫任何 hint（欄位還不存在），切勿遺漏。
 - **承接 PR-1b 延後項**：PR-2 既已導入分類佇列 / worker 與 pgmq 路徑，重分類動作的「自動觸發 / 重排 OCR」在此一併補上（promote / convert / switch 後直接入擷取佇列，不再只停 `uploaded`）；`convert` / `demote` / `switch` 的事務所端 UI 接線（隨 `/documents` 疊加 hint 一起，把列表擴為列全 doc type 並掛上列操作）亦在此完成。
 
 **驗證**：見設計提案 §10 全部手動情境（一致 / 不一致 / doc type 不符 / verdict='other' / direct-other genuine 與反向 / 客戶端無提示 / periodless 盲區提醒 / unclassified 重跑 / switch target / convert 重排 OCR / 延遲穩健 / dialog 旗標）+ 不退步 smoke。
@@ -109,6 +110,8 @@
 **目標**：建立分類器 eval 骨架，供日後「能否開放給客戶自我校正」的 rollout gate（§7）。
 
 **改動**：`tests/fixtures/classifier/{README.md, manifest.json, .gitignore}`、`tests/integration/document-classifier.eval.ts`（manifest 空時 skip）。
+
+**資料來源（與 PR-2 benchmark 寫回相連）**：除人工策劃的 fixture manifest 外，PR-2 讓重分類動作把員工最終動作寫回 `classifier_hint`（見 PR-2「動作 benchmark 寫回」），這批「AI 建議 vs 實際動作」標註即為線上實況 benchmark 的主要來源，供 §7 rollout gate 衡量分類器準度。
 
 **退出條件**：eval harness 可讀 manifest 跑 `classifyDocument` 並算 per-class precision/recall；manifest 空時 skip、不影響 CI。
 

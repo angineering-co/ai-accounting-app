@@ -98,7 +98,10 @@ export function DocumentsView({ firmId, clientId }: DocumentsViewProps) {
     if (isProcessingUpload || uploadedFiles.length === 0) return;
     setIsProcessingUpload(true);
     try {
-      await Promise.all(
+      // allSettled so one failed row doesn't abort the rest. Clear the queue
+      // immediately after, before mutate, so a partial failure can't re-trigger
+      // this effect and re-create the already-succeeded documents (duplicates).
+      const results = await Promise.allSettled(
         uploadedFiles.map((uploadedFile) =>
           createOtherDocument({
             firm_id: firmId,
@@ -108,14 +111,19 @@ export function DocumentsView({ firmId, clientId }: DocumentsViewProps) {
           }),
         ),
       );
-      toast.success("其他文件上傳成功");
-      await mutate();
       setFiles([]);
       setUploadedFiles([]);
+
+      const failures = results.filter((r) => r.status === "rejected");
+      if (failures.length > 0) {
+        failures.forEach((f) => console.error(f.reason));
+        toast.error(`有 ${failures.length} 個文件上傳失敗`);
+      } else {
+        toast.success("其他文件上傳成功");
+      }
+
+      await mutate();
       setPage(0);
-    } catch (error) {
-      console.error(error);
-      toast.error("其他文件上傳失敗");
     } finally {
       setIsProcessingUpload(false);
     }

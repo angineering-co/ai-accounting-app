@@ -3,6 +3,7 @@ import {
   createDocument,
   createOtherDocument,
   deleteOtherDocument,
+  renameOtherDocument,
 } from "@/lib/services/document";
 import {
   cleanupTestFixture,
@@ -88,6 +89,7 @@ describe.skipIf(!hasDbEnv)("createOtherDocument / deleteOtherDocument", () => {
         firm_id: fixture.firmId,
         client_id: fixture.clientId,
         storage_path: `${fixture.firmId}/${fixture.clientId}/other/file.pdf`,
+        filename: "保險帳單.pdf",
       },
       { supabaseClient: supabase, userId: fixture.userId },
     );
@@ -107,6 +109,30 @@ describe.skipIf(!hasDbEnv)("createOtherDocument / deleteOtherDocument", () => {
     expect(data.file_url).toBe(
       `${fixture.firmId}/${fixture.clientId}/other/file.pdf`,
     );
+    expect(data.filename).toBe("保險帳單.pdf");
+  });
+
+  it("renames an 'other' document (filename update)", async () => {
+    const documentId = await createOtherDocument(
+      {
+        firm_id: fixture.firmId,
+        client_id: fixture.clientId,
+        storage_path: `${fixture.firmId}/${fixture.clientId}/other/rename.pdf`,
+        filename: "原始.pdf",
+      },
+      { supabaseClient: supabase, userId: fixture.userId },
+    );
+
+    await renameOtherDocument(documentId, "  改後的名稱.pdf  ", {
+      supabaseClient: supabase,
+    });
+
+    const { data } = await supabase
+      .from("documents")
+      .select("filename")
+      .eq("id", documentId)
+      .single();
+    expect(data?.filename).toBe("改後的名稱.pdf");
   });
 
   it("soft-deletes an 'other' document (status -> deleted)", async () => {
@@ -115,6 +141,7 @@ describe.skipIf(!hasDbEnv)("createOtherDocument / deleteOtherDocument", () => {
         firm_id: fixture.firmId,
         client_id: fixture.clientId,
         storage_path: `${fixture.firmId}/${fixture.clientId}/other/del.pdf`,
+        filename: "待刪除.pdf",
       },
       { supabaseClient: supabase, userId: fixture.userId },
     );

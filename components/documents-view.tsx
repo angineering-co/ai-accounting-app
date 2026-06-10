@@ -104,6 +104,7 @@ export function DocumentsView({ firmId, clientId }: DocumentsViewProps) {
             firm_id: firmId,
             client_id: clientId,
             storage_path: uploadedFile.path,
+            filename: uploadedFile.name,
           }),
         ),
       );
@@ -213,7 +214,12 @@ export function DocumentsView({ firmId, clientId }: DocumentsViewProps) {
                   )}
                 </div>
                 <div className="space-y-0.5 p-3">
-                  <p className="text-base font-medium text-slate-900">其他文件</p>
+                  <p
+                    className="truncate text-base font-medium text-slate-900"
+                    title={doc.filename ?? undefined}
+                  >
+                    {doc.filename ?? "其他文件"}
+                  </p>
                   <p className="text-sm text-muted-foreground">
                     上傳 {formatUploadDate(doc.created_at)}
                   </p>
@@ -246,6 +252,9 @@ export function DocumentsView({ firmId, clientId }: DocumentsViewProps) {
         document={selected}
         isOpen={!!selected}
         onOpenChange={(open) => !open && setSelected(null)}
+        onRenamed={async () => {
+          await mutate();
+        }}
       />
 
       <AlertDialog

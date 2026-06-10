@@ -286,6 +286,7 @@ export type Database = {
           doc_date: string
           doc_type: string
           file_url: string | null
+          filename: string | null
           firm_id: string
           id: string
           ocr_status: string | null
@@ -301,6 +302,7 @@ export type Database = {
           doc_date: string
           doc_type: string
           file_url?: string | null
+          filename?: string | null
           firm_id: string
           id?: string
           ocr_status?: string | null
@@ -316,6 +318,7 @@ export type Database = {
           doc_date?: string
           doc_type?: string
           file_url?: string | null
+          filename?: string | null
           firm_id?: string
           id?: string
           ocr_status?: string | null

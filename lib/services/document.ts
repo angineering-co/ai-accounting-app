@@ -52,9 +52,8 @@ export async function createDocument(
 /**
  * Create a childless `doc_type='other'` document — the NON_VAT container for
  * files that are not 統一發票 / 折讓單 (receipts, statements, etc). Uploaded from
- * the `/documents` page; periodless, OCR skipped. The original filename is not
- * persisted (the `documents` table has no filename column); the file is
- * identified by its preview + upload date until the editable-fields work lands.
+ * the `/documents` page; periodless, OCR skipped. `documents.filename` is the
+ * source of truth for `other` docs (invoice/allowance keep theirs on the subtable).
  *
  * `doc_date` is a today placeholder, mirroring `createInvoice` / `createAllowance`
  * (which set it before OCR fills the real value); `other` docs have no OCR so it
@@ -65,6 +64,7 @@ export async function createOtherDocument(
     firm_id: string;
     client_id: string;
     storage_path: string;
+    filename: string;
   },
   options?: DocumentServiceOptions,
 ): Promise<string> {
@@ -76,10 +76,45 @@ export async function createOtherDocument(
       type: "NON_VAT",
       doc_type: "other",
       file_url: input.storage_path,
+      filename: input.filename,
       ocr_status: null,
     },
     options,
   );
+}
+
+/**
+ * Rename an `other` document. `documents.filename` is the source of truth for
+ * `other` docs, so this is a plain column update. Guarded to `doc_type='other'`.
+ */
+export async function renameOtherDocument(
+  documentId: string,
+  filename: string,
+  options?: DocumentServiceOptions,
+): Promise<void> {
+  const supabase = options?.supabaseClient ?? (await createClient());
+
+  const trimmed = filename.trim();
+  if (!trimmed) throw new Error("檔名不可為空");
+
+  const { data: doc, error: fetchError } = await supabase
+    .from("documents")
+    .select("doc_type")
+    .eq("id", documentId)
+    .single();
+
+  if (fetchError) throw fetchError;
+  if (!doc) throw new Error("Document not found");
+  if (doc.doc_type !== "other") {
+    throw new Error("renameOtherDocument only handles doc_type='other'");
+  }
+
+  const { error } = await supabase
+    .from("documents")
+    .update({ filename: trimmed })
+    .eq("id", documentId);
+
+  if (error) throw error;
 }
 
 /**

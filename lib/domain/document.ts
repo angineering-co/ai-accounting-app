@@ -19,6 +19,9 @@ export const documentSchema = z.object({
   type: z.enum(DOC_VAT_TYPE),
   doc_type: z.enum(DOC_TYPE),
   file_url: z.string().nullable().optional(),
+  // Original filename. Authoritative only for doc_type='other' (childless);
+  // NULL for invoice/allowance, whose subtable owns the filename.
+  filename: z.string().nullable().optional(),
   ocr_status: z.enum(DOC_OCR_STATUS).nullable().optional(),
   amount: z.number().int().nullable().optional(),
   status: z.enum(DOC_STATUS).default("active"),
@@ -36,6 +39,7 @@ export const createDocumentSchema = z.object({
   type: z.enum(DOC_VAT_TYPE).default("VAT"),
   doc_type: z.enum(DOC_TYPE),
   file_url: z.string().nullable().optional(),
+  filename: z.string().nullable().optional(),
   ocr_status: z.enum(DOC_OCR_STATUS).nullable().optional(),
 });
 

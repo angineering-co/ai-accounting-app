@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1000px; height: 200px; overflow: hidden; }
+  .banner {
+    position: relative;
+    width: 1000px;
+    height: 200px;
+    background: linear-gradient(120deg, #ECFDF5 0%, #D1FAE5 60%, #A7F3D0 100%);
+    display: flex;
+    align-items: center;
+    font-family: -apple-system, "PingFang TC", "Noto Sans TC", system-ui, sans-serif;
+    overflow: hidden;
+  }
+  /* decorative soft blobs */
+  .blob {
+    position: absolute;
+    border-radius: 50%;
+    opacity: 0.35;
+    filter: blur(2px);
+  }
+  .blob1 { width: 260px; height: 260px; right: -60px; top: -90px;
+           background: radial-gradient(circle at 30% 30%, #6EE7B7, transparent 70%); }
+  .blob2 { width: 200px; height: 200px; right: 180px; bottom: -120px;
+           background: radial-gradient(circle at 40% 40%, #34D399, transparent 70%); opacity: 0.25; }
+
+  .icon { width: 150px; height: 150px; margin-left: 44px; flex: 0 0 auto; z-index: 2; }
+
+  .copy { margin-left: 30px; z-index: 2; }
+  .wordmark {
+    font-family: "Geist", -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-weight: 800;
+    font-size: 62px;
+    letter-spacing: -2px;
+    color: #0F172A;
+    line-height: 1;
+  }
+  .wordmark .ai { color: #10B981; }
+  .subtitle {
+    margin-top: 12px;
+    font-size: 27px;
+    font-weight: 500;
+    letter-spacing: 2px;
+    color: #475569;
+  }
+  .tagline {
+    margin-top: 11px;
+    font-size: 21px;
+    font-weight: 400;
+    letter-spacing: 0.5px;
+    color: #047857;
+  }
+
+  .mascot { position: absolute; right: 36px; bottom: 0; width: 168px; height: 168px; z-index: 2; }
+</style>
+</head>
+<body>
+  <div class="banner">
+    <div class="blob blob1"></div>
+    <div class="blob blob2"></div>
+
+    <!-- App icon (books / receipt) -->
+    <svg class="icon" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="wm-bg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#FFFFFF"></stop>
+          <stop offset="100%" stop-color="#ECFDF5"></stop>
+        </linearGradient>
+        <linearGradient id="wm-check" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#10B981"></stop>
+          <stop offset="100%" stop-color="#059669"></stop>
+        </linearGradient>
+      </defs>
+      <rect width="256" height="256" rx="60" fill="url(#wm-bg)"></rect>
+      <ellipse cx="128" cy="222" rx="78" ry="6" fill="#0F172A" opacity="0.08"></ellipse>
+      <g transform="rotate(-10 120 158)">
+        <rect x="48" y="84" width="132" height="150" rx="12" fill="#34D399"></rect>
+        <rect x="60" y="100" width="108" height="6" rx="3" fill="#FFFFFF" opacity="0.55"></rect>
+        <rect x="60" y="116" width="80" height="6" rx="3" fill="#FFFFFF" opacity="0.4"></rect>
+      </g>
+      <g transform="rotate(6 132 142)">
+        <rect x="62" y="68" width="132" height="150" rx="12" fill="#6EE7B7"></rect>
+        <rect x="74" y="84" width="108" height="6" rx="3" fill="#FFFFFF" opacity="0.65"></rect>
+        <rect x="74" y="100" width="92" height="6" rx="3" fill="#FFFFFF" opacity="0.5"></rect>
+      </g>
+      <g>
+        <rect x="58" y="50" width="140" height="160" rx="14" fill="#FFFFFF"></rect>
+        <rect x="58" y="50" width="140" height="160" rx="14" fill="none" stroke="#0F172A" stroke-width="3"></rect>
+        <rect x="58" y="50" width="140" height="22" rx="14" fill="#0F172A"></rect>
+        <rect x="58" y="62" width="140" height="10" fill="#0F172A"></rect>
+        <circle cx="74" cy="61" r="3" fill="#10B981"></circle>
+        <rect x="84" y="58" width="56" height="6" rx="3" fill="#FFFFFF" opacity="0.85"></rect>
+        <rect x="74" y="92" width="80" height="6" rx="3" fill="#CBD5E1"></rect>
+        <rect x="74" y="106" width="80" height="6" rx="3" fill="#CBD5E1"></rect>
+        <rect x="74" y="120" width="56" height="6" rx="3" fill="#CBD5E1"></rect>
+        <rect x="74" y="138" width="80" height="6" rx="3" fill="#E2E8F0"></rect>
+        <rect x="74" y="152" width="64" height="6" rx="3" fill="#E2E8F0"></rect>
+        <rect x="70" y="172" width="116" height="2" fill="#E2E8F0"></rect>
+        <rect x="74" y="180" width="40" height="6" rx="3" fill="#0F172A"></rect>
+        <rect x="120" y="180" width="34" height="6" rx="3" fill="#0F172A"></rect>
+        <path d="M164 190 L174 200 L192 180" stroke="url(#wm-check)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
+      </g>
+    </svg>
+
+    <div class="copy">
+      <div class="wordmark">SnapBooks<span class="ai">.ai</span></div>
+      <div class="subtitle">速博智慧有限公司｜記帳事務所</div>
+      <div class="tagline">拍照上傳憑證，專業會計師把關</div>
+    </div>
+
+    <!-- Bookie mascot -->
+    <svg class="mascot" viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="bk-body" cx="0.4" cy="0.3" r="0.9">
+          <stop offset="0%" stop-color="#0EA5E9"></stop>
+          <stop offset="100%" stop-color="#0284C7"></stop>
+        </radialGradient>
+      </defs>
+      <ellipse cx="120" cy="148" rx="76" ry="80" fill="url(#bk-body)"></ellipse>
+      <ellipse cx="120" cy="158" rx="50" ry="62" fill="#E0F2FE"></ellipse>
+      <path d="M104 130 Q120 138 136 130" stroke="#0EA5E9" stroke-width="2" fill="none" opacity="0.35"></path>
+      <path d="M98 156 Q120 168 142 156" stroke="#0EA5E9" stroke-width="2" fill="none" opacity="0.35"></path>
+      <path d="M102 184 Q120 196 138 184" stroke="#0EA5E9" stroke-width="2" fill="none" opacity="0.35"></path>
+      <path d="M62 96 L78 56 L94 96 Z" fill="#0284C7"></path>
+      <path d="M178 96 L162 56 L146 96 Z" fill="#0284C7"></path>
+      <circle cx="98" cy="116" r="30" fill="#FFFFFF"></circle>
+      <circle cx="142" cy="116" r="30" fill="#FFFFFF"></circle>
+      <circle cx="98" cy="116" r="30" fill="none" stroke="#0F172A" stroke-width="2" opacity="0.15"></circle>
+      <circle cx="142" cy="116" r="30" fill="none" stroke="#0F172A" stroke-width="2" opacity="0.15"></circle>
+      <circle cx="98" cy="116" r="9" fill="#0F172A"></circle>
+      <circle cx="101" cy="113" r="3" fill="#FFFFFF"></circle>
+      <circle cx="142" cy="116" r="9" fill="#0F172A"></circle>
+      <circle cx="145" cy="113" r="3" fill="#FFFFFF"></circle>
+      <path d="M120 132 L112 146 L128 146 Z" fill="#FBBF24"></path>
+      <ellipse cx="78" cy="138" rx="8" ry="4" fill="#F472B6" opacity="0.45"></ellipse>
+      <ellipse cx="162" cy="138" rx="8" ry="4" fill="#F472B6" opacity="0.45"></ellipse>
+      <g transform="translate(150 158) rotate(8)">
+        <rect x="0" y="0" width="52" height="62" rx="6" fill="#FFFFFF" stroke="#0F172A" stroke-width="2"></rect>
+        <rect x="0" y="0" width="52" height="14" rx="6" fill="#0F172A"></rect>
+        <rect x="0" y="6" width="52" height="8" fill="#0F172A"></rect>
+        <rect x="6" y="22" width="40" height="3" rx="1.5" fill="#CBD5E1"></rect>
+        <rect x="6" y="30" width="40" height="3" rx="1.5" fill="#CBD5E1"></rect>
+        <rect x="6" y="38" width="24" height="3" rx="1.5" fill="#CBD5E1"></rect>
+        <path d="M28 50 L36 58 L48 42" stroke="#10B981" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
+      </g>
+      <ellipse cx="56" cy="138" rx="18" ry="26" fill="#0284C7" transform="rotate(-26 56 138)"></ellipse>
+      <ellipse cx="100" cy="222" rx="14" ry="6" fill="#FBBF24"></ellipse>
+      <ellipse cx="140" cy="222" rx="14" ry="6" fill="#FBBF24"></ellipse>
+    </svg>
+  </div>
+</body>
+</html>

@@ -27,6 +27,12 @@ jobs:
       - name: Start Supabase
         run: supabase start -x studio,imgproxy,edge-runtime,pooler
 
+      # Integration tests build their own fixtures against a shared DB and
+      # assume a clean slate, so strip the preview/local seed data here.
+      # (supabase/seed.sql is for preview branches + local dev, not CI.)
+      - name: Reset DB without seed data
+        run: supabase db reset --no-seed
+
       - name: Export Supabase env
         run: |
           STATUS=$(supabase status -o json)

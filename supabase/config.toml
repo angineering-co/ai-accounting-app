@@ -10,7 +10,12 @@ enabled = true
 port = 54321
 # Schemas to expose in your API. Tables, views and stored procedures in this schema will get API
 # endpoints. `public` and `graphql_public` schemas are included by default.
-# After enabling "Expose Queues via PostgREST" in Studio, add "pgmq_public" here:
+# Do NOT add pgmq_public here. `supabase start` fails to load the PostgREST
+# schema cache when a listed schema doesn't exist, and the pgmq_public wrapper
+# schema is created per-environment by the "Expose Queues via PostgREST" button
+# (local Studio for local; the staging dashboard for staging) — we don't codify
+# that generated SQL, so it can't drift from Supabase's version. See
+# supabase/STAGING.md.
 schemas = ["public", "graphql_public"]
 # Extra schemas to add to the search_path of every request.
 extra_search_path = ["public", "extensions"]
@@ -376,8 +381,12 @@ inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
 
-# [edge_runtime.secrets]
-# secret_key = "env(SECRET_VALUE)"
+# Secrets handed to Edge Functions. The extraction-worker needs GEMINI_API_KEY.
+# This covers LOCAL dev (reads env(GEMINI_API_KEY) from your environment). On the
+# hosted staging branch it's set once with `supabase secrets set`. See
+# supabase/STAGING.md.
+[edge_runtime.secrets]
+GEMINI_API_KEY = "env(GEMINI_API_KEY)"
 
 [analytics]
 enabled = true

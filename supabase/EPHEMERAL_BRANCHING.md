@@ -46,23 +46,37 @@ log in, click around.
 These are **conditional**: skip them on PRs that don't touch extraction.
 
 1. **Expose Queues button** (`pgmq_public` wrappers) — dashboard click, per
-   branch. Not codifiable, same reason as the persistent model: it's
-   Supabase-generated SQL, and listing `pgmq_public` in `config.toml [api].schemas`
-   breaks `supabase start` (PostgREST can't load a schema-cache for a schema that
-   doesn't exist yet).
-2. **Cron vault secrets** (`project_url`, `service_role_key`) — **the irreducible
-   one.** Each branch has its own ref / URL / service-role key; migration
-   `20260311090000` seeds *local* values; and SQL can't discover its own URL. So
-   for every branch you want extraction on, re-run the vault SQL with *that
-   branch's* values (the same SQL as `STAGING.md` step 4). On staging this is a
-   one-time cost; here it's per branch.
+   branch. *Technically* this is codifiable — you could hand-write the
+   `pgmq_public` schema + wrapper functions in a migration, and since the
+   migration runs before PostgREST loads its schema cache, listing `pgmq_public`
+   in `config.toml [api].schemas` would then no longer break `supabase start`.
+   We **deliberately don't**, for the same reason as the persistent model: the
+   wrappers are Supabase-generated and version-coupled, so a hand-copied
+   migration is a frozen snapshot that silently **drifts** as Supabase evolves
+   them. "Codify what we own, click what Supabase owns" — so the button stays
+   manual on purpose.
+2. **Cron vault secrets** (`project_url`, `service_role_key`) — each branch has
+   its own ref / URL / service-role key; migration `20260311090000` seeds
+   *local* values; and SQL can't discover its own URL. What's irreducible is
+   that *some external actor must inject* the branch-specific values — but that
+   actor needn't be a human. Two ways:
+   - **Manual:** re-run the vault SQL with *that branch's* values (the same SQL
+     as `STAGING.md` step 4). One-time on staging; per branch here.
+   - **CI:** a GitHub Action that fires after the integration provisions the
+     branch, fetches its ref/URL/service-role-key via the Management API, and
+     writes the secrets. Removes the human step, at the cost of building +
+     maintaining that workflow: getting the post-provision timing right, a
+     Management-API token living in CI secrets, and no clean one-shot CLI for the
+     write (you go via the Management API or psql — and psql hits the
+     IPv6/pooler issue again).
 3. **`GEMINI_API_KEY`** — must exist as a branch/preview edge secret. *Verify*
    whether Supabase lets you set one preview-wide secret shared by all branches;
    if not, it's per branch.
 
-The only **irreducible** per-PR friction is therefore the extraction pipeline's
-self-referential URL/key (#2) plus the queue button (#1). Everything else
-automates.
+So the per-PR friction reduces to the extraction pipeline's self-referential
+URL/key (#2) plus the queue button (#1). Both can in principle be pushed further
+toward automation (CI injection for #2; a drift-prone migration for #1) — we
+keep them manual by choice, not by limitation. Everything else automates.
 
 ## Changes to this repo to adopt the ephemeral route
 

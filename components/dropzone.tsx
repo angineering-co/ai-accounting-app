@@ -5,6 +5,7 @@ import { getUploadFileId, type UseSupabaseUploadReturn } from '@/hooks/use-supab
 import { Button } from '@/components/ui/button'
 import { CheckCircle, File, Loader2, Upload, X } from 'lucide-react'
 import { createContext, type PropsWithChildren, useCallback, useContext } from 'react'
+import type { FileError } from 'react-dropzone'
 import Image from 'next/image'
 
 export const formatBytes = (
@@ -19,6 +20,21 @@ export const formatBytes = (
   if (bytes === 0 || bytes === undefined) return size !== undefined ? `0 ${size}` : '0 bytes'
   const i = size !== undefined ? sizes.indexOf(size) : Math.floor(Math.log(bytes) / Math.log(k))
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i]
+}
+
+// Translate a dropzone/upload error into Traditional Chinese by its code, so we
+// don't depend on the upstream (English) error text.
+const fileErrorMessage = (error: FileError, maxFileSize: number, fileSize: number) => {
+  switch (error.code) {
+    case 'file-too-large':
+      return `檔案 ${formatBytes(fileSize, 2)} 超過單檔上限 ${formatBytes(maxFileSize, 2)}`
+    case 'file-invalid-type':
+      return '檔案格式不支援，僅接受 PDF 或圖片'
+    case 'too-many-files':
+      return '檔案數量過多'
+    default:
+      return error.message
+  }
 }
 
 type DropzoneContextType = Omit<UseSupabaseUploadReturn, 'getRootProps' | 'getInputProps'>
@@ -72,6 +88,9 @@ const DropzoneContent = ({ className }: { className?: string }) => {
     errors,
     maxFileSize,
     maxFiles,
+    maxTotalSize,
+    totalSize,
+    exceedsMaxTotalSize,
     isSuccess,
   } = useDropzoneContext()
 
@@ -89,7 +108,7 @@ const DropzoneContent = ({ className }: { className?: string }) => {
       <div className={cn('flex flex-row items-center gap-x-2 justify-center', className)}>
         <CheckCircle size={16} className="text-primary" />
         <p className="text-primary text-base">
-          Successfully uploaded {files.length} file{files.length > 1 ? 's' : ''}
+          已成功上傳 {files.length} 個檔案
         </p>
       </div>
     )
@@ -131,19 +150,15 @@ const DropzoneContent = ({ className }: { className?: string }) => {
               {file.errors.length > 0 ? (
                 <p className="text-sm text-destructive">
                   {file.errors
-                    .map((e) =>
-                      e.message.startsWith('File is larger than')
-                        ? `File is larger than ${formatBytes(maxFileSize, 2)} (Size: ${formatBytes(file.size, 2)})`
-                        : e.message
-                    )
-                    .join(', ')}
+                    .map((e) => fileErrorMessage(e, maxFileSize, file.size))
+                    .join('、')}
                 </p>
               ) : loading && !isSuccessfullyUploaded ? (
-                <p className="text-sm text-muted-foreground">Uploading file...</p>
+                <p className="text-sm text-muted-foreground">上傳中…</p>
               ) : !!fileError ? (
-                <p className="text-sm text-destructive">Failed to upload: {fileError.message}</p>
+                <p className="text-sm text-destructive">上傳失敗：{fileError.message}</p>
               ) : isSuccessfullyUploaded ? (
-                <p className="text-sm text-primary">Successfully uploaded file</p>
+                <p className="text-sm text-primary">已上傳</p>
               ) : (
                 <p className="text-sm text-muted-foreground">{formatBytes(file.size, 2)}</p>
               )}
@@ -164,8 +179,12 @@ const DropzoneContent = ({ className }: { className?: string }) => {
       })}
       {exceedMaxFiles && (
         <p className="text-base text-left mt-2 text-destructive">
-          You may upload only up to {maxFiles} files, please remove {files.length - maxFiles} file
-          {files.length - maxFiles > 1 ? 's' : ''}.
+          最多只能上傳 {maxFiles} 個檔案，請移除 {files.length - maxFiles} 個。
+        </p>
+      )}
+      {exceedsMaxTotalSize && (
+        <p className="text-base text-left mt-2 text-destructive">
+          這些檔案共 {formatBytes(totalSize, 2)}，超過單次上傳上限 {formatBytes(maxTotalSize, 2)}，請移除部分檔案。
         </p>
       )}
       {files.length > 0 && !exceedMaxFiles && (
@@ -173,15 +192,19 @@ const DropzoneContent = ({ className }: { className?: string }) => {
           <Button
             variant="outline"
             onClick={onUpload}
-            disabled={files.some((file) => file.errors.length !== 0) || loading}
+            disabled={
+              files.some((file) => file.errors.length !== 0) ||
+              loading ||
+              exceedsMaxTotalSize
+            }
           >
             {loading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Uploading...
+                上傳中…
               </>
             ) : (
-              <>Upload files</>
+              <>上傳檔案</>
             )}
           </Button>
         </div>
@@ -191,7 +214,8 @@ const DropzoneContent = ({ className }: { className?: string }) => {
 }
 
 const DropzoneEmptyState = ({ className }: { className?: string }) => {
-  const { maxFiles, maxFileSize, inputRef, isSuccess } = useDropzoneContext()
+  const { maxFileSize, maxTotalSize, inputRef, isSuccess } =
+    useDropzoneContext()
 
   if (isSuccess) {
     return null
@@ -200,24 +224,22 @@ const DropzoneEmptyState = ({ className }: { className?: string }) => {
   return (
     <div className={cn('flex flex-col items-center gap-y-2', className)}>
       <Upload size={20} className="text-muted-foreground" />
-      <p className="text-base">
-        Upload{!!maxFiles && maxFiles > 1 ? ` ${maxFiles}` : ''} file
-        {!maxFiles || maxFiles > 1 ? 's' : ''}
-      </p>
+      <p className="text-base">上傳檔案</p>
       <div className="flex flex-col items-center gap-y-1">
         <p className="text-sm text-muted-foreground">
-          Drag and drop or{' '}
+          拖曳檔案至此，或{' '}
           <a
             onClick={() => inputRef.current?.click()}
             className="underline cursor-pointer transition hover:text-foreground"
           >
-            select {maxFiles === 1 ? `file` : 'files'}
-          </a>{' '}
-          to upload
+            選擇檔案
+          </a>
         </p>
         {maxFileSize !== Number.POSITIVE_INFINITY && (
           <p className="text-sm text-muted-foreground">
-            Maximum file size: {formatBytes(maxFileSize, 2)}
+            單檔上限 {formatBytes(maxFileSize, 2)}
+            {maxTotalSize !== Number.POSITIVE_INFINITY &&
+              `（單次上限 ${formatBytes(maxTotalSize, 2)}）`}
           </p>
         )}
       </div>

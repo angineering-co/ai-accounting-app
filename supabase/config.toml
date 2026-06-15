@@ -17,6 +17,14 @@ extra_search_path = ["public", "extensions"]
 # The maximum number of rows returns from a view, table, or stored procedure. Limits payload size
 # for accidental or malicious requests.
 max_rows = 1000
+# TODO(by 2026-10-30): remove this flag and add explicit GRANTs in migrations.
+# As of CLI v2.106.0 this defaults to false, which stops granting anon/
+# authenticated/service_role access to tables created by migrations (every
+# PostgREST query then hits "permission denied"). This `= true` restores the
+# pre-v2.106.0 behavior as a STOPGAP only.
+# The flag is deprecated and scheduled for removal on 2026-10-30 — before then,
+# grant the intended roles per table in SQL migrations and delete this line.
+auto_expose_new_tables = true
 
 [api.tls]
 # Enable HTTPS endpoints locally using a self-signed certificate.

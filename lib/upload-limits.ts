@@ -12,11 +12,14 @@
 /** Accepted MIME types for document uploads (images and PDFs). */
 export const ACCEPTED_UPLOAD_MIME_TYPES = ["image/*", "application/pdf"];
 
+// Decimal megabytes (not 1024-based): the dropzone's formatBytes uses base-1000,
+// so these render as a clean "10 MB" / "50 MB" in the UI.
+
 /** Maximum size of a single uploaded file, in bytes (10MB). */
-export const MAX_UPLOAD_FILE_SIZE = 10 * 1024 * 1024;
+export const MAX_UPLOAD_FILE_SIZE = 10 * 1000 * 1000;
 
 /** Maximum combined size of all files in one upload batch, in bytes (50MB). */
-export const MAX_UPLOAD_BATCH_SIZE = 50 * 1024 * 1024;
+export const MAX_UPLOAD_BATCH_SIZE = 50 * 1000 * 1000;
 
 /** Maximum number of files allowed in one upload batch. */
 export const MAX_UPLOAD_FILES = 10;

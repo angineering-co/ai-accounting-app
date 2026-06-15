@@ -15,6 +15,9 @@ Principle: **codify what we own, click what Supabase owns.** Supabase-generated
 SQL (the queue wrapper functions) is *not* put in migrations — that's a snapshot
 that drifts from the live Supabase version. It comes from the dashboard button.
 
+> Considering per-PR ephemeral branches instead? See
+> [`EPHEMERAL_BRANCHING.md`](./EPHEMERAL_BRANCHING.md) for that route's tradeoffs.
+
 ## Reproduces automatically (in code)
 
 - **Queue + extensions + cron** — `migrations/20260311090000_create_extraction_queue.sql`.

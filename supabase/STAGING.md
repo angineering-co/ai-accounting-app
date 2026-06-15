@@ -65,29 +65,41 @@ schemas.
 
 ### 4. Point the cron at staging's own function
 
-```bash
-PROJECT_URL=https://<staging-ref>.supabase.co \
-SERVICE_ROLE_KEY=<staging-service-role-key> \
-DB_URL=<staging-db-connection-string> \
-./scripts/configure-staging.sh
+The `process-extraction-jobs` cron reads its target URL + auth from two Vault
+secrets that migration `20260311090000` seeds with *local* values — wrong on a
+hosted branch. Reset them to staging's values. Easiest: staging dashboard → SQL
+Editor, paste and run (substitute the two values):
+
+```sql
+begin;
+delete from vault.secrets where name in ('project_url', 'service_role_key');
+select vault.create_secret('https://<staging-ref>.supabase.co', 'project_url');
+select vault.create_secret('<staging-service-role-key>', 'service_role_key');
+commit;
 ```
+
+(`scripts/configure-staging.sh` does the same over `psql` if you have a working
+direct DB connection — note the direct endpoint is IPv6-only, so the SQL editor
+is usually less hassle.)
 
 ### 5. Seed once
 
-```bash
-psql "<staging-db-connection-string>" -f supabase/seed.sql
-```
-
-Creates 速博記帳事務所, the admin + client logins, and 速博智慧有限公司.
+Staging dashboard → SQL Editor → paste the full contents of `supabase/seed.sql`
+→ Run. Creates 速博記帳事務所, the admin + client logins, and 速博智慧有限公司.
 Idempotent (`on conflict do nothing`), and we never re-seed, so accumulated data
 is preserved.
 
+(If you have `psql` on a reachable DB connection: `psql
+"<staging-db-connection-string>" -f supabase/seed.sql`. The direct DB host is
+IPv6-only; use the **Session pooler** connection string for IPv4.)
+
 ### 6. Wire Vercel + Auth
 
-- In Vercel, set the **Preview** environment variables to staging's values
-  (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`). This is
-  what makes every PR preview talk to staging. Keep the Supabase–Vercel
-  integration only for Production vars.
+- In Vercel, set the **Preview** environment variables to staging's values:
+  `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and
+  `POSTGRES_URL` (the server-side direct DB connection — previews fail without
+  it). This is what makes every PR preview talk to staging. Keep the
+  Supabase–Vercel integration only for Production vars.
 - Add the Vercel preview domain(s) to staging's **Auth → URL Configuration**
   redirect allowlist so logins work from previews.
 

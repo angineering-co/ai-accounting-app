@@ -4,6 +4,12 @@
 # Function. Run it ONCE for the staging branch (and once for production). See
 # supabase/STAGING.md.
 #
+# OPTIONAL: this is the psql form. The primary, lower-friction path is to paste
+# the same SQL into the hosted env's SQL editor (see STAGING.md step 4) — the
+# direct DB endpoint is IPv6-only, so psql often can't connect from a typical
+# machine. Use this script only when you have a reachable connection (e.g. the
+# Session pooler connection string).
+#
 # WHY THIS EXISTS
 # ---------------
 # The `process-extraction-jobs` pg_cron job calls the extraction-worker Edge
@@ -49,9 +55,11 @@ echo "Configuring extraction-pipeline Vault secrets for: ${PROJECT_URL}"
 # delete-then-create keeps this idempotent (vault.secrets.name is unique).
 psql "${DB_URL}" -v ON_ERROR_STOP=1 \
   -v url="${PROJECT_URL}" -v key="${SERVICE_ROLE_KEY}" <<'SQL'
+begin;
 delete from vault.secrets where name in ('project_url', 'service_role_key');
 select vault.create_secret(:'url', 'project_url');
 select vault.create_secret(:'key', 'service_role_key');
+commit;
 SQL
 
 echo "Done. The process-extraction-jobs cron job will now POST to:"

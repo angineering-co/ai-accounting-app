@@ -99,8 +99,25 @@ IPv6-only; use the **Session pooler** connection string for IPv4.)
   `POSTGRES_URL` (the server-side direct DB connection — previews fail without
   it). This is what makes every PR preview talk to staging. Keep the
   Supabase–Vercel integration only for Production vars.
-- Add the Vercel preview domain(s) to staging's **Auth → URL Configuration**
-  redirect allowlist so logins work from previews.
+- Add the Vercel preview domains to staging's redirect allowlist so logins work
+  from previews:
+  `https://supabase.com/dashboard/project/<staging-project-id>/auth/url-configuration`.
+  The wildcard patterns we already use in prod cover the PR preview domains, so
+  the same list works on staging:
+
+  ```
+  https://snapbooks.ai/auth/confirm
+  https://snapbooks.ai/auth/update-password
+  https://ai-accounting-app-*.vercel.app/**
+  https://ai-*-accounting-app-angineering.vercel.app
+  https://ai-*-accounting-app-angineering.vercel.app/**
+  https://ai-accounting-app-angineering.vercel.app/
+  https://ai-accounting-app-angineering.vercel.app/**
+  https://ai-*-accounting-app-snapbooks-ai.vercel.app
+  https://ai-*-accounting-app-snapbooks-ai.vercel.app/**
+  https://ai-accounting-app-snapbooks-ai.vercel.app/
+  https://ai-accounting-app-snapbooks-ai.vercel.app/**
+  ```
 
 ## Operating
 

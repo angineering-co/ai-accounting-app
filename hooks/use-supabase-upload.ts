@@ -94,9 +94,15 @@ const useSupabaseUpload = (options: UseSupabaseUploadOptions) => {
     return successes.length === files.length && errors.length === 0;
   }, [files.length, successes.length, errors.length]);
 
+  // Only count files still pending upload, mirroring the `filesToUpload` filter
+  // in onUpload. Otherwise, after a partial success, already-uploaded files
+  // would keep consuming the batch budget and could lock the upload button.
   const totalSize = useMemo(
-    () => files.reduce((sum, file) => sum + file.size, 0),
-    [files]
+    () =>
+      files
+        .filter((file) => !successes.includes(getUploadFileId(file)))
+        .reduce((sum, file) => sum + file.size, 0),
+    [files, successes]
   );
 
   const exceedsMaxTotalSize = totalSize > maxTotalSize;

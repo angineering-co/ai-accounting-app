@@ -19,17 +19,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v1
-        with:
-          version: latest
-
+      # CLI version is pinned via the `supabase` devDependency (package.json /
+      # package-lock.json) so local and CI run the identical binary + service
+      # images. `npm ci` above installs it; `npx supabase` resolves the locked
+      # binary. Bump deliberately with `npm i -D supabase@latest --save-exact`,
+      # never via a floating `setup-cli` action.
       - name: Start Supabase
-        run: supabase start -x studio,imgproxy,edge-runtime,pooler
+        run: npx supabase start -x studio,imgproxy,edge-runtime,pooler
 
       - name: Export Supabase env
         run: |
-          STATUS=$(supabase status -o json)
+          STATUS=$(npx supabase status -o json)
           echo "NEXT_PUBLIC_SUPABASE_URL=$(echo "$STATUS" | jq -r '.API_URL')" >> "$GITHUB_ENV"
           echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$(echo "$STATUS" | jq -r '.PUBLISHABLE_KEY')" >> "$GITHUB_ENV"
           echo "SUPABASE_SERVICE_ROLE_KEY=$(echo "$STATUS" | jq -r '.SERVICE_ROLE_KEY')" >> "$GITHUB_ENV"

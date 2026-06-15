@@ -78,9 +78,8 @@ select vault.create_secret('<staging-service-role-key>', 'service_role_key');
 commit;
 ```
 
-(`scripts/configure-staging.sh` does the same over `psql` if you have a working
-direct DB connection — note the direct endpoint is IPv6-only, so the SQL editor
-is usually less hassle.)
+(Same SQL works over `psql` if you have a reachable connection — the direct DB
+endpoint is IPv6-only, so use the **Session pooler** string for IPv4.)
 
 ### 5. Seed once
 

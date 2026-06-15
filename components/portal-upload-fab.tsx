@@ -2,7 +2,13 @@
 
 import { useCallback, useId, useRef, useState } from "react";
 import { Camera, FileText, Images, Receipt, X } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  ACCEPTED_UPLOAD_MIME_TYPES,
+  MAX_UPLOAD_FILE_SIZE,
+} from "@/lib/upload-limits";
+import { formatBytes } from "@/components/dropzone";
 import {
   Sheet,
   SheetContent,
@@ -59,9 +65,6 @@ const isMimeTypeAllowed = (fileType: string, allowedMimeTypes: string[]) => {
   });
 };
 
-const ALLOWED_MIME_TYPES = ["image/*", "application/pdf"];
-const MAX_FILE_SIZE = 50 * 1024 * 1024;
-
 type PortalUploadFabProps = {
   onFilesSelected: (
     files: File[],
@@ -94,11 +97,27 @@ export function PortalUploadFab({
       const snapshot = fileList ? Array.from(fileList) : [];
       if (snapshot.length === 0 || !selectedDocType) return;
 
-      const validFiles = snapshot.filter(
-        (f) =>
-          isMimeTypeAllowed(f.type, ALLOWED_MIME_TYPES) &&
-          f.size <= MAX_FILE_SIZE,
-      );
+      const validFiles: File[] = [];
+      let tooLargeCount = 0;
+      let wrongTypeCount = 0;
+      for (const f of snapshot) {
+        if (!isMimeTypeAllowed(f.type, ACCEPTED_UPLOAD_MIME_TYPES)) {
+          wrongTypeCount += 1;
+        } else if (f.size > MAX_UPLOAD_FILE_SIZE) {
+          tooLargeCount += 1;
+        } else {
+          validFiles.push(f);
+        }
+      }
+
+      if (wrongTypeCount > 0) {
+        toast.error(`有 ${wrongTypeCount} 個檔案格式不支援，僅接受 PDF 或圖片。`);
+      }
+      if (tooLargeCount > 0) {
+        toast.error(
+          `有 ${tooLargeCount} 個檔案超過單檔上限 ${formatBytes(MAX_UPLOAD_FILE_SIZE, 0)}，請壓縮後再上傳。`,
+        );
+      }
 
       if (validFiles.length > 0) {
         onFilesSelected(

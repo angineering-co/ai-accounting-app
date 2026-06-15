@@ -13,6 +13,12 @@ import { toast } from "sonner";
 import { createInvoice } from "@/lib/services/invoice";
 import { createAllowance } from "@/lib/services/allowance";
 import { useSupabaseUpload } from "@/hooks/use-supabase-upload";
+import {
+  ACCEPTED_UPLOAD_MIME_TYPES,
+  MAX_UPLOAD_BATCH_SIZE,
+  MAX_UPLOAD_FILE_SIZE,
+  MAX_UPLOAD_FILES,
+} from "@/lib/upload-limits";
 import { usePreAiUploadQueue } from "@/hooks/use-pre-ai-upload-queue";
 import { InvoiceDeleteDialog } from "@/components/invoice/invoice-delete-dialog";
 import { AllowanceDeleteDialog } from "@/components/allowance-delete-dialog";
@@ -85,9 +91,10 @@ export const DocumentUploadSection = forwardRef<
   const uploadProps = useSupabaseUpload({
     bucketName: "documents",
     path: `${firmId}/${clientId}/${periodYYYMM}`,
-    allowedMimeTypes: ["image/*", "application/pdf"],
-    maxFiles: 10,
-    maxFileSize: 50 * 1024 * 1024,
+    allowedMimeTypes: ACCEPTED_UPLOAD_MIME_TYPES,
+    maxFiles: MAX_UPLOAD_FILES,
+    maxFileSize: MAX_UPLOAD_FILE_SIZE,
+    maxTotalSize: MAX_UPLOAD_BATCH_SIZE,
     getStorageKey: (file) => {
       const ext = file.name.split(".").pop();
       return `${crypto.randomUUID()}${ext ? `.${ext}` : ""}`;

@@ -42,6 +42,12 @@ type UseSupabaseUploadOptions = {
    */
   maxFiles?: number
   /**
+   * Maximum combined size of all files in a single batch, in bytes.
+   *
+   * Defaults to no batch limit.
+   */
+  maxTotalSize?: number
+  /**
    * The number of seconds the asset is cached in the browser and in the Supabase CDN.
    *
    * This is set in the Cache-Control: max-age=<seconds> header. Defaults to 3600 seconds.
@@ -69,6 +75,7 @@ const useSupabaseUpload = (options: UseSupabaseUploadOptions) => {
     allowedMimeTypes = [],
     maxFileSize = Number.POSITIVE_INFINITY,
     maxFiles = 1,
+    maxTotalSize = Number.POSITIVE_INFINITY,
     cacheControl = 3600,
     upsert = false,
     getStorageKey,
@@ -86,6 +93,13 @@ const useSupabaseUpload = (options: UseSupabaseUploadOptions) => {
     }
     return successes.length === files.length && errors.length === 0;
   }, [files.length, successes.length, errors.length]);
+
+  const totalSize = useMemo(
+    () => files.reduce((sum, file) => sum + file.size, 0),
+    [files]
+  );
+
+  const exceedsMaxTotalSize = totalSize > maxTotalSize;
 
   const onDrop = useCallback(
     (acceptedFiles: File[], fileRejections: FileRejection[]) => {
@@ -120,6 +134,12 @@ const useSupabaseUpload = (options: UseSupabaseUploadOptions) => {
   })
 
   const onUpload = useCallback(async () => {
+    // Hard guard so paths that auto-upload (e.g. the mobile FAB injecting files
+    // and triggering onUpload directly) can't bypass the batch-size limit.
+    if (totalSize > maxTotalSize) {
+      return
+    }
+
     setLoading(true)
 
     // Only upload files that are not already in the successes list
@@ -161,7 +181,7 @@ const useSupabaseUpload = (options: UseSupabaseUploadOptions) => {
     ])
 
     setLoading(false)
-  }, [files, path, bucketName, successes, cacheControl, upsert, getStorageKey])
+  }, [files, path, bucketName, successes, cacheControl, upsert, getStorageKey, totalSize, maxTotalSize])
 
   useEffect(() => {
     if (files.length === 0) {
@@ -199,6 +219,9 @@ const useSupabaseUpload = (options: UseSupabaseUploadOptions) => {
     onUpload,
     maxFileSize: maxFileSize,
     maxFiles: maxFiles,
+    maxTotalSize: maxTotalSize,
+    totalSize,
+    exceedsMaxTotalSize,
     allowedMimeTypes,
     ...dropzoneProps,
   }

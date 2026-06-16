@@ -19,7 +19,7 @@ const BATCH_SIZE = 5;
 const CONCURRENCY_LIMIT = 2;
 const VISIBILITY_TIMEOUT = 120; // seconds
 const MAX_READ_COUNT = 3;
-const GEMINI_MODEL = "gemini-3.1-flash-lite";
+const GEMINI_MODEL = "gemini-3.5-flash";
 // Gemini 3.x replaces the numeric thinking_budget with a string enum.
 // "low" keeps reasoning minimal for fast structured extraction; raise to
 // "medium" if accuracy regresses.

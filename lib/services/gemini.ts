@@ -32,8 +32,9 @@ interface GeminiRequest {
   };
 }
 
-// Gemini 3.1 Flash Lite: fastest model suited to structured extraction.
-const GEMINI_MODEL = "gemini-3.1-flash-lite";
+// Gemini 3.5 Flash: fast, and accurate enough on account classification
+// (the reasoning-heaviest extraction step) where flash-lite regressed.
+const GEMINI_MODEL = "gemini-3.5-flash";
 
 // Reasoning effort for extraction. "low" trades a small amount of reasoning
 // for substantially lower latency; raise to "medium" if accuracy regresses.

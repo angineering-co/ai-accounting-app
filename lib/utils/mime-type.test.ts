@@ -1,7 +1,21 @@
 import { describe, it, expect } from "vitest";
-import { getImportFileMimeType } from "./mime-type";
+import { getImportFileMimeType, isHeicFilename } from "./mime-type";
 
 const blob = (type: string) => new Blob(["x"], { type });
+
+describe("isHeicFilename", () => {
+  it("matches .heic/.heif case-insensitively", () => {
+    expect(isHeicFilename("IMG_1234.HEIC")).toBe(true);
+    expect(isHeicFilename("photo.heif")).toBe(true);
+  });
+
+  it("rejects other formats and empty input", () => {
+    expect(isHeicFilename("scan.jpg")).toBe(false);
+    expect(isHeicFilename("doc.pdf")).toBe(false);
+    expect(isHeicFilename(null)).toBe(false);
+    expect(isHeicFilename(undefined)).toBe(false);
+  });
+});
 
 describe("getImportFileMimeType", () => {
   it("prefers a valid blob content-type", () => {

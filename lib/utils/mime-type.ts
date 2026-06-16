@@ -1,3 +1,9 @@
+/** True when the filename has a HEIC/HEIF extension (case-insensitive). */
+export function isHeicFilename(filename: string | null | undefined): boolean {
+  const ext = filename?.split(".").pop()?.toLowerCase();
+  return ext === "heic" || ext === "heif";
+}
+
 /**
  * Get MIME type from a Blob and filename.
  * Prefers the Blob's content-type if valid, falls back to extension-based detection.

@@ -62,6 +62,7 @@ import {
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ImportedAllowancePreview } from "@/components/imported-allowance-preview";
+import { ReclassifyDocumentActions } from "@/components/reclassify-document-actions";
 import Image from "next/image";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -136,6 +137,9 @@ interface AllowanceReviewDialogProps {
   onNext?: () => void;
   onPrevious?: () => void;
   isLocked?: boolean;
+  // Fired after a successful reclassify (convert type / move to 其他文件); the
+  // allowance leaves this list, so the parent should close the dialog and refresh.
+  onReclassified?: () => void;
 }
 
 export function AllowanceReviewDialog({
@@ -146,6 +150,7 @@ export function AllowanceReviewDialog({
   onNext,
   onPrevious,
   isLocked = false,
+  onReclassified,
 }: AllowanceReviewDialogProps) {
   const [excelDownloadUrl, setExcelDownloadUrl] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -157,6 +162,10 @@ export function AllowanceReviewDialog({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [previewLoading, setPreviewLoading] = useState(false);
+  // Tracks unsaved field edits since the dialog opened or last saved, so the
+  // reclassify menu can disable-while-dirty (a convert seeds the new subtable
+  // from persisted state, which would silently drop in-progress edits).
+  const [hasEdited, setHasEdited] = useState(false);
   const supabase = createClient();
 
   const form = useForm<AllowanceReviewFormValues>({
@@ -237,6 +246,7 @@ export function AllowanceReviewDialog({
   };
 
   const clearConfidence = (fieldName: string) => {
+    setHasEdited(true);
     const currentConfidence = form.getValues("confidence");
     if (
       currentConfidence &&
@@ -252,6 +262,7 @@ export function AllowanceReviewDialog({
   useEffect(() => {
     if (allowance && isOpen) {
       const extractedData = allowance.extracted_data || {};
+      setHasEdited(false);
 
       form.reset({
         allowanceType: extractedData.allowanceType || "電子發票折讓",
@@ -347,6 +358,7 @@ export function AllowanceReviewDialog({
           original_invoice_serial_code:
             dataToSave.originalInvoiceSerialCode || null,
         });
+        setHasEdited(false);
         toast.success(status === "confirmed" ? "折讓已確認" : "變更已儲存");
 
         if (shouldClose) {
@@ -424,6 +436,20 @@ export function AllowanceReviewDialog({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, previewText, isExcelImport, onNext, onPrevious, form, handleSave]);
 
+  // Reclassify (convert type / move to 其他文件) is blocked by the same downstream
+  // commitments the server guards against; surface the reason as a tooltip.
+  const reclassifyDisabledReason = isLocked
+    ? "此折讓已鎖定，無法重新分類"
+    : isExcelImport
+      ? "匯入的資料無法重新分類"
+      : allowance?.status === "confirmed"
+        ? "請先取消確認再重新分類"
+        : allowance?.status === "processing"
+          ? "文件正在解析中，請稍候"
+          : hasEdited
+            ? "請先儲存變更，再重新分類"
+            : null;
+
   const isPdf = allowance?.filename?.toLowerCase().endsWith(".pdf");
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -454,11 +480,27 @@ export function AllowanceReviewDialog({
         className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <DialogHeader>
-          <DialogTitle>折讓內容確認</DialogTitle>
-          <DialogDescription>
-            請確認折讓資訊是否正確。您可以在此進行修改。
-          </DialogDescription>
+        <DialogHeader className="flex flex-row items-center justify-between space-y-0">
+          <div>
+            <DialogTitle>折讓內容確認</DialogTitle>
+            <DialogDescription>
+              請確認折讓資訊是否正確。您可以在此進行修改。
+            </DialogDescription>
+          </div>
+          {allowance && (
+            <div className="flex items-center mr-8">
+              <ReclassifyDocumentActions
+                documentId={allowance.document_id}
+                docType="allowance"
+                inOrOut={allowance.in_or_out}
+                disabledReason={reclassifyDisabledReason}
+                onReclassified={() => {
+                  onOpenChange(false);
+                  onReclassified?.();
+                }}
+              />
+            </div>
+          )}
         </DialogHeader>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">

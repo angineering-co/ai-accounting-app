@@ -26,6 +26,7 @@ function makeInvoice(overrides: Partial<Invoice> & {
 }): Invoice {
   return {
     id: "00000000-0000-4000-8000-000000000001",
+    document_id: "00000000-0000-4000-8000-0000000000d1",
     firm_id: FIRM,
     client_id: CLIENT,
     storage_path: "demo/path.pdf",
@@ -47,6 +48,7 @@ function makeAllowance(overrides: Partial<Allowance> & {
 }): Allowance {
   return {
     id: "00000000-0000-4000-8000-000000000002",
+    document_id: "00000000-0000-4000-8000-0000000000d2",
     firm_id: FIRM,
     client_id: CLIENT,
     tax_filing_period_id: null,

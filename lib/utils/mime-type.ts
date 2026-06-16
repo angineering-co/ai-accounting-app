@@ -11,6 +11,8 @@ export function getImportFileMimeType(blob: Blob, filename: string): string {
       "image/jpeg",
       "image/gif",
       "image/webp",
+      "image/heic",
+      "image/heif",
     ];
     if (supportedTypes.includes(blob.type)) {
       return blob.type;
@@ -26,23 +28,15 @@ export function getImportFileMimeType(blob: Blob, filename: string): string {
     jpeg: "image/jpeg",
     gif: "image/gif",
     webp: "image/webp",
+    heic: "image/heic",
+    heif: "image/heif",
   };
-
-  // Special handling for HEIC/HEIF - not supported by Gemini
-  if (ext === "heic" || ext === "heif") {
-    throw new Error(
-      `HEIC/HEIF format is not supported by Gemini API. ` +
-        `Please convert your image to JPEG or PNG format before uploading. ` +
-        `You can use online converters or image editing software to convert the file.`
-    );
-  }
 
   const detectedType = mimeTypes[ext || ""];
   if (!detectedType) {
     throw new Error(
       `Unsupported file format: ${ext || "unknown"}. ` +
-        `Supported formats: PDF, PNG, JPEG, GIF, WEBP. ` +
-        `For HEIC files, please convert to JPEG or PNG first.`
+        `Supported formats: PDF, PNG, JPEG, GIF, WEBP, HEIC, HEIF.`
     );
   }
 

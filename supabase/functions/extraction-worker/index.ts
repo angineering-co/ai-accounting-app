@@ -207,6 +207,7 @@ async function callGemini(
 function getMimeType(blobType: string, filename: string): string {
   const supportedTypes = [
     "application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp",
+    "image/heic", "image/heif",
   ];
   if (blobType && blobType !== "application/octet-stream" && supportedTypes.includes(blobType)) {
     return blobType;
@@ -215,10 +216,8 @@ function getMimeType(blobType: string, filename: string): string {
   const mimeTypes: Record<string, string> = {
     pdf: "application/pdf", png: "image/png", jpg: "image/jpeg",
     jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp",
+    heic: "image/heic", heif: "image/heif",
   };
-  if (ext === "heic" || ext === "heif") {
-    throw new Error("HEIC/HEIF format is not supported by Gemini API.");
-  }
   const detectedType = mimeTypes[ext || ""];
   if (!detectedType) throw new Error(`Unsupported file format: ${ext || "unknown"}`);
   return detectedType;

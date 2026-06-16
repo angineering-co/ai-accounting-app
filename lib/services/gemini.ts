@@ -23,8 +23,25 @@ interface GeminiRequest {
   }>;
   generationConfig: {
     response_mime_type: string;
+    thinkingConfig?: {
+      // Gemini 3.x replaces the numeric thinking_budget with a string enum.
+      // "low" keeps reasoning minimal for fast structured extraction.
+      // See https://ai.google.dev/gemini-api/docs/whats-new-gemini-3.5#thinking-budget
+      thinkingLevel: "minimal" | "low" | "medium" | "high";
+    };
   };
 }
+
+// Gemini 3.5 Flash: fast, and accurate enough on account classification
+// (the reasoning-heaviest extraction step) where flash-lite regressed.
+const GEMINI_MODEL = "gemini-3.5-flash";
+
+// Reasoning effort for extraction. "low" trades a small amount of reasoning
+// for substantially lower latency; raise to "medium" if accuracy regresses.
+const GEMINI_THINKING_LEVEL = "low" as const;
+
+const buildGeminiApiUrl = (apiKey: string) =>
+  `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
 
 interface GeminiResponse {
   candidates: Array<{
@@ -92,10 +109,11 @@ export async function determineAccountForInputElectronicInvoice(
     ],
     generationConfig: {
       response_mime_type: "text/plain",
+      thinkingConfig: { thinkingLevel: GEMINI_THINKING_LEVEL },
     },
   };
 
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const apiUrl = buildGeminiApiUrl(apiKey);
 
   try {
     const response = await fetch(apiUrl, {
@@ -252,10 +270,11 @@ export async function extractInvoiceData(
     ],
     generationConfig: {
       response_mime_type: "application/json",
+      thinkingConfig: { thinkingLevel: GEMINI_THINKING_LEVEL },
     },
   };
 
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const apiUrl = buildGeminiApiUrl(apiKey);
 
   try {
     const response = await fetch(apiUrl, {
@@ -389,10 +408,11 @@ export async function extractAllowanceData(
     ],
     generationConfig: {
       response_mime_type: "application/json",
+      thinkingConfig: { thinkingLevel: GEMINI_THINKING_LEVEL },
     },
   };
 
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const apiUrl = buildGeminiApiUrl(apiKey);
 
   try {
     const response = await fetch(apiUrl, {

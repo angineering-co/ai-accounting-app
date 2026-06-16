@@ -49,7 +49,7 @@ deny() {
 
 # --- escape hatch for PROD: env var, or inline `ALLOW_PROD=1 <cmd>` prefix ---
 allow_prod=0
-if [ "${ALLOW_PROD:-}" = "1" ] || printf '%s' "$cmd" | grep -Eq 'ALLOW_PROD=1'; then
+if [ "${ALLOW_PROD:-}" = "1" ] || printf '%s' "$cmd" | grep -Eq '(^|[;&|[:space:]])ALLOW_PROD=1([[:space:]]|$)'; then
   allow_prod=1
 fi
 
@@ -60,6 +60,8 @@ if printf '%s' "$cmd" | grep -Eq '(^|[^[:alnum:]_])supabase(@[^[:space:]]+)?([[:
   remote_op=0
   # write/mutating subcommands that hit a remote project
   printf '%s' "$cmd" | grep -Eq '\bdb[[:space:]]+push\b|\bdb[[:space:]]+pull\b|\blink\b' && remote_op=1
+  # remote-mutating function deploys and secret writes (could clobber prod if linked)
+  printf '%s' "$cmd" | grep -Eq '\bfunctions[[:space:]]+(deploy|delete)\b|\bsecrets[[:space:]]+(set|unset)\b' && remote_op=1
   # branch mutations are guarded; read-only `branches get`/`list` are NOT
   printf '%s' "$cmd" | grep -Eq '\bbranches[[:space:]]+(create|delete|disable|update)\b' && remote_op=1
   # `db reset` and `migration up` default to LOCAL; only remote when pointed at one
@@ -101,14 +103,14 @@ if printf '%s' "$cmd" | grep -Eq '(^|[^[:alnum:]_])git([[:space:]])'; then
     deny "BLOCKED: you are on the 'main' branch — don't commit here.
 
 Create a feature branch first, then commit:
-  git switch -c <short-name>     (e.g. fix-invoice-total)
+  git checkout -b <short-name>   (e.g. fix-invoice-total)
   git commit -m \"...\"
 Then push the branch and open a PR. Nothing reaches main without review."
   fi
 
   # any push that would land on main (bare push on main, origin main, HEAD:main, :main)
   if printf '%s' "$cmd" | grep -Eq '\bgit[[:space:]]+push\b'; then
-    if [ "$branch" = "main" ] || printf '%s' "$cmd" | grep -Eq '(:|[[:space:]])main([[:space:]]|$)|HEAD:main\b'; then
+    if [ "$branch" = "main" ] || printf '%s' "$cmd" | grep -Eq '(^|[[:space:]:/])main([[:space:]:]|$)'; then
       deny "BLOCKED: this would push to 'main'. main is updated only by merging a PR.
 
 Push your feature branch and open a PR instead:

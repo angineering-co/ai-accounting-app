@@ -47,7 +47,7 @@ every PR gets a **preview deployment**, already wired to the **staging** Supabas
 database, so the change can be clicked through with real-ish data.
 
 1. **Start a feature branch** (never work on main):
-   `git switch -c <short-name>` (e.g. `fix-invoice-total`).
+   `git checkout -b <short-name>` (e.g. `fix-invoice-total`).
 2. **Make the change**, then check it locally if useful: `npm run dev`
    (localhost:3000), `npm run lint`.
 3. **Commit** with a clear message describing the change.
@@ -72,8 +72,11 @@ staging run a not-yet-merged migration during review — see the caution in step
    types.
 3. **Apply it locally** with `supabase migration up` — it applies only the new,
    pending migration and **keeps your local data**. Prefer this over
-   `supabase db reset`, which wipes the local DB. Then `npm run dev` and exercise
-   the feature; regenerate types if the schema changed (see CLAUDE.md).
+   `supabase db reset`, which wipes the local DB.
+   - **Regenerate types:** run `npm run db:gen-types` so both the Drizzle and
+     Supabase types reflect the new schema (it does drizzle-kit pull + supabase
+     gen types in one step). Do this whenever the migration changed the schema.
+   - Then `npm run dev` and exercise the feature.
    - For local pieces Supabase owns (the queue's `pgmq_public` wrappers), see
      `supabase/STAGING.md` — those come from a Studio button, not a migration.
 4. **Open the PR** as in Workflow A, noting it contains a migration.

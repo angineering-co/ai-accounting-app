@@ -39,6 +39,16 @@ export const QUEUE_PREVIEW_TRANSFORM: ImageTransformOptions = {
   resize: "contain",
 } as const;
 
+// Full-size preview used by the review dialogs for formats a browser can't
+// render directly (HEIC/HEIF). Omitting `format` lets Storage auto-negotiate a
+// browser-friendly output (WebP/JPEG). 2500px is Storage's max transform
+// dimension, so this keeps as much detail as possible for zooming.
+export const FULL_PREVIEW_TRANSFORM: ImageTransformOptions = {
+  width: 2500,
+  height: 2500,
+  resize: "contain",
+} as const;
+
 const signedPreviewCache = new Map<string, SignedPreviewCacheEntry>();
 const inflightSignedPreviewRequests = new Map<
   string,

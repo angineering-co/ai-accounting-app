@@ -45,6 +45,8 @@ import { toast } from "sonner";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { toDocumentsKey } from "@/lib/storage/documents-key";
+import { FULL_PREVIEW_TRANSFORM } from "@/lib/supabase/signed-preview-url-cache";
+import { isHeicFilename } from "@/lib/utils/mime-type";
 import {
   cn,
   formatDateToYYYYMMDD,
@@ -297,7 +299,16 @@ export function AllowanceReviewDialog({
           } else {
             const { data, error } = await supabase.storage
               .from("documents")
-              .createSignedUrl(toDocumentsKey(allowance.storage_path), 3600);
+              .createSignedUrl(
+                toDocumentsKey(allowance.storage_path),
+                3600,
+                // HEIC/HEIF can't be decoded by <img> outside Safari, so have
+                // Storage transcode it to a browser-renderable image. Other
+                // formats serve the original to preserve full-resolution zoom.
+                isHeicFilename(allowance.filename)
+                  ? { transform: FULL_PREVIEW_TRANSFORM }
+                  : undefined,
+              );
             if (error) throw error;
             if (data) setPreviewUrl(data.signedUrl);
           }

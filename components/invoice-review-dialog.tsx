@@ -56,6 +56,8 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { toDocumentsKey } from "@/lib/storage/documents-key";
+import { FULL_PREVIEW_TRANSFORM } from "@/lib/supabase/signed-preview-url-cache";
+import { isHeicFilename } from "@/lib/utils/mime-type";
 import Image from "next/image";
 import {
   cn,
@@ -485,7 +487,16 @@ export function InvoiceReviewDialog({
           } else {
             const { data, error } = await supabase.storage
               .from("documents")
-              .createSignedUrl(toDocumentsKey(invoice.storage_path), 3600);
+              .createSignedUrl(
+                toDocumentsKey(invoice.storage_path),
+                3600,
+                // HEIC/HEIF can't be decoded by <img> outside Safari, so have
+                // Storage transcode it to a browser-renderable image. Other
+                // formats serve the original to preserve full-resolution zoom.
+                isHeicFilename(invoice.filename)
+                  ? { transform: FULL_PREVIEW_TRANSFORM }
+                  : undefined,
+              );
             if (error) throw error;
             if (data) setPreviewUrl(data.signedUrl);
           }

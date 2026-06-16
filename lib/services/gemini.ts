@@ -37,14 +37,15 @@ interface GeminiResponse {
 }
 
 // Supported MIME types by Gemini API
-// Note: HEIC/HEIF are not supported by Gemini API
-// Users should convert HEIC files to JPEG or PNG before uploading
+// See https://ai.google.dev/gemini-api/docs/image-understanding#supported-formats
 const SUPPORTED_MIME_TYPES = [
   "application/pdf",
   "image/png",
   "image/jpeg",
   "image/gif",
   "image/webp",
+  "image/heic",
+  "image/heif",
 ];
 
 /**
@@ -154,8 +155,7 @@ export async function extractInvoiceData(
   if (!SUPPORTED_MIME_TYPES.includes(mimeType)) {
     throw new Error(
       `Unsupported MIME type: ${mimeType}. ` +
-        `Supported types: ${SUPPORTED_MIME_TYPES.join(", ")}. ` +
-        `For HEIC files, please convert to JPEG or PNG format.`
+        `Supported types: ${SUPPORTED_MIME_TYPES.join(", ")}.`
     );
   }
 
@@ -329,8 +329,7 @@ export async function extractAllowanceData(
   if (!SUPPORTED_MIME_TYPES.includes(mimeType)) {
     throw new Error(
       `Unsupported MIME type: ${mimeType}. ` +
-        `Supported types: ${SUPPORTED_MIME_TYPES.join(", ")}. ` +
-        `For HEIC files, please convert to JPEG or PNG format.`
+        `Supported types: ${SUPPORTED_MIME_TYPES.join(", ")}.`
     );
   }
 

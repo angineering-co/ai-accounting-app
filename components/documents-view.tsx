@@ -6,6 +6,12 @@ import { ArrowUpCircle, FileText, Trash2 } from "lucide-react";
 import { createOtherDocument, deleteOtherDocument } from "@/lib/services/document";
 import { useOtherDocuments, type DocumentRow } from "@/hooks/use-other-documents";
 import { useSupabaseUpload } from "@/hooks/use-supabase-upload";
+import {
+  ACCEPTED_UPLOAD_MIME_TYPES,
+  MAX_UPLOAD_BATCH_SIZE,
+  MAX_UPLOAD_FILE_SIZE,
+  MAX_UPLOAD_FILES,
+} from "@/lib/upload-limits";
 import { FilePreview } from "@/components/file-preview";
 import { DocumentDetailDialog } from "@/components/document-detail-dialog";
 import { ConvertDocumentToChildDialog } from "@/components/convert-document-to-child-dialog";
@@ -88,9 +94,10 @@ export function DocumentsView({ firmId, clientId, canManage = false }: Documents
     bucketName: "documents",
     // Periodless, client-scoped path — `other` files are not filed under a period.
     path: `${firmId}/${clientId}/other`,
-    allowedMimeTypes: ["image/*", "application/pdf"],
-    maxFiles: 10,
-    maxFileSize: 50 * 1024 * 1024,
+    allowedMimeTypes: ACCEPTED_UPLOAD_MIME_TYPES,
+    maxFiles: MAX_UPLOAD_FILES,
+    maxFileSize: MAX_UPLOAD_FILE_SIZE,
+    maxTotalSize: MAX_UPLOAD_BATCH_SIZE,
     getStorageKey: (file) => {
       // lastIndexOf, not split('.').pop(): an extension-less name like "myfile"
       // would otherwise yield "myfile" as the "extension". Leading-dot files

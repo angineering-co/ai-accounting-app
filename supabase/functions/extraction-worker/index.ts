@@ -19,7 +19,12 @@ const BATCH_SIZE = 5;
 const CONCURRENCY_LIMIT = 2;
 const VISIBILITY_TIMEOUT = 120; // seconds
 const MAX_READ_COUNT = 3;
-const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_MODEL = "gemini-3.1-flash-lite";
+// Gemini 3.x replaces the numeric thinking_budget with a string enum.
+// "low" keeps reasoning minimal for fast structured extraction; raise to
+// "medium" if accuracy regresses.
+// See https://ai.google.dev/gemini-api/docs/whats-new-gemini-3.5#thinking-budget
+const GEMINI_THINKING_LEVEL = "low";
 
 // ─── Account list for 進項 invoice account determination ────────────────────
 // Inlined from lib/data/accounts.ts ACCOUNT_LIST
@@ -298,7 +303,10 @@ async function extractInvoice(
         { inline_data: { mime_type: mimeType, data: base64Data } },
       ],
     }],
-    generationConfig: { response_mime_type: "application/json" },
+    generationConfig: {
+      response_mime_type: "application/json",
+      thinkingConfig: { thinkingLevel: GEMINI_THINKING_LEVEL },
+    },
   };
 
   const geminiStart = Date.now();
@@ -377,7 +385,10 @@ async function determineAccount(
 
   const payload = {
     contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { response_mime_type: "text/plain" },
+    generationConfig: {
+      response_mime_type: "text/plain",
+      thinkingConfig: { thinkingLevel: GEMINI_THINKING_LEVEL },
+    },
   };
 
   const text = await callGemini(payload);
@@ -513,7 +524,10 @@ async function extractAllowance(
         { inline_data: { mime_type: mimeType, data: base64Data } },
       ],
     }],
-    generationConfig: { response_mime_type: "application/json" },
+    generationConfig: {
+      response_mime_type: "application/json",
+      thinkingConfig: { thinkingLevel: GEMINI_THINKING_LEVEL },
+    },
   };
 
   const geminiStart = Date.now();

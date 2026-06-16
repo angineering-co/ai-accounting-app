@@ -133,7 +133,17 @@ const useSupabaseUpload = (options: UseSupabaseUploadOptions) => {
   const dropzoneProps = useDropzone({
     onDrop,
     noClick: true,
-    accept: allowedMimeTypes.reduce((acc, type) => ({ ...acc, [type]: [] }), {}),
+    // Some browsers (e.g. Chrome on Windows, which lacks an OS HEIC codec)
+    // report an empty file.type for .heic/.heif files, so the "image/*" wildcard
+    // alone would reject them. Listing the extensions makes react-dropzone accept
+    // them by name too. This is purely additive — it only widens acceptance.
+    accept: allowedMimeTypes.reduce(
+      (acc, type) => ({
+        ...acc,
+        [type]: type === 'image/*' ? ['.heic', '.heif'] : [],
+      }),
+      {}
+    ),
     maxSize: maxFileSize,
     maxFiles: maxFiles,
     multiple: maxFiles !== 1,

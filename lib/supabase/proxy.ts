@@ -39,8 +39,8 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/blog/") ||
     pathname.startsWith("/tools/") ||
     pathname.startsWith("/api/webhooks/") ||
-    // 公開收款連結：checkout 與付款結果頁（簽約前訂金亦可用）。
-    // 綠界 server-to-server 回呼走 /api/webhooks/ecpay/*，已由上面的 /api/webhooks/ 放行。
+    // 公開收款連結：checkout 頁、前景結果回呼（/pay/result）與結果顯示頁（簽約前訂金亦可用）。
+    // 綠界 server-to-server 權威回呼（ReturnURL）走 /api/webhooks/ecpay/return，已由上面的 /api/webhooks/ 放行。
     pathname.startsWith("/pay/");
 
   // Skip the Supabase round-trip on public marketing/content routes so they

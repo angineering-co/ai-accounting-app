@@ -177,13 +177,14 @@ v1 只需兩個 Route Handler（不是 Server Action）。Server Action 走 Next
    → 用 checkout_token 查回該筆（檢查未過期、仍 pending）
    → 讀出該筆既有的 merchant_trade_no（建 row 時已產生，render 不重生）
    → 用「該筆的 amount + merchant_trade_no」組 AIO 一次付清表單 + CheckMacValue（MerchantTradeDate 取當下 UTC+8），自動送出
+   → OrderResultURL 帶 ?token=<checkout_token>，讓前景回呼免反查即可導頁
 
 4. /api/webhooks/ecpay/return 回來（server-to-server，權威）
    → 驗 CheckMacValue → 用 callback 的 MerchantTradeNo 找到這筆
    → 僅在 status='pending' 時 UPDATE 填入 status(paid/failed) / gwsr / card4no / charged_at，寫帳（冪等）
    → 回 "1|OK"（HTTP 200）；驗 CMV 失敗回非 200 讓綠界重送
 
-5. /pay/result（前景 Form POST）→ 用 MerchantTradeNo 對應 token
+5. /pay/result（前景 Form POST）→ 直接讀 OrderResultURL 帶的 ?token=
    → 303 導去 /pay/[token]/result 顯示頁；不做記帳、不回 1|OK
    → 顯示頁讀 DB status 呈現成功/失敗；若 return 稍慢仍 pending，短暫自動輪詢
 ```

@@ -87,7 +87,8 @@ async function PayContent({ params }: Props) {
         tradeDesc: payment.description,
         itemName: payment.description,
         returnUrl: `${baseUrl}/api/webhooks/ecpay/return`,
-        orderResultUrl: `${baseUrl}/pay/result`,
+        // checkout_token 帶在 query，讓前景回呼免反查 DB 即可確定要導去哪筆的結果頁。
+        orderResultUrl: `${baseUrl}/pay/result?token=${encodeURIComponent(token)}`,
       },
       config.credentials,
       config.env,

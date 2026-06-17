@@ -141,14 +141,15 @@ v1 每筆付款都**先建好 `pending` row**（建立時就連同 `checkout_tok
 
 v1 只需兩個 Route Handler（不是 Server Action）。Server Action 走 Next.js RSC 協定、有 CSRF / same-origin 保護，無法被綠界這種外部伺服器直接 POST、也無法回精確的純文字 `1|OK`。只有 Route Handler 能讀原始 body 並 `return new Response('1|OK', { status: 200 })`。
 
-**路由放置**：server-to-server 回呼（webhook）歸 `/api/webhooks/ecpay/*`，與既有 `app/api/webhooks/line` 同慣例，`proxy.ts` 既有的 `/api/webhooks/` 已放行；前景導回的 `result` 是客戶看的頁面、非 webhook，歸 `/pay/result`（由 `/pay/` 放行）。
+**路由放置**：綠界主動 POST 的兩個回呼都歸 `/api/webhooks/ecpay/*`（與既有 `app/api/webhooks/line` 同慣例，`proxy.ts` 的 `/api/webhooks/` 已放行）。其中前景 `result` 是 Form POST，RSC 頁面只服務 GET 接不了，故由 webhook handler 收下後 303 轉成 GET，導去客戶看的顯示頁 `/pay/[token]/result`（由 `/pay/` 放行）。
 
-| Route | 觸發者 | 時機 | 性質 | 回 `1\|OK`？ |
+| Route | 觸發者 | 時機 | 性質 | 回應 |
 |---|---|---|---|---|
-| `app/api/webhooks/ecpay/return/route.ts`（ReturnURL） | 綠界伺服器 | 付款結果 | server-to-server，**權威來源** | 要 |
-| `app/pay/result/route.ts`（OrderResultURL） | 客戶瀏覽器 | 付款完導回前景 | 只為顯示 UI，**不可當依據** | 不用 |
+| `app/api/webhooks/ecpay/return/route.ts`（ReturnURL） | 綠界伺服器 | 付款結果 | server-to-server，**權威來源** | `1\|OK`（驗 CMV 失敗回非 200） |
+| `app/api/webhooks/ecpay/result/route.ts`（OrderResultURL） | 客戶瀏覽器 | 付款完導回前景 | Form POST，只為導頁 | 303 → `/pay/[token]/result` |
+| `app/pay/[token]/result/page.tsx` | 客戶瀏覽器 | 顯示結果 | RSC 顯示頁，讀 DB status | HTML（pending 時短暫輪詢） |
 
-核心原則：記帳只信 `return`（背景、會重送、要驗 CMV）；`result` 純粹給客戶看「付款成功」畫面，因為客戶可能付完就關掉瀏覽器，`result` 不一定會到，但 `return` 一定會到。
+核心原則：記帳只信 `return`（背景、會重送、要驗 CMV）；`result` 那條只負責把客戶導到顯示頁，顯示頁讀的是 `return` 寫進 DB 的 status。客戶可能付完就關掉瀏覽器，`result` 不一定會到，但 `return` 一定會到。
 
 > `app/api/webhooks/ecpay/period/route.ts`（PeriodReturnURL）是定期定額專屬，**v1 不實作**，見「後續階段」。
 
@@ -177,11 +178,14 @@ v1 只需兩個 Route Handler（不是 Server Action）。Server Action 走 Next
    → 讀出該筆既有的 merchant_trade_no（建 row 時已產生，render 不重生）
    → 用「該筆的 amount + merchant_trade_no」組 AIO 一次付清表單 + CheckMacValue（MerchantTradeDate 取當下 UTC+8），自動送出
 
-4. /api/webhooks/ecpay/return 回來
-   → 用 callback 的 MerchantTradeNo 找到這筆 → UPDATE 填入 status / gwsr / card4no / charged_at，寫帳
-   → 回 "1|OK"（HTTP 200）
+4. /api/webhooks/ecpay/return 回來（server-to-server，權威）
+   → 驗 CheckMacValue → 用 callback 的 MerchantTradeNo 找到這筆
+   → 僅在 status='pending' 時 UPDATE 填入 status(paid/failed) / gwsr / card4no / charged_at，寫帳（冪等）
+   → 回 "1|OK"（HTTP 200）；驗 CMV 失敗回非 200 讓綠界重送
 
-5. /pay/result（前景導回）→ 顯示「付款成功」頁，不做記帳、不回 1|OK
+5. /api/webhooks/ecpay/result（前景 Form POST）→ 用 MerchantTradeNo 對應 token
+   → 303 導去 /pay/[token]/result 顯示頁；不做記帳、不回 1|OK
+   → 顯示頁讀 DB status 呈現成功/失敗；若 return 稍慢仍 pending，短暫自動輪詢
 ```
 
 安全：金額永遠由 server 端依該 token 決定，絕不從 query 帶；`checkout_token` 隨機不可猜並設過期，避免列舉（IDOR）；`merchant_trade_no` 在 step 1 建 row 時即產生（render 只讀取、不重生），這樣 step 4 的 callback 一定比對得到、也不會被重整 / 多分頁覆寫。
@@ -247,7 +251,10 @@ v1 只需兩個 Route Handler（不是 Server Action）。Server Action 走 Next
 - `proxy.ts` 放行 `/pay`。
 
 ### Phase 4 — Callback 端點
-- `app/api/webhooks/ecpay/return/route.ts`（ReturnURL，webhook）、`app/pay/result/route.ts`（OrderResultURL，前景結果頁）。
+- `app/api/webhooks/ecpay/return/route.ts`（ReturnURL，權威 webhook，驗 CMV + 冪等寫帳 + 回 `1|OK`）。
+- `app/api/webhooks/ecpay/result/route.ts`（OrderResultURL，前景 Form POST，303 導去顯示頁）。
+- `app/pay/[token]/result/page.tsx`（顯示頁，讀 DB status；pending 時短暫輪詢）。
+- 純函式 `lib/services/ecpay/callback.ts`（解析 + 驗 CMV，含單測）。
 - 無需新增 proxy 規則：webhook 由既有 `/api/webhooks/` 放行、結果頁由 Phase 3 放行的 `/pay/` 涵蓋。
 - `return`：驗 CMV → 以 `merchant_trade_no` `UPDATE` 該 pending row（status / gwsr / card4no / charged_at、寫 `raw_payload`）→ 回 `1|OK`（HTTP 200）。
 - `result`：顯示「付款成功」頁，不記帳、不回 `1|OK`。

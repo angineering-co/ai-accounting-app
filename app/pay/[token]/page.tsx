@@ -87,7 +87,7 @@ async function PayContent({ params }: Props) {
         tradeDesc: payment.description,
         itemName: payment.description,
         returnUrl: `${baseUrl}/api/webhooks/ecpay/return`,
-        orderResultUrl: `${baseUrl}/pay/result`,
+        orderResultUrl: `${baseUrl}/api/webhooks/ecpay/result`,
       },
       config.credentials,
       config.env,

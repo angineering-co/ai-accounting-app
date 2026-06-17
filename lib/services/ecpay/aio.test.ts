@@ -63,7 +63,7 @@ describe("buildAioCreditForm", () => {
     tradeDesc: "年度訂閱",
     itemName: "2026 年度訂閱",
     returnUrl: "https://example.com/api/webhooks/ecpay/return",
-    orderResultUrl: "https://example.com/pay/result",
+    orderResultUrl: "https://example.com/api/webhooks/ecpay/result",
   };
 
   it("帶入信用卡一次付清的固定參數（不含 Period*）", () => {
@@ -76,7 +76,9 @@ describe("buildAioCreditForm", () => {
     expect(params.EncryptType).toBe("1");
     expect(params.TotalAmount).toBe("16380");
     expect(params.MerchantID).toBe("3002607");
-    expect(params.OrderResultURL).toBe("https://example.com/pay/result");
+    expect(params.OrderResultURL).toBe(
+      "https://example.com/api/webhooks/ecpay/result",
+    );
     expect(params).not.toHaveProperty("PeriodAmount");
   });
 

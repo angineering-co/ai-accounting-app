@@ -91,18 +91,30 @@ staging run a not-yet-merged migration during review — see the caution in step
 
    If `$STAGING_DB_URL` isn't set in `.env.local`, fetch it yourself — this needs
    `supabase login` and access to the **prod** project that owns the branch
-   (`<prod-ref>` is the ref in prod's `NEXT_PUBLIC_SUPABASE_URL`):
+   (`<prod-ref>` is the ref in prod's `NEXT_PUBLIC_SUPABASE_URL`). Two fix-ups are
+   required on the fetched value, both handled by the command below:
+   `branches get -o env` wraps the URL in **double quotes** (strip them, or
+   `$STAGING_DB_URL` expands with literal quotes and the connection fails), and it
+   returns the **transaction** pooler (port `6543`). A migration needs **session
+   mode**, so rewrite the port to `5432` on the same pooler host:
 
    ```bash
    supabase branches get staging -o env --project-ref <prod-ref> \
-     | grep '^POSTGRES_URL=' | sed 's/^POSTGRES_URL=/STAGING_DB_URL=/' >> .env.local
+     | grep '^POSTGRES_URL=' \
+     | sed -E 's/^POSTGRES_URL="?//; s/"$//' \
+     | sed 's/:6543/:5432/' \
+     | sed 's#^#STAGING_DB_URL=#' >> .env.local
    ```
 
    `branches get` is read-only so the guard allows it, and prod's own URL is
    intentionally not retrievable this way. (No prod access? Ask Ang for the
-   value.) If `db push` complains about pooler mode, use the **session** pooler
-   string (port 5432). Once it succeeds, the PR's preview deployment — already
-   wired to staging — reflects the new schema and you can both click through it.
+   value.) The value written above is already unquoted and in session mode, so
+   `supabase db push --db-url "$STAGING_DB_URL"` works directly. If you got the
+   string another way and `db push` complains about pooler / transaction mode,
+   apply the same two fix-ups: drop surrounding quotes and use the **session**
+   pooler port `5432` (not `6543`). Once it succeeds, the PR's preview deployment —
+   already wired to staging — reflects the new schema and you can both click
+   through it.
 
    ⚠️ Caution: staging now runs a migration that isn't in `main` yet. If you
    **edit the migration `.sql` during review**, `supabase db push` won't re-apply

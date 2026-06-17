@@ -350,6 +350,75 @@ export type Database = {
           },
         ]
       }
+      ecpay_payments: {
+        Row: {
+          amount: number
+          card4no: string | null
+          charged_at: string | null
+          checkout_token: string
+          client_id: string | null
+          created_at: string
+          description: string
+          expires_at: string | null
+          firm_id: string
+          gwsr: number | null
+          id: string
+          merchant_trade_no: string | null
+          raw_payload: Json | null
+          status: string
+          type: string
+        }
+        Insert: {
+          amount: number
+          card4no?: string | null
+          charged_at?: string | null
+          checkout_token: string
+          client_id?: string | null
+          created_at?: string
+          description: string
+          expires_at?: string | null
+          firm_id: string
+          gwsr?: number | null
+          id?: string
+          merchant_trade_no?: string | null
+          raw_payload?: Json | null
+          status?: string
+          type: string
+        }
+        Update: {
+          amount?: number
+          card4no?: string | null
+          charged_at?: string | null
+          checkout_token?: string
+          client_id?: string | null
+          created_at?: string
+          description?: string
+          expires_at?: string | null
+          firm_id?: string
+          gwsr?: number | null
+          id?: string
+          merchant_trade_no?: string | null
+          raw_payload?: Json | null
+          status?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ecpay_payments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ecpay_payments_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       firms: {
         Row: {
           created_at: string | null

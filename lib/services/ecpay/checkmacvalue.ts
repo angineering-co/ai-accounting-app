@@ -25,9 +25,14 @@ const ECPAY_ENCODE_REPLACEMENTS: ReadonlyArray<readonly [RegExp, string]> = [
   [/%29/g, ")"],
 ];
 
-/** 綠界版 URL encode：encodeURIComponent → 轉小寫 → 還原 .NET 不編碼字元。 */
+/** 綠界版 URL encode：encodeURIComponent → 補編碼 ' 與 ~ → 轉小寫 → 還原 .NET 不編碼字元。 */
 export function ecpayUrlEncode(input: string): string {
-  let encoded = encodeURIComponent(input).toLowerCase();
+  // encodeURIComponent 不編碼 ' 與 ~，但綠界（.NET HttpUtility.UrlEncode）會分別編成
+  // %27 / %7e，且兩者都不在還原清單內。漏掉這步會讓含 ' 或 ~ 的 ItemName 算出錯誤雜湊。
+  let encoded = encodeURIComponent(input)
+    .replace(/'/g, "%27")
+    .replace(/~/g, "%7E")
+    .toLowerCase();
   for (const [pattern, replacement] of ECPAY_ENCODE_REPLACEMENTS) {
     encoded = encoded.replace(pattern, replacement);
   }

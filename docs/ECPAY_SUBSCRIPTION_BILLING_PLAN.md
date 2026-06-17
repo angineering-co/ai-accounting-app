@@ -88,8 +88,8 @@ create table ecpay_payments (
   expires_at        timestamptz,                            -- 連結過期時間
 
   -- 綠界比對 / callback 回填
-  merchant_trade_no text unique,                            -- checkout render 時產生並存回；callback 以此比對 UPDATE
-  gwsr              integer,                                -- 授權交易號，pending 時 NULL；付款憑證 / 退款用
+  merchant_trade_no text unique,                            -- 首次 checkout render 時產生並存回（set-once，之後重用）；callback 以此比對 UPDATE
+  gwsr              bigint,                                 -- 授權交易號（綠界可達 10 位數，bigint 防 int 溢位），pending 時 NULL；付款憑證 / 退款用
   card4no           text,                                   -- 末四碼，顯示用（"卡號末四碼 5678"）
   raw_payload       jsonb,                                  -- 完整 callback 留存（含 rtn_code / trade_no / card6no 等所有原始欄位）
 
@@ -123,9 +123,10 @@ create index on ecpay_payments (client_id);
 
 ### 冪等與寫入規則（v1：單一路徑）
 
-v1 每筆付款都**先建好 `pending` row**（`merchant_trade_no` 在 checkout render 時才產生並寫回、`gwsr` 初始 NULL）。`return` callback 回來時以 `merchant_trade_no` 找到該 row 後 `UPDATE` 填入 `gwsr` / `status` / `card4no` / `charged_at`。
+v1 每筆付款都**先建好 `pending` row**（`merchant_trade_no` 在首次 checkout render 時產生並寫回、之後沿用不覆寫、`gwsr` 初始 NULL）。`return` callback 回來時以 `merchant_trade_no` 找到該 row 後 `UPDATE` 填入 `gwsr` / `status` / `card4no` / `charged_at`。
 
 - 冪等防線：`UNIQUE (merchant_trade_no)`。綠界同一筆重送（最多 4 次）只會 UPDATE 同一 row，不會重複入帳。
+- **`merchant_trade_no` set-once**：同一 pending row 只在 `merchant_trade_no` 為 NULL 時產生一次，之後重整 / 多分頁 render 一律沿用既有值、**不覆寫**。否則舊分頁付款回來的 callback 會找不到 row 而掉單。僅在前次嘗試確定失敗、需重試時才換新（綠界不接受重複的 `merchant_trade_no`，重用也順帶擋掉第二分頁的重複下單）。
 - v1 **沒有** `INSERT … ON CONFLICT (merchant_trade_no, gwsr)` 這條路徑（那是 recurring 每期沿用同一 `merchant_trade_no`、`gwsr` 每期不同才需要的，隨 Primitive #2 一起回來）。因此 callback 內**只有 UPDATE、沒有 INSERT**，先前「pending 的 `gwsr=NULL` 在 upsert 下插出孤兒第二筆」的風險在 v1 結構性不存在。
 
 ### RLS
@@ -170,7 +171,7 @@ v1 只需兩個 Route Handler（不是 Server Action）。Server Action 走 Next
 
 3. 客戶點開 checkout 頁（server 端）
    → 用 checkout_token 查回該筆（檢查未過期、仍 pending）
-   → 產生 merchant_trade_no、寫回這筆
+   → 若該筆尚無 merchant_trade_no 才產生並寫回（已有則重用，避免重整 / 多分頁覆寫）
    → 用「該筆的 amount」組 AIO 一次付清表單 + CheckMacValue，自動送出
 
 4. /api/ecpay/return 回來
@@ -180,7 +181,7 @@ v1 只需兩個 Route Handler（不是 Server Action）。Server Action 走 Next
 5. /api/ecpay/result（前景導回）→ 顯示「付款成功」頁，不做記帳、不回 1|OK
 ```
 
-安全：金額永遠由 server 端依該 token 決定，絕不從 query 帶；`checkout_token` 隨機不可猜並設過期，避免列舉（IDOR）；`merchant_trade_no` 在 step 3 組表單時才產生並存回，這樣 step 4 的 callback 才比對得到。
+安全：金額永遠由 server 端依該 token 決定，絕不從 query 帶；`checkout_token` 隨機不可猜並設過期，避免列舉（IDOR）；`merchant_trade_no` 在 step 3 首次組表單時產生並存回（set-once、之後重用），這樣 step 4 的 callback 才比對得到、也不會被重整 / 多分頁覆寫。
 
 ### Callback 回應與比對規則
 

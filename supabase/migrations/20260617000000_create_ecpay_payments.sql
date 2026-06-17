@@ -27,7 +27,7 @@ CREATE TABLE ecpay_payments (
 
     -- 綠界比對 / callback 回填
     merchant_trade_no TEXT UNIQUE,             -- checkout render 時產生並存回；callback 以此比對 UPDATE（≤20 英數）
-    gwsr              INTEGER NULL,            -- 授權交易號，pending 時 NULL；付款憑證 / 退款用
+    gwsr              BIGINT NULL,             -- 授權交易號（綠界可達 10 位數，bigint 防 int 溢位），pending 時 NULL；付款憑證 / 退款用
     card4no           TEXT NULL,               -- 末四碼，顯示用（"卡號末四碼 5678"）
     raw_payload       JSONB NULL,              -- 完整 callback 留存（含 rtn_code / trade_no / card6no 等）
 

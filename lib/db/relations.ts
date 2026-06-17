@@ -1,21 +1,21 @@
 import { relations } from "drizzle-orm/relations";
 import { authUsers as usersInAuth } from "drizzle-orm/supabase";
-import { clients, ecpay_payments, firms, line_accounts, leads, documents, profiles, journal_entries, journal_entry_lines, invoices, tax_filing_periods, allowances, invoice_ranges, fiscal_year_closes, audit_trails, voucher_sequences } from "./schema";
+import { clients, line_accounts, leads, ecpay_payments, firms, documents, profiles, journal_entries, journal_entry_lines, invoices, tax_filing_periods, allowances, invoice_ranges, fiscal_year_closes, audit_trails, voucher_sequences } from "./schema";
 
-export const ecpay_paymentsRelations = relations(ecpay_payments, ({one}) => ({
+export const line_accountsRelations = relations(line_accounts, ({one}) => ({
 	client: one(clients, {
-		fields: [ecpay_payments.client_id],
+		fields: [line_accounts.client_id],
 		references: [clients.id]
 	}),
-	firm: one(firms, {
-		fields: [ecpay_payments.firm_id],
-		references: [firms.id]
+	lead: one(leads, {
+		fields: [line_accounts.lead_id],
+		references: [leads.id]
 	}),
 }));
 
 export const clientsRelations = relations(clients, ({one, many}) => ({
-	ecpay_payments: many(ecpay_payments),
 	line_accounts: many(line_accounts),
+	ecpay_payments: many(ecpay_payments),
 	documents: many(documents),
 	journal_entries: many(journal_entries),
 	invoices: many(invoices),
@@ -31,6 +31,21 @@ export const clientsRelations = relations(clients, ({one, many}) => ({
 	voucher_sequences: many(voucher_sequences),
 }));
 
+export const leadsRelations = relations(leads, ({many}) => ({
+	line_accounts: many(line_accounts),
+}));
+
+export const ecpay_paymentsRelations = relations(ecpay_payments, ({one}) => ({
+	client: one(clients, {
+		fields: [ecpay_payments.client_id],
+		references: [clients.id]
+	}),
+	firm: one(firms, {
+		fields: [ecpay_payments.firm_id],
+		references: [firms.id]
+	}),
+}));
+
 export const firmsRelations = relations(firms, ({many}) => ({
 	ecpay_payments: many(ecpay_payments),
 	documents: many(documents),
@@ -43,21 +58,6 @@ export const firmsRelations = relations(firms, ({many}) => ({
 	clients: many(clients),
 	fiscal_year_closes: many(fiscal_year_closes),
 	audit_trails: many(audit_trails),
-}));
-
-export const line_accountsRelations = relations(line_accounts, ({one}) => ({
-	client: one(clients, {
-		fields: [line_accounts.client_id],
-		references: [clients.id]
-	}),
-	lead: one(leads, {
-		fields: [line_accounts.lead_id],
-		references: [leads.id]
-	}),
-}));
-
-export const leadsRelations = relations(leads, ({many}) => ({
-	line_accounts: many(line_accounts),
 }));
 
 export const documentsRelations = relations(documents, ({one, many}) => ({

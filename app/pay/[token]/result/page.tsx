@@ -4,33 +4,14 @@ import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/drizzle";
 import { ecpay_payments } from "@/lib/db/schema";
+import { PayShell } from "../../pay-shell";
 import { ResultAutoRefresh } from "./result-auto-refresh";
 
 type Props = { params: Promise<{ token: string }> };
 
-function Shell({
-  title,
-  detail,
-  children,
-}: {
-  title: string;
-  detail?: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-3 p-6 text-center">
-      <h1 className="text-xl font-semibold">{title}</h1>
-      {detail ? (
-        <p className="text-sm text-muted-foreground">{detail}</p>
-      ) : null}
-      {children}
-    </main>
-  );
-}
-
 export default function ResultPage({ params }: Props) {
   return (
-    <Suspense fallback={<Shell title="載入中…" />}>
+    <Suspense fallback={<PayShell title="載入中…" tone="pending" />}>
       <ResultContent params={params} />
     </Suspense>
   );
@@ -56,7 +37,8 @@ async function ResultContent({ params }: Props) {
 
   if (payment.status === "paid") {
     return (
-      <Shell
+      <PayShell
+        tone="success"
         title="付款成功"
         detail={`${payment.description}　${formatAmount(payment.amount)} 已完成付款，感謝您！`}
       />
@@ -65,7 +47,8 @@ async function ResultContent({ params }: Props) {
 
   if (payment.status === "failed") {
     return (
-      <Shell
+      <PayShell
+        tone="error"
         title="付款未完成"
         detail="這筆付款未成功完成。若您的帳戶已遭扣款，請與我們聯繫；或重新嘗試付款。"
       />
@@ -74,7 +57,8 @@ async function ResultContent({ params }: Props) {
 
   if (payment.status === "expired") {
     return (
-      <Shell
+      <PayShell
+        tone="error"
         title="付款連結已過期"
         detail="這條收款連結已超過有效期限，請向我們索取新的連結。"
       />
@@ -83,11 +67,12 @@ async function ResultContent({ params }: Props) {
 
   // pending：ReturnURL 可能尚未送達，短暫輪詢等待確認。
   return (
-    <Shell
+    <PayShell
+      tone="pending"
       title="付款確認中…"
       detail="正在向綠界確認付款結果，請稍候，本頁會自動更新。"
     >
       <ResultAutoRefresh token={token} />
-    </Shell>
+    </PayShell>
   );
 }

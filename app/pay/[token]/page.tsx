@@ -9,6 +9,7 @@ import {
   formatMerchantTradeDate,
 } from "@/lib/services/ecpay/aio";
 import { getEcpayConfig, getSiteBaseUrl } from "@/lib/services/ecpay/config";
+import { generateMerchantTradeNo } from "@/lib/services/ecpay/merchant-trade-no";
 import { PayShell } from "../pay-shell";
 import { AutoSubmitForm } from "./auto-submit-form";
 
@@ -37,6 +38,7 @@ async function PayContent({ params }: Props) {
 
   if (!payment) notFound();
 
+  // 狀態閘門：付款後此連結即失效，重開不再產生付款表單（避免重複付款的「先付再重開」路徑）。
   if (payment.status !== "pending") {
     return (
       <PayShell
@@ -57,24 +59,17 @@ async function PayContent({ params }: Props) {
     );
   }
 
-  if (!payment.merchant_trade_no) {
-    return (
-      <PayShell
-        tone="error"
-        title="付款暫時無法進行"
-        detail="這筆款項的設定尚未完成，請稍後再試或與我們聯繫。"
-      />
-    );
-  }
-
   let form;
   try {
     const config = getEcpayConfig();
     const baseUrl = getSiteBaseUrl();
+    // 每次開啟都產生全新的 MerchantTradeNo：綠界視 MTN 為永久唯一，重送同一個會被擋
+    // （10200047），故無法重用。對帳改以 CustomField1=checkout_token（綠界原樣回傳），
+    // 真正成交的 MTN 由 ReturnURL 回寫。
     form = buildAioCreditForm(
       {
         merchantId: config.merchantId,
-        merchantTradeNo: payment.merchant_trade_no,
+        merchantTradeNo: generateMerchantTradeNo(),
         merchantTradeDate: formatMerchantTradeDate(new Date()),
         totalAmount: payment.amount,
         tradeDesc: payment.description,
@@ -82,6 +77,8 @@ async function PayContent({ params }: Props) {
         returnUrl: `${baseUrl}/api/webhooks/ecpay/return`,
         // checkout_token 帶在 query，讓前景回呼免反查 DB 即可確定要導去哪筆的結果頁。
         orderResultUrl: `${baseUrl}/pay/result?token=${encodeURIComponent(token)}`,
+        // 對帳鍵：綠界 callback 會原樣帶回，ReturnURL 以此對應到這筆收款。
+        customField1: token,
       },
       config.credentials,
       config.env,

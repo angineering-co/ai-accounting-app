@@ -12,7 +12,6 @@ import {
   createPaymentLinkSchema,
   type CreatePaymentLinkInput,
 } from "@/lib/domain/models";
-import { generateMerchantTradeNo } from "@/lib/services/ecpay/merchant-trade-no";
 
 // ecpay_payments 一律走 Drizzle 直連（與公開 /pay 頁一致），而 Drizzle 繞過 RLS。
 // 故所有進出都先用 Supabase session 認證 + 顯式 firm 把關，再以「已驗證的 firm_id」
@@ -111,10 +110,11 @@ export async function createPaymentLink(
     ? new Date(Date.now() + parsed.expires_in_days * 86_400_000).toISOString()
     : null;
 
-  // checkout_token / merchant_trade_no 皆 UNIQUE；碰撞機率極低，仍保留少量重試。
+  // 此處只產生 checkout_token（UNIQUE，碰撞機率極低仍保留少量重試）。
+  // merchant_trade_no 不在建單時產生：每次開啟 checkout 才以新的 MTN 送綠界，
+  // 真正成交的 MTN 由 ReturnURL 回寫（綠界視 MTN 永久唯一，無法重用）。
   for (let attempt = 0; attempt < 3; attempt++) {
     const checkoutToken = randomUUID();
-    const merchantTradeNo = generateMerchantTradeNo();
     try {
       await db.insert(ecpay_payments).values({
         firm_id: firmId,
@@ -123,7 +123,6 @@ export async function createPaymentLink(
         amount: parsed.amount,
         description: parsed.description,
         checkout_token: checkoutToken,
-        merchant_trade_no: merchantTradeNo,
         expires_at: expiresAt,
       });
       revalidatePath(`/firm/${firmId}/payment-link`);

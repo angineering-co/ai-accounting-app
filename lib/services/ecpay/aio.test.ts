@@ -64,6 +64,7 @@ describe("buildAioCreditForm", () => {
     itemName: "2026 年度訂閱",
     returnUrl: "https://example.com/api/webhooks/ecpay/return",
     orderResultUrl: "https://example.com/pay/result?token=tok_demo123",
+    customField1: "tok_demo123",
   };
 
   it("帶入信用卡一次付清的固定參數（不含 Period*）", () => {
@@ -79,7 +80,17 @@ describe("buildAioCreditForm", () => {
     expect(params.OrderResultURL).toBe(
       "https://example.com/pay/result?token=tok_demo123",
     );
+    expect(params.CustomField1).toBe("tok_demo123");
     expect(params).not.toHaveProperty("PeriodAmount");
+  });
+
+  it("未提供 customField1 時不帶 CustomField1", () => {
+    const { params } = buildAioCreditForm(
+      { ...order, customField1: undefined },
+      CREDS,
+      "stage",
+    );
+    expect(params).not.toHaveProperty("CustomField1");
   });
 
   it("CheckMacValue 可被自身驗證（round-trip）", () => {

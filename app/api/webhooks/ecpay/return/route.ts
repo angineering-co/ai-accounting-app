@@ -9,7 +9,9 @@ const PLAIN_TEXT = { "Content-Type": "text/plain" } as const;
 
 /**
  * 綠界 AIO ReturnURL 回呼（信用卡一次付清）。server-to-server Form POST，是付款
- * 結果的**權威來源**。驗 CheckMacValue → 以 merchant_trade_no 冪等更新 → 回 `1|OK`。
+ * 結果的**權威來源**。驗 CheckMacValue → 以 checkout_token（CustomField1）冪等更新
+ * → 回 `1|OK`。對帳鍵用 checkout_token 而非 MerchantTradeNo，因為每次開啟 checkout
+ * 都會換新的 MTN，唯有 checkout_token 穩定（不論哪次嘗試成交都對得回同一筆）。
  *
  * 回應規則：綠界要求純文字 `1|OK`，否則每 5–15 分鐘重送（每日上限 4 次）。
  * - CheckMacValue 驗證失敗：刻意回非 200，讓綠界於重試窗口內重送（真實回呼必定
@@ -41,25 +43,41 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  if (result.merchantTradeNo) {
+  // 對帳鍵優先用 checkout_token（CustomField1）；舊連結若無 CustomField1，退回以
+  // MerchantTradeNo 比對（過渡相容）。
+  const matchClause = result.checkoutToken
+    ? eq(ecpay_payments.checkout_token, result.checkoutToken)
+    : result.merchantTradeNo
+      ? eq(ecpay_payments.merchant_trade_no, result.merchantTradeNo)
+      : null;
+
+  if (matchClause) {
     const nextStatus = result.success ? "paid" : "failed";
 
-    // 僅在 status='pending' 時更新：重複回呼（綠界重送）具冪等性，不會覆寫已結案的列。
-    await db
+    // 僅在 status='pending' 時更新：重複/遲到回呼具冪等性，不覆寫已結案的列。
+    // 同時把這次「實際成交」的 MerchantTradeNo 回寫（退款/查詢時需要）。
+    const updated = await db
       .update(ecpay_payments)
       .set({
         status: nextStatus,
+        merchant_trade_no: result.merchantTradeNo || null,
         gwsr: result.gwsr,
         card4no: result.card4no,
         charged_at: result.success ? result.paidAt : null,
         raw_payload: params,
       })
-      .where(
-        and(
-          eq(ecpay_payments.merchant_trade_no, result.merchantTradeNo),
-          eq(ecpay_payments.status, "pending"),
-        ),
-      );
+      .where(and(matchClause, eq(ecpay_payments.status, "pending")))
+      .returning({ id: ecpay_payments.id });
+
+    // 成功回呼卻沒更新到任何 pending 列：可能是綠界重送（已處理），也可能是同一筆
+    // 在另一分頁被重複付款（並行雙刷）。留下軌跡，偵測/退款於後續階段處理。
+    if (result.success && updated.length === 0) {
+      console.warn("[ecpay] 成功回呼但無 pending 列可更新（重送或並行重複付款？）", {
+        checkoutToken: result.checkoutToken,
+        merchantTradeNo: result.merchantTradeNo,
+        tradeNo: result.tradeNo,
+      });
+    }
   }
 
   // 查無此單或已結案都回 1|OK，避免綠界持續重送。

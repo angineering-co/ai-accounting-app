@@ -56,6 +56,7 @@ export interface AioCreditOrder {
   itemName: string;
   returnUrl: string; // server-to-server，付款結果權威來源
   orderResultUrl?: string; // 付款完導回前景顯示用（選填）
+  customField1?: string; // 自訂欄位，綠界 callback 原樣回傳；放 checkout_token 供對帳（≤50 字）
 }
 
 export interface EcpayCheckoutForm {
@@ -85,6 +86,9 @@ export function buildAioCreditForm(
   };
   if (order.orderResultUrl) {
     params.OrderResultURL = order.orderResultUrl;
+  }
+  if (order.customField1) {
+    params.CustomField1 = order.customField1;
   }
   params.CheckMacValue = generateCheckMacValue(params, credentials);
   return { actionUrl: ECPAY_AIO_ENDPOINTS[env], params };

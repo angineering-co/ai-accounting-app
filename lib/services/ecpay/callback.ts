@@ -12,6 +12,9 @@ import { verifyCheckMacValue, type EcpayCredentials } from "./checkmacvalue";
 export interface AioReturnResult {
   /** CheckMacValue 驗證是否通過。false 代表偽造或我方實作有誤，不可採信其餘欄位。 */
   valid: boolean;
+  /** 對帳鍵：建單時放進 CustomField1 的 checkout_token，綠界原樣回傳。 */
+  checkoutToken: string;
+  /** 實際成交的綠界特店交易編號（每次開啟 checkout 都不同，成交後才回寫到列）。 */
   merchantTradeNo: string;
   /** RtnCode === '1' 才算付款成功。 */
   success: boolean;
@@ -56,6 +59,7 @@ export function parseAioReturn(
   const card4no = get("Card4No") || null;
   return {
     valid,
+    checkoutToken: get("CustomField1"),
     merchantTradeNo: get("MerchantTradeNo"),
     success: rtnCode === "1",
     rtnCode,

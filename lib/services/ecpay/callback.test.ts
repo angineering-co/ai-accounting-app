@@ -27,6 +27,7 @@ const SUCCESS_FIELDS = {
   PaymentType: "Credit_CreditCard",
   Gwsr: "1234567890",
   Card4No: "2222",
+  CustomField1: "27858c54-8b28-4108-bc36-e08619613146",
 };
 
 describe("ecpayPaymentDateToISO", () => {
@@ -48,6 +49,7 @@ describe("parseAioReturn", () => {
     const result = parseAioReturn(signedReturn(SUCCESS_FIELDS), CREDS);
     expect(result.valid).toBe(true);
     expect(result.success).toBe(true);
+    expect(result.checkoutToken).toBe("27858c54-8b28-4108-bc36-e08619613146");
     expect(result.merchantTradeNo).toBe("SB0123456789");
     expect(result.tradeNo).toBe("2401011234567890");
     expect(result.gwsr).toBe(1234567890);

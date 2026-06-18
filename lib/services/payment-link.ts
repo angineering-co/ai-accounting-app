@@ -1,7 +1,7 @@
 "use server";
 
 import { randomUUID } from "crypto";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 import { createClient as createSupabaseClient } from "@/lib/supabase/server";
@@ -12,6 +12,11 @@ import {
   createPaymentLinkSchema,
   type CreatePaymentLinkInput,
 } from "@/lib/domain/models";
+import { getEcpayConfig } from "@/lib/services/ecpay/config";
+import {
+  buildDoActionParams,
+  parseDoActionResponse,
+} from "@/lib/services/ecpay/do-action";
 
 // ecpay_payments 一律走 Drizzle 直連（與公開 /pay 頁一致），而 Drizzle 繞過 RLS。
 // 故所有進出都先用 Supabase session 認證 + 顯式 firm 把關，再以「已驗證的 firm_id」
@@ -134,4 +139,97 @@ export async function createPaymentLink(
   }
 
   throw new Error("產生收款連結失敗，請再試一次");
+}
+
+/**
+ * 退款：由本 app 透過綠界 CreditDetail/DoAction（Action=R）對某筆已付款訂單退全額。
+ * 成功後將該列改為 'refunded'，並記 refunded_amount / refunded_at。
+ *
+ * 為何由 app 發起：綠界後台「直接退款」不會回呼本系統（付款 ReturnURL 僅在原始付款
+ * 時觸發一次），故唯有由 app 發起退款，本系統才會即時得知。退款請一律在 SnapBooks 操作。
+ *
+ * 注意：
+ * - 僅信用卡（本系統收款一律 ChoosePayment=Credit）；DoAction 不支援 ATM/超商退款。
+ * - DoAction 僅正式環境可實際執行（測試環境無真實授權，呼叫會失敗）。
+ * - Action=R 要求交易已關帳（請款）。AIO 信用卡預設自動關帳，故一般退款落在此路徑；
+ *   付款後極短的未關帳窗口若退款失敗，綠界會於 RtnMsg 說明，照實回報給操作者。
+ */
+export async function refundPayment(input: {
+  firm_id: string;
+  payment_id: string;
+}): Promise<{ status: "refunded" }> {
+  const { profile } = await requireStaff();
+  const firmId = resolveFirmId(profile, input.firm_id);
+
+  // 限本 firm 讀取該筆付款（Drizzle 繞過 RLS，需顯式把關）。
+  const [payment] = await db
+    .select()
+    .from(ecpay_payments)
+    .where(
+      and(
+        eq(ecpay_payments.id, input.payment_id),
+        eq(ecpay_payments.firm_id, firmId),
+      ),
+    )
+    .limit(1);
+
+  if (!payment) throw new Error("找不到付款紀錄");
+  if (payment.status !== "paid") throw new Error("僅已付款的款項可退款");
+
+  // TradeNo（綠界交易編號）留在 raw_payload；退款必填，缺漏代表資料異常。
+  const rawPayload =
+    payment.raw_payload && typeof payment.raw_payload === "object"
+      ? (payment.raw_payload as Record<string, unknown>)
+      : {};
+  const tradeNo = rawPayload.TradeNo;
+  if (!payment.merchant_trade_no || typeof tradeNo !== "string" || !tradeNo) {
+    throw new Error("缺少綠界交易編號，無法退款");
+  }
+
+  const config = getEcpayConfig();
+  const params = buildDoActionParams(
+    {
+      merchantId: config.merchantId,
+      merchantTradeNo: payment.merchant_trade_no,
+      tradeNo,
+      action: "R",
+      totalAmount: payment.amount, // v1 全額退款
+    },
+    config.credentials,
+  );
+
+  const response = await fetch(config.doActionUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(params).toString(),
+  });
+  const result = parseDoActionResponse(await response.text());
+
+  if (!result.success) {
+    console.error("[ecpay] 退款失敗", {
+      paymentId: payment.id,
+      merchantTradeNo: payment.merchant_trade_no,
+      rtnCode: result.rtnCode,
+      rtnMsg: result.rtnMsg,
+    });
+    throw new Error(`退款失敗：${result.rtnMsg || `綠界回應碼 ${result.rtnCode}`}`);
+  }
+
+  // 僅在 status='paid' 時改為 refunded：並行/重複退款保護（避免覆寫已結案列）。
+  await db
+    .update(ecpay_payments)
+    .set({
+      status: "refunded",
+      refunded_amount: payment.amount,
+      refunded_at: new Date().toISOString(),
+    })
+    .where(
+      and(
+        eq(ecpay_payments.id, payment.id),
+        eq(ecpay_payments.status, "paid"),
+      ),
+    );
+
+  revalidatePath(`/firm/${firmId}/payment-link`);
+  return { status: "refunded" };
 }

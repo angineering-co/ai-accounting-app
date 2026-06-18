@@ -47,7 +47,7 @@ async function ResultContent({ params }: Props) {
       <PayShell
         tone="error"
         title="付款未完成"
-        detail="這筆付款未成功完成。若您的帳戶已遭扣款，請與我們聯繫；或重新嘗試付款。"
+        detail="這筆付款未能完成。若您的帳戶已遭扣款，請與我們聯繫；若需重新付款，請向我們索取新的收款連結。"
       />
     );
   }

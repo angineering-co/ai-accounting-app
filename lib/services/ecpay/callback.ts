@@ -54,11 +54,14 @@ export function parseAioReturn(
   const get = (key: string) =>
     typeof params[key] === "string" ? params[key] : "";
   const rtnCode = get("RtnCode");
-  const gwsrRaw = get("Gwsr");
+  // 注意：綠界「額外回傳的參數」用**小寫**鍵名（gwsr / card4no），與一般欄位
+  // （MerchantTradeNo 等）的大駝峰不同。讀錯大小寫會永遠取到空字串、欄位掉空。
+  // 來源：ECPay 5675（額外回傳的參數）、skill guides/01 §額外回傳參數。
+  const gwsrRaw = get("gwsr");
   // GWSR 最長 10 位，遠小於 Number.MAX_SAFE_INTEGER（~9×10^15），用 Number 安全；
   // 與 DB 欄位 bigint({ mode: "number" }) 一致，勿改成 BigInt 以免型別不符。
   const gwsr = /^\d+$/.test(gwsrRaw) ? Number(gwsrRaw) : null;
-  const card4no = get("Card4No") || null;
+  const card4no = get("card4no") || null;
   return {
     valid,
     checkoutToken: get("CustomField1"),

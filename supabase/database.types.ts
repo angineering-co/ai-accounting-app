@@ -365,6 +365,8 @@ export type Database = {
           id: string
           merchant_trade_no: string | null
           raw_payload: Json | null
+          refunded_amount: number | null
+          refunded_at: string | null
           status: string
           type: string
         }
@@ -382,6 +384,8 @@ export type Database = {
           id?: string
           merchant_trade_no?: string | null
           raw_payload?: Json | null
+          refunded_amount?: number | null
+          refunded_at?: string | null
           status?: string
           type: string
         }
@@ -399,6 +403,8 @@ export type Database = {
           id?: string
           merchant_trade_no?: string | null
           raw_payload?: Json | null
+          refunded_amount?: number | null
+          refunded_at?: string | null
           status?: string
           type?: string
         }

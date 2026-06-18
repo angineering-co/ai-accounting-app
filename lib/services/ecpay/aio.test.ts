@@ -81,6 +81,8 @@ describe("buildAioCreditForm", () => {
       "https://example.com/pay/result?token=tok_demo123",
     );
     expect(params.CustomField1).toBe("tok_demo123");
+    // 必須要求額外付款資訊，callback 才會回傳 gwsr / card4no。
+    expect(params.NeedExtraPaidInfo).toBe("Y");
     expect(params).not.toHaveProperty("PeriodAmount");
   });
 

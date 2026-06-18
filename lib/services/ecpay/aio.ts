@@ -83,6 +83,9 @@ export function buildAioCreditForm(
     ReturnURL: order.returnUrl,
     ChoosePayment: "Credit",
     EncryptType: "1",
+    // 要求綠界於 callback 回傳額外付款資訊（gwsr / card4no / card6no / auth_code 等）。
+    // 未帶此參數時，ReturnURL 完全不會出現這些欄位，gwsr / card4no 必為空（掉欄位）。
+    NeedExtraPaidInfo: "Y",
   };
   if (order.orderResultUrl) {
     params.OrderResultURL = order.orderResultUrl;

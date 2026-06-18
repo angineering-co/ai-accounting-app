@@ -1,0 +1,10 @@
+# Claude Code 在建立 git worktree 時，會把符合下列樣式且被 git 忽略的檔案
+# 複製進新的 worktree（語法同 .gitignore）。用來帶入沒進版控、但本機跑 app 需要的
+# 設定檔（例如 .env.local，內含 Supabase / ECPay / STAGING_DB_URL 等）。
+#
+# 注意：
+# - 只在「建立 worktree 當下」複製一次，且是「複製」非 symlink，事後不會自動同步。
+# - 不要在這裡列 node_modules：複製整包很肥，且官方建議改在各 worktree 跑 npm install
+#   （本 repo 的 worktree 也能沿父目錄解析主 repo 的 node_modules）。
+.env
+.env*.local

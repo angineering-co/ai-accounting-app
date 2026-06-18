@@ -10,6 +10,7 @@ const STATUS_STYLES: Record<EcpayPaymentStatus, string> = {
   pending: "border-amber-200 bg-amber-50 text-amber-700",
   failed: "border-red-200 bg-red-50 text-red-700",
   expired: "border-slate-200 bg-slate-50 text-slate-600",
+  refunded: "border-slate-200 bg-slate-50 text-slate-600",
 };
 
 const STATUS_LABELS: Record<EcpayPaymentStatus, string> = {
@@ -17,6 +18,7 @@ const STATUS_LABELS: Record<EcpayPaymentStatus, string> = {
   pending: "待付款",
   failed: "付款失敗",
   expired: "已過期",
+  refunded: "已退款",
 };
 
 function isStatus(value: string): value is EcpayPaymentStatus {

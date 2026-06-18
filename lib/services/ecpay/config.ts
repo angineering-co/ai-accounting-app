@@ -7,11 +7,21 @@ export const ECPAY_AIO_ENDPOINTS: Record<EcpayEnv, string> = {
   production: "https://payment.ecpay.com.tw/Cashier/AioCheckOut/V5",
 };
 
+// 信用卡請款/退款/取消（DoAction）。
+// ⚠️ DoAction 僅正式環境可實際執行：綠界測試環境無法做真實授權，故 stage 沒有可用的
+// 退款 API。stage 仍指向 stage domain 以維持對稱，但於 stage 呼叫退款會收到失敗回應，
+// 屬預期行為（退款須於正式環境驗證）。來源：綠界 2885（信用卡請退款功能）。
+export const ECPAY_DOACTION_ENDPOINTS: Record<EcpayEnv, string> = {
+  stage: "https://payment-stage.ecpay.com.tw/CreditDetail/DoAction",
+  production: "https://payment.ecpay.com.tw/CreditDetail/DoAction",
+};
+
 export interface EcpayConfig {
   merchantId: string;
   credentials: EcpayCredentials;
   env: EcpayEnv;
   aioCheckoutUrl: string;
+  doActionUrl: string;
 }
 
 /** 讀 ECPay 環境變數。缺漏即丟錯（部署設定問題，不該無聲失敗）。 */
@@ -31,6 +41,7 @@ export function getEcpayConfig(): EcpayConfig {
     credentials: { hashKey, hashIV },
     env,
     aioCheckoutUrl: ECPAY_AIO_ENDPOINTS[env],
+    doActionUrl: ECPAY_DOACTION_ENDPOINTS[env],
   };
 }
 

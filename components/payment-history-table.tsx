@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import { PaymentStatusBadge } from "@/components/payment-status-badge";
 import { CopyLinkButton } from "@/components/copy-link-button";
+import { RefundPaymentButton } from "@/components/refund-payment-button";
 import type { FirmPaymentRow } from "@/lib/services/payment-link";
 
 function typeLabel(type: string): string {
@@ -22,9 +23,11 @@ function typeLabel(type: string): string {
 export function PaymentHistoryTable({
   rows,
   baseUrl,
+  firmId,
 }: {
   rows: FirmPaymentRow[];
   baseUrl: string;
+  firmId: string;
 }) {
   if (rows.length === 0) {
     return (
@@ -45,7 +48,7 @@ export function PaymentHistoryTable({
             <TableHead className="text-right">金額</TableHead>
             <TableHead>狀態</TableHead>
             <TableHead>建立時間</TableHead>
-            <TableHead className="text-right">連結</TableHead>
+            <TableHead className="text-right">操作</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -60,7 +63,14 @@ export function PaymentHistoryTable({
                 NT${formatNTD(row.amount)}
               </TableCell>
               <TableCell>
-                <PaymentStatusBadge status={row.status} />
+                <div className="flex flex-col items-start gap-1">
+                  <PaymentStatusBadge status={row.status} />
+                  {row.status === "refunded" && row.refunded_at && (
+                    <span className="text-sm text-muted-foreground">
+                      退款於 {formatIsoDateTimeZhTW(row.refunded_at)}
+                    </span>
+                  )}
+                </div>
               </TableCell>
               <TableCell className="text-base text-muted-foreground">
                 {formatIsoDateTimeZhTW(row.created_at)}
@@ -68,6 +78,13 @@ export function PaymentHistoryTable({
               <TableCell className="text-right">
                 {row.status === "pending" ? (
                   <CopyLinkButton url={`${baseUrl}/pay/${row.checkout_token}`} />
+                ) : row.status === "paid" ? (
+                  <RefundPaymentButton
+                    firmId={firmId}
+                    paymentId={row.id}
+                    amount={row.amount}
+                    description={row.description}
+                  />
                 ) : (
                   <span className="text-sm text-muted-foreground">—</span>
                 )}

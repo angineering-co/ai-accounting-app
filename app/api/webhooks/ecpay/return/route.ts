@@ -4,6 +4,7 @@ import { db } from "@/lib/db/drizzle";
 import { ecpay_payments } from "@/lib/db/schema";
 import { getEcpayConfig } from "@/lib/services/ecpay/config";
 import { parseAioReturn } from "@/lib/services/ecpay/callback";
+import type { EcpayPaymentStatus } from "@/lib/domain/models";
 
 const PLAIN_TEXT = { "Content-Type": "text/plain" } as const;
 
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
   // 對帳鍵是 checkout_token（建單時放進 CustomField1，綠界原樣回傳）。v1 一律帶，
   // 故缺漏只代表異常——留 log，不更新。
   if (result.checkoutToken) {
-    const nextStatus = result.success ? "paid" : "failed";
+    const nextStatus: EcpayPaymentStatus = result.success ? "paid" : "failed";
 
     // 僅在 status='pending' 時更新：重複/遲到回呼具冪等性，不覆寫已結案的列。
     // 同時把這次「實際成交」的 MerchantTradeNo 回寫（退款/查詢時需要）。

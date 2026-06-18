@@ -139,11 +139,14 @@ export const PAYMENT_LINK_TYPE_LABELS: Record<PaymentLinkType, string> = {
 };
 
 // ecpay_payments.status 的可能值（與 migration CHECK 一致）。
+// refunded：由本 app 透過綠界 DoAction 退款成功後寫入（綠界後台直接退款不會回呼，
+// 故退款一律走 SnapBooks）。
 export const ECPAY_PAYMENT_STATUSES = [
   "pending",
   "paid",
   "failed",
   "expired",
+  "refunded",
 ] as const;
 export type EcpayPaymentStatus = (typeof ECPAY_PAYMENT_STATUSES)[number];
 

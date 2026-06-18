@@ -40,7 +40,7 @@ export default async function PaymentLinkPage({
         />
       </div>
 
-      <PaymentHistoryTable rows={payments} baseUrl={baseUrl} />
+      <PaymentHistoryTable rows={payments} baseUrl={baseUrl} firmId={firmId} />
     </div>
   );
 }

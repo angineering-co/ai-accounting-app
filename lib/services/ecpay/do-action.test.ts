@@ -1,0 +1,60 @@
+import { describe, it, expect } from "vitest";
+import { generateCheckMacValue, type EcpayCredentials } from "./checkmacvalue";
+import { buildDoActionParams, parseDoActionResponse } from "./do-action";
+
+const CREDS: EcpayCredentials = {
+  hashKey: "pwFHCqoQZGmho4w6",
+  hashIV: "EkRm7iFT261dpevs",
+};
+
+describe("buildDoActionParams", () => {
+  it("帶齊退款必填欄位並附上可被驗證的 CheckMacValue", () => {
+    const params = buildDoActionParams(
+      {
+        merchantId: "3002607",
+        merchantTradeNo: "SB0123456789",
+        tradeNo: "2401011234567890",
+        action: "R",
+        totalAmount: 16380,
+      },
+      CREDS,
+    );
+
+    expect(params.MerchantID).toBe("3002607");
+    expect(params.MerchantTradeNo).toBe("SB0123456789");
+    expect(params.TradeNo).toBe("2401011234567890");
+    expect(params.Action).toBe("R");
+    expect(params.TotalAmount).toBe("16380"); // 字串化
+
+    // CheckMacValue 必須與用其餘欄位重算的一致（自洽，避免日後改動演算法掉單）。
+    const { CheckMacValue, ...rest } = params;
+    expect(CheckMacValue).toBe(generateCheckMacValue(rest, CREDS));
+  });
+});
+
+describe("parseDoActionResponse", () => {
+  it("RtnCode=1 視為成功（整數比較）", () => {
+    const result = parseDoActionResponse(
+      "MerchantID=3002607&MerchantTradeNo=SB0123456789&TradeNo=2401011234567890&RtnCode=1&RtnMsg=",
+    );
+    expect(result.success).toBe(true);
+    expect(result.rtnCode).toBe(1);
+    expect(result.merchantTradeNo).toBe("SB0123456789");
+    expect(result.tradeNo).toBe("2401011234567890");
+  });
+
+  it("RtnCode 非 1 視為失敗並保留 RtnMsg", () => {
+    const result = parseDoActionResponse(
+      "RtnCode=10200047&RtnMsg=" + encodeURIComponent("交易不存在"),
+    );
+    expect(result.success).toBe(false);
+    expect(result.rtnCode).toBe(10200047);
+    expect(result.rtnMsg).toBe("交易不存在");
+  });
+
+  it("缺 RtnCode 時不誤判為成功", () => {
+    const result = parseDoActionResponse("RtnMsg=oops");
+    expect(result.success).toBe(false);
+    expect(result.rtnCode).toBe(-1);
+  });
+});

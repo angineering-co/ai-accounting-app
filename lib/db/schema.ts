@@ -64,6 +64,8 @@ export const ecpay_payments = pgTable("ecpay_payments", {
 	raw_payload: jsonb(),
 	charged_at: timestamp({ withTimezone: true, mode: 'string' }),
 	created_at: timestamp({ withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	refunded_amount: integer(),
+	refunded_at: timestamp({ withTimezone: true, mode: 'string' }),
 }, (table) => [
 	index("ecpay_payments_client_id_idx").using("btree", table.client_id.asc().nullsLast().op("uuid_ops")).where(sql`(client_id IS NOT NULL)`),
 	index("ecpay_payments_firm_id_status_idx").using("btree", table.firm_id.asc().nullsLast().op("uuid_ops"), table.status.asc().nullsLast().op("text_ops")),
@@ -80,7 +82,7 @@ export const ecpay_payments = pgTable("ecpay_payments", {
 	unique("ecpay_payments_checkout_token_key").on(table.checkout_token),
 	unique("ecpay_payments_merchant_trade_no_key").on(table.merchant_trade_no),
 	pgPolicy("Users can manage ecpay_payments in their firm", { as: "permissive", for: "all", to: ["public"], using: sql`(((firm_id = get_auth_user_firm_id()) AND ((get_auth_user_client_id() IS NULL) OR (client_id = get_auth_user_client_id()))) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`, withCheck: sql`(((firm_id = get_auth_user_firm_id()) AND ((get_auth_user_client_id() IS NULL) OR (client_id = get_auth_user_client_id()))) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`  }),
-	check("ecpay_payments_status_check", sql`status = ANY (ARRAY['pending'::text, 'paid'::text, 'failed'::text, 'expired'::text])`),
+	check("ecpay_payments_status_check", sql`status = ANY (ARRAY['pending'::text, 'paid'::text, 'failed'::text, 'expired'::text, 'refunded'::text])`),
 	check("ecpay_payments_type_check", sql`type = ANY (ARRAY['deposit'::text, 'subscription'::text, 'addon'::text])`),
 ]);
 

@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { refundPayment } from "@/lib/services/payment-link";
+import {
+  isAutoCaptureBlackout,
+  AUTO_CAPTURE_BLACKOUT_LABEL,
+} from "@/lib/services/ecpay/auto-capture-window";
 import { formatNTD } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,6 +42,16 @@ export function RefundPaymentButton({
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
 
+  // 自動關帳時段（台灣 20:15–20:30）綠界禁止退款；此時段停用按鈕（伺服器端亦會擋）。
+  // 初次 render 一律 false（避免 SSR/CSR 不一致），掛載後再依台灣時間每分鐘校正。
+  const [blackout, setBlackout] = useState(false);
+  useEffect(() => {
+    const check = () => setBlackout(isAutoCaptureBlackout());
+    check();
+    const timer = setInterval(check, 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
   const onConfirm = async () => {
     setPending(true);
     try {
@@ -51,6 +65,21 @@ export function RefundPaymentButton({
       setPending(false);
     }
   };
+
+  if (blackout) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled
+        title={`綠界自動關帳時段（${AUTO_CAPTURE_BLACKOUT_LABEL}）暫停退款`}
+      >
+        <Undo2 className="mr-1 size-4" />
+        退款
+      </Button>
+    );
+  }
 
   return (
     <AlertDialog open={open} onOpenChange={(next) => !pending && setOpen(next)}>

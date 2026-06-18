@@ -17,6 +17,10 @@ import {
   buildDoActionParams,
   parseDoActionResponse,
 } from "@/lib/services/ecpay/do-action";
+import {
+  isAutoCaptureBlackout,
+  AUTO_CAPTURE_BLACKOUT_LABEL,
+} from "@/lib/services/ecpay/auto-capture-window";
 
 // ecpay_payments 一律走 Drizzle 直連（與公開 /pay 頁一致），而 Drizzle 繞過 RLS。
 // 故所有進出都先用 Supabase session 認證 + 顯式 firm 把關，再以「已驗證的 firm_id」
@@ -151,8 +155,11 @@ export async function createPaymentLink(
  * 注意：
  * - 僅信用卡（本系統收款一律 ChoosePayment=Credit）；DoAction 不支援 ATM/超商退款。
  * - DoAction 僅正式環境可實際執行（測試環境無真實授權，呼叫會失敗）。
- * - Action=R 要求交易已關帳（請款）。AIO 信用卡預設自動關帳，故一般退款落在此路徑；
- *   付款後極短的未關帳窗口若退款失敗，綠界會於 RtnMsg 說明，照實回報給操作者。
+ * - Action=R 在「要關帳」與「已關帳」狀態皆可退款（來源：綠界 2883 狀態機）。本帳戶為
+ *   每日自動關帳，付款後即進入 要關帳→已關帳，故 R 一路適用，不需先請款。（若帳戶改為
+ *   手動請款，已授權未關帳的訂單須先 C 請款或 N 放棄，屆時再擴充。）
+ * - 每日自動關帳時段（台灣時間 20:15–20:30）綠界要求勿呼叫 DoAction，故此時段擋下退款。
+ * - 退款金額不得超過原訂單；綠界帳戶餘額不足會被拒，RtnMsg 照實回報給操作者。
  */
 export async function refundPayment(input: {
   firm_id: string;
@@ -175,6 +182,13 @@ export async function refundPayment(input: {
 
   if (!payment) throw new Error("找不到付款紀錄");
   if (payment.status !== "paid") throw new Error("僅已付款的款項可退款");
+
+  // 每日自動關帳時段綠界禁止呼叫 DoAction，於此時段擋下退款（server 端為權威把關）。
+  if (isAutoCaptureBlackout()) {
+    throw new Error(
+      `綠界每日自動關帳時段（台灣時間 ${AUTO_CAPTURE_BLACKOUT_LABEL}）暫停退款，請於 20:30 後再試`,
+    );
+  }
 
   // TradeNo（綠界交易編號）留在 raw_payload；退款必填，缺漏代表資料異常。
   const rawPayload =

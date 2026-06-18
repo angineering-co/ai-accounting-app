@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/drizzle";
 import { ecpay_payments } from "@/lib/db/schema";
@@ -38,15 +38,10 @@ async function PayContent({ params }: Props) {
 
   if (!payment) notFound();
 
-  // 狀態閘門：付款後此連結即失效，重開不再產生付款表單（避免重複付款的「先付再重開」路徑）。
+  // 狀態閘門：付款後此連結即失效，不再產生付款表單（避免重複付款的「先付再重開」路徑）。
+  // 重開時導去結果頁，讓已付款者看到「付款成功」確認，而非含糊的失效訊息。
   if (payment.status !== "pending") {
-    return (
-      <PayShell
-        tone="error"
-        title="此連結已完成或失效"
-        detail="這筆款項已付款或不再有效，如有疑問請與我們聯繫。"
-      />
-    );
+    redirect(`/pay/${encodeURIComponent(token)}/result`);
   }
 
   if (payment.expires_at && new Date(payment.expires_at) < new Date()) {

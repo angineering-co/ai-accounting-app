@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import { PaymentStatusBadge } from "@/components/payment-status-badge";
 import { CopyLinkButton } from "@/components/copy-link-button";
+import { RefundPaymentButton } from "@/components/refund-payment-button";
 import type { FirmPaymentRow } from "@/lib/services/payment-link";
 
 function typeLabel(type: string): string {
@@ -22,9 +23,11 @@ function typeLabel(type: string): string {
 export function PaymentHistoryTable({
   rows,
   baseUrl,
+  firmId,
 }: {
   rows: FirmPaymentRow[];
   baseUrl: string;
+  firmId: string;
 }) {
   if (rows.length === 0) {
     return (
@@ -45,7 +48,7 @@ export function PaymentHistoryTable({
             <TableHead className="text-right">金額</TableHead>
             <TableHead>狀態</TableHead>
             <TableHead>建立時間</TableHead>
-            <TableHead className="text-right">連結</TableHead>
+            <TableHead className="text-right">操作</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -68,6 +71,13 @@ export function PaymentHistoryTable({
               <TableCell className="text-right">
                 {row.status === "pending" ? (
                   <CopyLinkButton url={`${baseUrl}/pay/${row.checkout_token}`} />
+                ) : row.status === "paid" ? (
+                  <RefundPaymentButton
+                    firmId={firmId}
+                    paymentId={row.id}
+                    amount={row.amount}
+                    description={row.description}
+                  />
                 ) : (
                   <span className="text-sm text-muted-foreground">—</span>
                 )}

@@ -11,6 +11,7 @@ import { ecpay_payments, clients } from "@/lib/db/schema";
 import {
   createPaymentLinkSchema,
   type CreatePaymentLinkInput,
+  type EcpayPaymentStatus,
 } from "@/lib/domain/models";
 import { getEcpayConfig } from "@/lib/services/ecpay/config";
 import {
@@ -230,10 +231,13 @@ export async function refundPayment(input: {
   }
 
   // 僅在 status='paid' 時改為 refunded：並行/重複退款保護（避免覆寫已結案列）。
+  // status 以 EcpayPaymentStatus 約束（schema.ts 為 drizzle-kit pull 產生檔，不在該處放
+  // 型別細節，改於寫入端做編譯期把關；models.ts 為單一來源，DB CHECK 為執行期防線）。
+  const nextStatus: EcpayPaymentStatus = "refunded";
   await db
     .update(ecpay_payments)
     .set({
-      status: "refunded",
+      status: nextStatus,
       refunded_amount: payment.amount,
       refunded_at: new Date().toISOString(),
     })

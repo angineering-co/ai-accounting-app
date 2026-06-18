@@ -38,7 +38,10 @@ export async function updateSession(request: NextRequest) {
     publicRoutes.has(normalizedPath) ||
     pathname.startsWith("/blog/") ||
     pathname.startsWith("/tools/") ||
-    pathname.startsWith("/api/webhooks/");
+    pathname.startsWith("/api/webhooks/") ||
+    // 公開收款連結：checkout 頁、前景結果回呼（/pay/result）與結果顯示頁（簽約前訂金亦可用）。
+    // 綠界 server-to-server 權威回呼（ReturnURL）走 /api/webhooks/ecpay/return，已由上面的 /api/webhooks/ 放行。
+    pathname.startsWith("/pay/");
 
   // Skip the Supabase round-trip on public marketing/content routes so they
   // can serve from the Vercel edge cache. The auth client otherwise sets

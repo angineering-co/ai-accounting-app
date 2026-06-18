@@ -1,5 +1,5 @@
 import { authUsers as users } from "drizzle-orm/supabase";
-import { pgTable, index, unique, check, uuid, text, jsonb, timestamp, uniqueIndex, foreignKey, boolean, pgPolicy, date, bigint, smallint, varchar, primaryKey, integer } from "drizzle-orm/pg-core"
+import { pgTable, index, unique, check, uuid, text, jsonb, timestamp, uniqueIndex, foreignKey, boolean, pgPolicy, integer, bigint, date, smallint, varchar, primaryKey } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 
@@ -45,6 +45,43 @@ export const line_accounts = pgTable("line_accounts", {
 			name: "line_accounts_lead_id_fkey"
 		}).onDelete("set null"),
 	unique("line_accounts_line_user_id_key").on(table.line_user_id),
+]);
+
+export const ecpay_payments = pgTable("ecpay_payments", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	firm_id: uuid().notNull(),
+	client_id: uuid(),
+	type: text().notNull(),
+	status: text().default('pending').notNull(),
+	amount: integer().notNull(),
+	description: text().notNull(),
+	checkout_token: text().notNull(),
+	expires_at: timestamp({ withTimezone: true, mode: 'string' }),
+	merchant_trade_no: text(),
+	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
+	gwsr: bigint({ mode: "number" }),
+	card4no: text(),
+	raw_payload: jsonb(),
+	charged_at: timestamp({ withTimezone: true, mode: 'string' }),
+	created_at: timestamp({ withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	index("ecpay_payments_client_id_idx").using("btree", table.client_id.asc().nullsLast().op("uuid_ops")).where(sql`(client_id IS NOT NULL)`),
+	index("ecpay_payments_firm_id_status_idx").using("btree", table.firm_id.asc().nullsLast().op("uuid_ops"), table.status.asc().nullsLast().op("text_ops")),
+	foreignKey({
+			columns: [table.client_id],
+			foreignColumns: [clients.id],
+			name: "ecpay_payments_client_id_fkey"
+		}).onDelete("set null"),
+	foreignKey({
+			columns: [table.firm_id],
+			foreignColumns: [firms.id],
+			name: "ecpay_payments_firm_id_fkey"
+		}).onDelete("cascade"),
+	unique("ecpay_payments_checkout_token_key").on(table.checkout_token),
+	unique("ecpay_payments_merchant_trade_no_key").on(table.merchant_trade_no),
+	pgPolicy("Users can manage ecpay_payments in their firm", { as: "permissive", for: "all", to: ["public"], using: sql`(((firm_id = get_auth_user_firm_id()) AND ((get_auth_user_client_id() IS NULL) OR (client_id = get_auth_user_client_id()))) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`, withCheck: sql`(((firm_id = get_auth_user_firm_id()) AND ((get_auth_user_client_id() IS NULL) OR (client_id = get_auth_user_client_id()))) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`  }),
+	check("ecpay_payments_status_check", sql`status = ANY (ARRAY['pending'::text, 'paid'::text, 'failed'::text, 'expired'::text])`),
+	check("ecpay_payments_type_check", sql`type = ANY (ARRAY['deposit'::text, 'subscription'::text, 'addon'::text])`),
 ]);
 
 export const documents = pgTable("documents", {

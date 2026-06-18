@@ -126,6 +126,48 @@ export type UpdateClientInput = z.infer<typeof updateClientSchema>;
 export type CreateClientInput = z.infer<typeof createClientSchema>;
 export type UpdateClientSettingsInput = z.infer<typeof updateClientSettingsSchema>;
 
+// ===== ECPay 收款連結 Schemas =====
+
+// 一次性收款連結三種用途：訂金（簽約前可無 client）、訂閱期費、加購。
+export const PAYMENT_LINK_TYPES = ["deposit", "subscription", "addon"] as const;
+export type PaymentLinkType = (typeof PAYMENT_LINK_TYPES)[number];
+
+export const PAYMENT_LINK_TYPE_LABELS: Record<PaymentLinkType, string> = {
+  deposit: "訂金",
+  subscription: "訂閱費",
+  addon: "加購",
+};
+
+// ecpay_payments.status 的可能值（與 migration CHECK 一致）。
+export const ECPAY_PAYMENT_STATUSES = [
+  "pending",
+  "paid",
+  "failed",
+  "expired",
+] as const;
+export type EcpayPaymentStatus = (typeof ECPAY_PAYMENT_STATUSES)[number];
+
+export const createPaymentLinkSchema = z.object({
+  firm_id: z.string().uuid(),
+  client_id: z.string().uuid().nullable().optional(),
+  type: z.enum(PAYMENT_LINK_TYPES),
+  amount: z.coerce
+    .number()
+    .int("金額必須是整數")
+    .min(1, "金額至少 1 元")
+    .max(1_000_000, "金額過大，請確認"),
+  description: z
+    .string()
+    .trim()
+    .min(1, "請填寫品項說明")
+    .max(100, "品項說明請少於 100 字"),
+  // 選填：未填＝不過期（刻意保留，供未來「常駐收款連結」用）。後台 UI 目前一律要求
+  // 1–90 天；若日後業務規則改為「連結必須有期限」，再於此層改為 required。
+  expires_in_days: z.coerce.number().int().min(1).max(90).optional(),
+});
+
+export type CreatePaymentLinkInput = z.infer<typeof createPaymentLinkSchema>;
+
 // ===== Invoice Schemas =====
 
 // Schema for extracted invoice data (stored in JSONB column)

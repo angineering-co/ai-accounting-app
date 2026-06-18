@@ -1,6 +1,6 @@
 import { relations } from "drizzle-orm/relations";
 import { authUsers as usersInAuth } from "drizzle-orm/supabase";
-import { clients, line_accounts, leads, documents, profiles, firms, journal_entries, journal_entry_lines, invoices, tax_filing_periods, allowances, invoice_ranges, fiscal_year_closes, audit_trails, voucher_sequences } from "./schema";
+import { clients, line_accounts, leads, ecpay_payments, firms, documents, profiles, journal_entries, journal_entry_lines, invoices, tax_filing_periods, allowances, invoice_ranges, fiscal_year_closes, audit_trails, voucher_sequences } from "./schema";
 
 export const line_accountsRelations = relations(line_accounts, ({one}) => ({
 	client: one(clients, {
@@ -15,6 +15,7 @@ export const line_accountsRelations = relations(line_accounts, ({one}) => ({
 
 export const clientsRelations = relations(clients, ({one, many}) => ({
 	line_accounts: many(line_accounts),
+	ecpay_payments: many(ecpay_payments),
 	documents: many(documents),
 	journal_entries: many(journal_entries),
 	invoices: many(invoices),
@@ -32,6 +33,31 @@ export const clientsRelations = relations(clients, ({one, many}) => ({
 
 export const leadsRelations = relations(leads, ({many}) => ({
 	line_accounts: many(line_accounts),
+}));
+
+export const ecpay_paymentsRelations = relations(ecpay_payments, ({one}) => ({
+	client: one(clients, {
+		fields: [ecpay_payments.client_id],
+		references: [clients.id]
+	}),
+	firm: one(firms, {
+		fields: [ecpay_payments.firm_id],
+		references: [firms.id]
+	}),
+}));
+
+export const firmsRelations = relations(firms, ({many}) => ({
+	ecpay_payments: many(ecpay_payments),
+	documents: many(documents),
+	journal_entries: many(journal_entries),
+	invoices: many(invoices),
+	allowances: many(allowances),
+	invoice_ranges: many(invoice_ranges),
+	tax_filing_periods: many(tax_filing_periods),
+	profiles: many(profiles),
+	clients: many(clients),
+	fiscal_year_closes: many(fiscal_year_closes),
+	audit_trails: many(audit_trails),
 }));
 
 export const documentsRelations = relations(documents, ({one, many}) => ({
@@ -74,19 +100,6 @@ export const profilesRelations = relations(profiles, ({one, many}) => ({
 		fields: [profiles.id],
 		references: [usersInAuth.id]
 	}),
-	fiscal_year_closes: many(fiscal_year_closes),
-	audit_trails: many(audit_trails),
-}));
-
-export const firmsRelations = relations(firms, ({many}) => ({
-	documents: many(documents),
-	journal_entries: many(journal_entries),
-	invoices: many(invoices),
-	allowances: many(allowances),
-	invoice_ranges: many(invoice_ranges),
-	tax_filing_periods: many(tax_filing_periods),
-	profiles: many(profiles),
-	clients: many(clients),
 	fiscal_year_closes: many(fiscal_year_closes),
 	audit_trails: many(audit_trails),
 }));

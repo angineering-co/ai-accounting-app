@@ -10,6 +10,7 @@ import {
   Scale,
   TrendingUp,
   FolderOpen,
+  CreditCard,
 } from "lucide-react";
 import {
   Sidebar,
@@ -43,6 +44,7 @@ export function FirmSidebar() {
     { title: "首頁", url: `/firm/${firmId}/dashboard`, icon: LayoutDashboard },
     { title: "客戶管理", url: `/firm/${firmId}/client`, icon: Users },
     { title: "發票管理", url: `/firm/${firmId}/invoice`, icon: FileText },
+    { title: "收款", url: `/firm/${firmId}/payment-link`, icon: CreditCard },
     { title: "設定", url: `/firm/${firmId}/settings`, icon: Settings },
   ];
 

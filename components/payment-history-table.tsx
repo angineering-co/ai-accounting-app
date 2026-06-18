@@ -63,7 +63,7 @@ export function PaymentHistoryTable({
                 NT${formatNTD(row.amount)}
               </TableCell>
               <TableCell>
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col items-start gap-1">
                   <PaymentStatusBadge status={row.status} />
                   {row.status === "refunded" && row.refunded_at && (
                     <span className="text-sm text-muted-foreground">

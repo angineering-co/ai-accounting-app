@@ -15,8 +15,18 @@ import { getSiteBaseUrl } from "@/lib/services/ecpay/config";
 export async function POST(request: NextRequest) {
   const base = getSiteBaseUrl();
   const token = request.nextUrl.searchParams.get("token");
-  const destination = token
-    ? `${base}/pay/${encodeURIComponent(token)}/result`
-    : `${base}/`;
-  return NextResponse.redirect(destination, 303);
+
+  if (!token) {
+    // 只會在 OrderResultURL 設定有誤（我方 bug）時發生。留 log 以可觀測；導去
+    // /pay/* 的品牌化 not-found（該 token 必查無），而非把客戶丟到行銷首頁。
+    console.error(
+      "[ecpay] OrderResultURL 缺少 token，無法導向結果頁（OrderResultURL 設定有誤？）",
+    );
+    return NextResponse.redirect(`${base}/pay/unavailable`, 303);
+  }
+
+  return NextResponse.redirect(
+    `${base}/pay/${encodeURIComponent(token)}/result`,
+    303,
+  );
 }

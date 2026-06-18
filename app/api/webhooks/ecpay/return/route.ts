@@ -43,15 +43,9 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // 對帳鍵優先用 checkout_token（CustomField1）；舊連結若無 CustomField1，退回以
-  // MerchantTradeNo 比對（過渡相容）。
-  const matchClause = result.checkoutToken
-    ? eq(ecpay_payments.checkout_token, result.checkoutToken)
-    : result.merchantTradeNo
-      ? eq(ecpay_payments.merchant_trade_no, result.merchantTradeNo)
-      : null;
-
-  if (matchClause) {
+  // 對帳鍵是 checkout_token（建單時放進 CustomField1，綠界原樣回傳）。v1 一律帶，
+  // 故缺漏只代表異常——留 log，不更新。
+  if (result.checkoutToken) {
     const nextStatus = result.success ? "paid" : "failed";
 
     // 僅在 status='pending' 時更新：重複/遲到回呼具冪等性，不覆寫已結案的列。
@@ -66,7 +60,12 @@ export async function POST(request: NextRequest) {
         charged_at: result.success ? result.paidAt : null,
         raw_payload: params,
       })
-      .where(and(matchClause, eq(ecpay_payments.status, "pending")))
+      .where(
+        and(
+          eq(ecpay_payments.checkout_token, result.checkoutToken),
+          eq(ecpay_payments.status, "pending"),
+        ),
+      )
       .returning({ id: ecpay_payments.id });
 
     // 成功回呼卻沒更新到任何 pending 列：可能是綠界重送（已處理），也可能是同一筆
@@ -78,6 +77,11 @@ export async function POST(request: NextRequest) {
         tradeNo: result.tradeNo,
       });
     }
+  } else {
+    console.error("[ecpay] ReturnURL 缺少 CustomField1（checkout_token），無法對帳", {
+      merchantTradeNo: result.merchantTradeNo,
+      tradeNo: result.tradeNo,
+    });
   }
 
   // 查無此單或已結案都回 1|OK，避免綠界持續重送。

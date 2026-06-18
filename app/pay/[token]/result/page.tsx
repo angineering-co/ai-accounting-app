@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/drizzle";
 import { ecpay_payments } from "@/lib/db/schema";
+import { formatNTD } from "@/lib/utils";
 import { PayShell } from "../../pay-shell";
 import { ResultAutoRefresh } from "./result-auto-refresh";
 
@@ -15,10 +16,6 @@ export default function ResultPage({ params }: Props) {
       <ResultContent params={params} />
     </Suspense>
   );
-}
-
-function formatAmount(amount: number): string {
-  return `NT$${amount.toLocaleString("en-US")}`;
 }
 
 async function ResultContent({ params }: Props) {
@@ -40,7 +37,7 @@ async function ResultContent({ params }: Props) {
       <PayShell
         tone="success"
         title="付款成功"
-        detail={`${payment.description}　${formatAmount(payment.amount)} 已完成付款，感謝您！`}
+        detail={`${payment.description}　NT$${formatNTD(payment.amount)} 已完成付款，感謝您！`}
       />
     );
   }
@@ -72,7 +69,7 @@ async function ResultContent({ params }: Props) {
       title="付款確認中…"
       detail="正在向綠界確認付款結果，請稍候，本頁會自動更新。"
     >
-      <ResultAutoRefresh token={token} />
+      <ResultAutoRefresh />
     </PayShell>
   );
 }

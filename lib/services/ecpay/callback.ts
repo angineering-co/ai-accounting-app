@@ -55,6 +55,8 @@ export function parseAioReturn(
     typeof params[key] === "string" ? params[key] : "";
   const rtnCode = get("RtnCode");
   const gwsrRaw = get("Gwsr");
+  // GWSR 最長 10 位，遠小於 Number.MAX_SAFE_INTEGER（~9×10^15），用 Number 安全；
+  // 與 DB 欄位 bigint({ mode: "number" }) 一致，勿改成 BigInt 以免型別不符。
   const gwsr = /^\d+$/.test(gwsrRaw) ? Number(gwsrRaw) : null;
   const card4no = get("Card4No") || null;
   return {

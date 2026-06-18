@@ -161,6 +161,8 @@ export const createPaymentLinkSchema = z.object({
     .trim()
     .min(1, "請填寫品項說明")
     .max(100, "品項說明請少於 100 字"),
+  // 選填：未填＝不過期（刻意保留，供未來「常駐收款連結」用）。後台 UI 目前一律要求
+  // 1–90 天；若日後業務規則改為「連結必須有期限」，再於此層改為 required。
   expires_in_days: z.coerce.number().int().min(1).max(90).optional(),
 });
 

@@ -1,6 +1,7 @@
 import { authUsers as users } from "drizzle-orm/supabase";
 import { pgTable, index, unique, check, uuid, text, jsonb, timestamp, uniqueIndex, foreignKey, boolean, pgPolicy, integer, bigint, date, smallint, varchar, primaryKey } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
+import type { EcpayPaymentStatus } from "@/lib/domain/models"
 
 
 
@@ -52,7 +53,9 @@ export const ecpay_payments = pgTable("ecpay_payments", {
 	firm_id: uuid().notNull(),
 	client_id: uuid(),
 	type: text().notNull(),
-	status: text().default('pending').notNull(),
+	// $type 把寫入端約束在 EcpayPaymentStatus（編譯期擋錯字）；DB CHECK 仍保留作為
+	// out-of-band 寫入（手動 SQL / 其他服務）的執行期防線。兩者皆以 models.ts 為單一來源。
+	status: text().$type<EcpayPaymentStatus>().default('pending').notNull(),
 	amount: integer().notNull(),
 	description: text().notNull(),
 	checkout_token: text().notNull(),

@@ -25,8 +25,9 @@ const SUCCESS_FIELDS = {
   TradeAmt: "16380",
   PaymentDate: "2026/03/05 12:00:05",
   PaymentType: "Credit_CreditCard",
-  Gwsr: "1234567890",
-  Card4No: "2222",
+  // 綠界「額外回傳的參數」為小寫鍵名（NeedExtraPaidInfo=Y 時回傳）。
+  gwsr: "1234567890",
+  card4no: "2222",
   CustomField1: "27858c54-8b28-4108-bc36-e08619613146",
 };
 
@@ -82,15 +83,15 @@ describe("parseAioReturn", () => {
 
   it("gwsr 可解析 10 位數（超出 int4 範圍）", () => {
     const result = parseAioReturn(
-      signedReturn({ ...SUCCESS_FIELDS, Gwsr: "9999999999" }),
+      signedReturn({ ...SUCCESS_FIELDS, gwsr: "9999999999" }),
       CREDS,
     );
     expect(result.gwsr).toBe(9999999999);
   });
 
-  it("Gwsr 非數字或缺漏 → null", () => {
+  it("gwsr 非數字或缺漏 → null", () => {
     const result = parseAioReturn(
-      signedReturn({ ...SUCCESS_FIELDS, Gwsr: "" }),
+      signedReturn({ ...SUCCESS_FIELDS, gwsr: "" }),
       CREDS,
     );
     expect(result.gwsr).toBeNull();

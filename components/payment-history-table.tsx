@@ -63,7 +63,14 @@ export function PaymentHistoryTable({
                 NT${formatNTD(row.amount)}
               </TableCell>
               <TableCell>
-                <PaymentStatusBadge status={row.status} />
+                <div className="flex flex-col gap-1">
+                  <PaymentStatusBadge status={row.status} />
+                  {row.status === "refunded" && row.refunded_at && (
+                    <span className="text-sm text-muted-foreground">
+                      退款於 {formatIsoDateTimeZhTW(row.refunded_at)}
+                    </span>
+                  )}
+                </div>
               </TableCell>
               <TableCell className="text-base text-muted-foreground">
                 {formatIsoDateTimeZhTW(row.created_at)}

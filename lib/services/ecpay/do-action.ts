@@ -10,7 +10,8 @@ import { generateCheckMacValue, type EcpayCredentials } from "./checkmacvalue";
  * 回應為 application/x-www-form-urlencoded 字串，RtnCode 為**整數**，1=成功。
  */
 
-// Action 代碼（C=請款/關帳, R=退款, E=取消關帳, N=放棄授權）。本系統 v1 只用 R（退款）。
+// Action 代碼（C=請款/關帳, R=退款, E=取消關帳, N=放棄授權）。
+// 本系統用 R 退已關帳訂單；要關帳（尚未關帳）訂單整筆退款改走 E→N（見下方 isUncapturedFullRefundError）。
 export type DoActionType = "C" | "R" | "E" | "N";
 
 export interface DoActionInput {
@@ -66,4 +67,28 @@ export function parseDoActionResponse(body: string): DoActionResult {
     merchantTradeNo: p.get("MerchantTradeNo") ?? "",
     tradeNo: p.get("TradeNo") ?? "",
   };
+}
+
+/**
+ * 判斷退款（Action=R）失敗是否因「訂單尚未關帳（要關帳）」。
+ *
+ * 要關帳狀態下，綠界只允許「部分退款」（退款金額 < 原金額）用 Action=R；整筆退款（=原金額）
+ * 會被拒，RtnMsg 形如 `更新失敗.(error_amount_R)`。整筆退款此時須改走 取消關帳(E)→放棄授權(N)。
+ * 本帳戶為每日自動關帳，付款當日（20:15–20:30 關帳前）退款必落在此情境。
+ * 來源：綠界 2883（信用卡請款與退款狀態機）、2885（信用卡請退款功能）。
+ */
+export function isUncapturedFullRefundError(result: DoActionResult): boolean {
+  return /error_amount_R/i.test(result.rtnMsg);
+}
+
+/**
+ * 把綠界退款失敗回應轉成操作者看得懂的訊息。RtnMsg 為綠界原始字串（含 `error_amount_R`
+ * 之類的 error token），不適合直接呈現；原始 rtnCode / rtnMsg 由 caller 記入 server log 供查修。
+ */
+export function describeDoActionFailure(result: DoActionResult): string {
+  // error_amount_R 正常情況已由 E→N fallback 處理；落到這裡代表訂單狀態異常或 fallback 也失敗。
+  if (isUncapturedFullRefundError(result)) {
+    return "這筆訂單目前的狀態無法退款，請至綠界廠商後台確認交易狀態後再試。";
+  }
+  return `退款未成功，請稍後再試，或至綠界廠商後台確認交易狀態（綠界回應碼 ${result.rtnCode}）。`;
 }

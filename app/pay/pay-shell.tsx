@@ -55,7 +55,7 @@ export function PayShell({
         <Link
           href="/"
           aria-label="SnapBooks.ai 速博 速博智慧有限公司"
-          className="animate-fade-up w-full overflow-hidden rounded-2xl border border-white/60 shadow-lg shadow-emerald-900/5"
+          className="animate-fade-up block w-full overflow-hidden rounded-2xl border border-white/60 shadow-lg shadow-emerald-900/5"
         >
           <Image
             src="/snapbooks-ecpay-banner.png"
@@ -64,7 +64,6 @@ export function PayShell({
             height={200}
             className="h-auto w-full"
             priority
-            unoptimized
           />
         </Link>
 

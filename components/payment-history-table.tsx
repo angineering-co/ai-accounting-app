@@ -78,7 +78,7 @@ export function PaymentHistoryTable({
                 {row.status === "paid" || row.status === "refunded" ? (
                   <div className="flex flex-col items-start gap-0.5">
                     {!row.issuance && (
-                      <span className="text-sm text-muted-foreground">
+                      <span className="text-base text-muted-foreground">
                         待開立
                       </span>
                     )}

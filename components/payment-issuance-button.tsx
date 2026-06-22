@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FileText, Loader2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -35,10 +35,20 @@ import {
 } from "@/components/ui/select";
 
 // 連結碼：寫在 Amego 訂單編號上，未來自動化時沿用。英數字、去除易混淆字元（0/O/1/I/L 等）。
+// 以 globalThis.crypto 取用並提供 Math.random 退路，確保 SSR（Node 18 無全域 crypto）與
+// 各瀏覽器環境皆可執行；此碼非安全用途，退路足夠。
 function generateOrderId(): string {
   const alphabet = "23456789ABCDEFGHJKMNPQRSTVWXYZ";
   const bytes = new Uint8Array(8);
-  crypto.getRandomValues(bytes);
+  const cryptoObj =
+    typeof globalThis !== "undefined" ? globalThis.crypto : undefined;
+  if (cryptoObj?.getRandomValues) {
+    cryptoObj.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = Math.floor(Math.random() * 256);
+    }
+  }
   let code = "";
   for (const b of bytes) code += alphabet[b % alphabet.length];
   return `SB${code}`;
@@ -61,26 +71,33 @@ export function PaymentIssuanceButton({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [pending, setPending] = useState(false);
+  // 同時當作 disabled 與 spinner 判斷：null=閒置 / "save"｜"clear"=該動作進行中。
+  const [pendingAction, setPendingAction] = useState<null | "save" | "clear">(
+    null,
+  );
+  const pending = pendingAction !== null;
+
+  // 新付款用的連結碼於掛載時固定產生一次，避免每次開窗變動造成混淆。
+  const [defaultOrderId] = useState(() => generateOrderId());
 
   const [kind, setKind] = useState<PaymentDocKind>(issuance?.kind ?? "invoice");
-  const [orderId, setOrderId] = useState(
-    issuance?.order_id ?? generateOrderId(),
-  );
+  const [orderId, setOrderId] = useState(issuance?.order_id ?? defaultOrderId);
   const [number, setNumber] = useState(issuance?.number ?? "");
 
-  const resetFromIssuance = () => {
+  // 僅在外部 issuance 真正變動（儲存/清除成功後父層重抓）時同步表單；
+  // 不在「開窗」時重設，以保留使用者未送出的輸入（避免誤關遺失）。
+  useEffect(() => {
     setKind(issuance?.kind ?? "invoice");
-    setOrderId(issuance?.order_id ?? generateOrderId());
+    setOrderId(issuance?.order_id ?? defaultOrderId);
     setNumber(issuance?.number ?? "");
-  };
+  }, [issuance, defaultOrderId]);
 
   const onSave = async () => {
     if (kind === "invoice" && !number.trim()) {
       toast.error("請填寫發票號碼");
       return;
     }
-    setPending(true);
+    setPendingAction("save");
     try {
       await markPaymentIssued({
         firm_id: firmId,
@@ -99,12 +116,12 @@ export function PaymentIssuanceButton({
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "標記失敗");
     } finally {
-      setPending(false);
+      setPendingAction(null);
     }
   };
 
   const onClear = async () => {
-    setPending(true);
+    setPendingAction("clear");
     try {
       await clearPaymentIssuance({ firm_id: firmId, payment_id: paymentId });
       toast.success("已清除，回到待開立");
@@ -113,7 +130,7 @@ export function PaymentIssuanceButton({
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "清除失敗");
     } finally {
-      setPending(false);
+      setPendingAction(null);
     }
   };
 
@@ -123,7 +140,6 @@ export function PaymentIssuanceButton({
       onOpenChange={(next) => {
         if (pending) return;
         setOpen(next);
-        if (next) resetFromIssuance();
       }}
     >
       <DialogTrigger asChild>
@@ -220,13 +236,18 @@ export function PaymentIssuanceButton({
               disabled={pending}
               className="text-muted-foreground"
             >
+              {pendingAction === "clear" && (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              )}
               清除（回到待開立）
             </Button>
           ) : (
             <span />
           )}
           <Button type="button" onClick={() => void onSave()} disabled={pending}>
-            {pending && <Loader2 className="mr-2 size-4 animate-spin" />}
+            {pendingAction === "save" && (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            )}
             儲存
           </Button>
         </DialogFooter>

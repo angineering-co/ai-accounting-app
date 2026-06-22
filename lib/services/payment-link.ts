@@ -3,6 +3,7 @@
 import { randomUUID } from "crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
 import { createClient as createSupabaseClient } from "@/lib/supabase/server";
 import { assertStaffRole, assertStaffCanAccessClient } from "@/lib/services/authz";
@@ -107,11 +108,13 @@ export async function getFirmPayments(
     .where(eq(ecpay_payments.firm_id, firmId))
     .orderBy(desc(ecpay_payments.created_at));
 
-  // issuance 為 JSONB（Drizzle 型別為 unknown），對齊 FirmPaymentRow 的型別。
-  return rows.map((r) => ({
-    ...r,
-    issuance: (r.issuance as PaymentIssuance | null) ?? null,
-  }));
+  // issuance 為 JSONB（Drizzle 型別為 unknown）。讀出端與寫入端對稱做 runtime 驗證，
+  // 但採容錯：格式不符時降級為 null（不讓單列髒資料拖垮整個列表載入）。
+  return rows.map((r) => {
+    if (r.issuance == null) return { ...r, issuance: null };
+    const parsed = paymentIssuanceSchema.safeParse(r.issuance);
+    return { ...r, issuance: parsed.success ? parsed.data : null };
+  });
 }
 
 /**
@@ -340,15 +343,18 @@ export async function clearPaymentIssuance(input: {
   firm_id: string;
   payment_id: string;
 }): Promise<{ ok: true }> {
+  const parsed = z
+    .object({ firm_id: z.string().uuid(), payment_id: z.string().uuid() })
+    .parse(input);
   const { profile } = await requireStaff();
-  const firmId = resolveFirmId(profile, input.firm_id);
+  const firmId = resolveFirmId(profile, parsed.firm_id);
 
   const result = await db
     .update(ecpay_payments)
     .set({ issuance: null })
     .where(
       and(
-        eq(ecpay_payments.id, input.payment_id),
+        eq(ecpay_payments.id, parsed.payment_id),
         eq(ecpay_payments.firm_id, firmId),
       ),
     )

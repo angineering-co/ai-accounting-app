@@ -191,7 +191,7 @@ export const paymentIssuanceAllowanceSchema = z.object({
   order_id: z.string().max(40).optional(),
   number: z.string().max(40).optional(),
   amount: z.number().int(),
-  issued_at: z.string(),
+  issued_at: z.string().datetime({ offset: true }),
   issued_by: z.string().uuid().nullable().optional(),
 });
 
@@ -200,7 +200,7 @@ export const paymentIssuanceSchema = z.object({
   kind: z.enum(PAYMENT_DOC_KINDS),
   order_id: z.string().max(40).optional(),
   number: z.string().max(40).optional(),
-  issued_at: z.string(),
+  issued_at: z.string().datetime({ offset: true }),
   issued_by: z.string().uuid().nullable().optional(),
   allowances: z.array(paymentIssuanceAllowanceSchema).optional(),
 });

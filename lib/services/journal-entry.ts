@@ -572,6 +572,9 @@ async function bulkInsertNewEntries(items: DraftEntryItem[], userId: string): Pr
       }
       total += chunk.length;
     });
+    // Periodic progress for large batches (up to tens of thousands of documents),
+    // so a long-running run is visibly advancing rather than appearing stalled.
+    console.log(`bulkInsertNewEntries: inserted ${total} / ${items.length} draft entries`);
     } catch (e) {
       // A multi-row INSERT aborts on the first offending row, rolling back the
       // whole chunk; the Postgres error reports that row's (now-discarded) values

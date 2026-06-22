@@ -95,6 +95,14 @@ describe("isUncapturedFullRefundError", () => {
     expect(isUncapturedFullRefundError(result)).toBe(true);
   });
 
+  it("可退刷額度不足（10100027，已關帳餘額不足）→ false，不誤觸 E→N", () => {
+    const result = parseDoActionResponse(
+      "RtnCode=10100027&RtnMsg=" +
+        encodeURIComponent("可退刷額度不足無法退刷，請參照廠商後台退刷失敗畫面。"),
+    );
+    expect(isUncapturedFullRefundError(result)).toBe(false);
+  });
+
   it("其他 RtnCode（如交易不存在）→ false", () => {
     const result = parseDoActionResponse(
       "RtnCode=10200047&RtnMsg=" + encodeURIComponent("交易不存在"),
@@ -121,6 +129,17 @@ describe("describeDoActionFailure", () => {
     );
     const msg = describeDoActionFailure(result);
     expect(msg).toContain("餘額不足");
+  });
+
+  it("可退刷額度不足（10100027）給帳戶餘額專屬訊息，不外吐原始 RtnMsg", () => {
+    const result = parseDoActionResponse(
+      "RtnCode=10100027&RtnMsg=" +
+        encodeURIComponent("可退刷額度不足無法退刷，請參照廠商後台退刷失敗畫面。"),
+    );
+    const msg = describeDoActionFailure(result);
+    expect(msg).toContain("餘額不足");
+    expect(msg).toContain("廠商後台");
+    expect(msg).not.toContain("退刷失敗畫面");
   });
 
   it("其他失敗給泛用可行動訊息並附綠界回應碼", () => {

@@ -70,12 +70,18 @@ export function parseDoActionResponse(body: string): DoActionResult {
 }
 
 /**
- * 退款失敗訊息是否為「帳戶餘額不足」（已關帳訂單退刷才會遇到，E→N 幫不上）。
- * 比對「帳戶餘額」而非單一「餘額」字，避免綠界其他含「餘額」的訊息（如「交易餘額不符」）
- * 被誤判，導致本該走 E→N 的要關帳訂單被跳過。
+ * 退款失敗是否因「綠界帳戶餘額／可退刷額度不足」。已關帳訂單退刷由綠界從特店帳戶餘額扣回，
+ * 餘額低於退刷金額即被拒（E→N 幫不上，且與要關帳情境互斥）。涵蓋兩種實測／文件措辭：
+ *   • RtnCode 10100027 `可退刷額度不足無法退刷…`（正式環境實測）。
+ *   • 綠界 2885：「如帳戶餘額低於退刷金額，將無法退刷…」。
+ * 比對「帳戶餘額／可退刷額度」而非單一「餘額」字，避免「交易餘額不符」之類訊息誤判而跳過
+ * 本該走 E→N 的要關帳訂單。
  */
 function isBalanceShortfall(result: DoActionResult): boolean {
-  return /帳戶餘額|account.*balance/i.test(result.rtnMsg);
+  return (
+    result.rtnCode === 10100027 ||
+    /可退刷額度不足|退刷額度不足|帳戶餘額|account.*balance/i.test(result.rtnMsg)
+  );
 }
 
 /**
@@ -102,7 +108,9 @@ export function isUncapturedFullRefundError(result: DoActionResult): boolean {
  */
 export function describeDoActionFailure(result: DoActionResult): string {
   if (isBalanceShortfall(result)) {
-    return "綠界帳戶餘額不足，無法完成退款，請確認綠界帳戶餘額後再試。";
+    // 信用卡退刷由綠界從特店帳戶餘額扣回；餘額不足時須先於廠商後台預存／留存餘額。
+    // 來源：綠界 2885「建議留存一定金額於綠界帳戶或至廠商後台預存綠界帳戶餘額供退刷之用」。
+    return "綠界帳戶餘額不足以支應這筆退款。信用卡退刷會從綠界帳戶餘額扣回，請先至綠界廠商後台預存或確認餘額足夠後再退款。";
   }
   // 要關帳訂單整筆退款正常情況已由 E→N fallback 處理；落到這裡代表 fallback 也失敗或狀態異常。
   if (isUncapturedFullRefundError(result)) {

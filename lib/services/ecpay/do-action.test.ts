@@ -88,6 +88,13 @@ describe("isUncapturedFullRefundError", () => {
     expect(isUncapturedFullRefundError(result)).toBe(false);
   });
 
+  it("10000002 且含「餘額」但非帳戶餘額（如交易餘額不符）→ 仍視為要關帳", () => {
+    const result = parseDoActionResponse(
+      "RtnCode=10000002&RtnMsg=" + encodeURIComponent("交易餘額不符"),
+    );
+    expect(isUncapturedFullRefundError(result)).toBe(true);
+  });
+
   it("其他 RtnCode（如交易不存在）→ false", () => {
     const result = parseDoActionResponse(
       "RtnCode=10200047&RtnMsg=" + encodeURIComponent("交易不存在"),

@@ -69,9 +69,13 @@ export function parseDoActionResponse(body: string): DoActionResult {
   };
 }
 
-/** 退款失敗訊息是否為「帳戶餘額不足」（已關帳訂單退刷才會遇到，E→N 幫不上）。 */
+/**
+ * 退款失敗訊息是否為「帳戶餘額不足」（已關帳訂單退刷才會遇到，E→N 幫不上）。
+ * 比對「帳戶餘額」而非單一「餘額」字，避免綠界其他含「餘額」的訊息（如「交易餘額不符」）
+ * 被誤判，導致本該走 E→N 的要關帳訂單被跳過。
+ */
 function isBalanceShortfall(result: DoActionResult): boolean {
-  return /餘額|balance/i.test(result.rtnMsg);
+  return /帳戶餘額|account.*balance/i.test(result.rtnMsg);
 }
 
 /**

@@ -259,7 +259,7 @@ export async function refundPayment(input: {
     };
 
     // 先嘗試退刷（Action=R）。已關帳訂單整筆退款走這條；要關帳訂單會被回拒，下方 fallback 接手。
-    let result = await doAction("R");
+    const result = await doAction("R");
     // 退款實際採用的動作（供稽核；要關帳訂單會改走 E→N）。
     let refundAction: "R" | "E+N" = "R";
 
@@ -272,12 +272,20 @@ export async function refundPayment(input: {
         throw new Error(describeDoActionFailure(cancel));
       }
       // E 成功＝這筆款項不會被請款入帳，退款已實質生效。N（放棄授權）僅為釋放剩餘授權額度
-      // 的善後，失敗不影響「不會入帳」的結果，故 N 失敗只記 log、不 rollback（否則 DB 退回
-      // paid 會與綠界實況不符，且重試時訂單已非要關帳，會走錯路徑）。
-      const abandon = await doAction("N");
-      if (!abandon.success) logFailure(abandon, "N");
+      // 的善後：成敗都不影響「不會入帳」的結果，故 N 一律不得 rollback（否則 DB 退回 paid 與
+      // 綠界實況不符，且重試時訂單已非要關帳，會走錯路徑）。doAction 在 fetch/HTTP 失敗時會
+      // throw，故整段以 try/catch 包住，例外只記 log、不外傳。
+      try {
+        const abandon = await doAction("N");
+        if (!abandon.success) logFailure(abandon, "N");
+      } catch (err) {
+        console.error("[ecpay] 放棄授權(N) 發生例外，僅記錄不影響退款結果", {
+          paymentId: payment.id,
+          merchantTradeNo: payment.merchant_trade_no,
+          err,
+        });
+      }
       refundAction = "E+N";
-      result = cancel;
     } else if (!result.success) {
       logFailure(result, "R");
       throw new Error(describeDoActionFailure(result));

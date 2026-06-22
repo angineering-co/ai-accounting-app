@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { generateCheckMacValue, type EcpayCredentials } from "./checkmacvalue";
-import { buildDoActionParams, parseDoActionResponse } from "./do-action";
+import {
+  buildDoActionParams,
+  parseDoActionResponse,
+  isUncapturedFullRefundError,
+  describeDoActionFailure,
+} from "./do-action";
 
 const CREDS: EcpayCredentials = {
   hashKey: "pwFHCqoQZGmho4w6",
@@ -56,5 +61,72 @@ describe("parseDoActionResponse", () => {
     const result = parseDoActionResponse("RtnMsg=oops");
     expect(result.success).toBe(false);
     expect(result.rtnCode).toBe(-1);
+  });
+});
+
+describe("isUncapturedFullRefundError", () => {
+  it("要關帳訂單整筆退款被拒（error_amount_R token）→ true", () => {
+    const result = parseDoActionResponse(
+      "RtnCode=10000002&RtnMsg=" +
+        encodeURIComponent("更新失敗.(error_amount_R)"),
+    );
+    expect(isUncapturedFullRefundError(result)).toBe(true);
+  });
+
+  it("放寬比對：10000002 更新失敗（token 改字）仍視為要關帳 → true", () => {
+    const result = parseDoActionResponse(
+      "RtnCode=10000002&RtnMsg=" + encodeURIComponent("更新失敗.(some_other)"),
+    );
+    expect(isUncapturedFullRefundError(result)).toBe(true);
+  });
+
+  it("10000002 但為帳戶餘額不足（已關帳退刷情境）→ false，不誤觸 E→N", () => {
+    const result = parseDoActionResponse(
+      "RtnCode=10000002&RtnMsg=" +
+        encodeURIComponent("帳戶餘額低於退刷金額"),
+    );
+    expect(isUncapturedFullRefundError(result)).toBe(false);
+  });
+
+  it("10000002 且含「餘額」但非帳戶餘額（如交易餘額不符）→ 仍視為要關帳", () => {
+    const result = parseDoActionResponse(
+      "RtnCode=10000002&RtnMsg=" + encodeURIComponent("交易餘額不符"),
+    );
+    expect(isUncapturedFullRefundError(result)).toBe(true);
+  });
+
+  it("其他 RtnCode（如交易不存在）→ false", () => {
+    const result = parseDoActionResponse(
+      "RtnCode=10200047&RtnMsg=" + encodeURIComponent("交易不存在"),
+    );
+    expect(isUncapturedFullRefundError(result)).toBe(false);
+  });
+});
+
+describe("describeDoActionFailure", () => {
+  it("error_amount_R 不把 error token 直接吐給操作者", () => {
+    const result = parseDoActionResponse(
+      "RtnCode=10000002&RtnMsg=" +
+        encodeURIComponent("更新失敗.(error_amount_R)"),
+    );
+    const msg = describeDoActionFailure(result);
+    expect(msg).not.toContain("error_amount_R");
+    expect(msg).toContain("綠界廠商後台");
+  });
+
+  it("帳戶餘額不足給專屬可行動訊息", () => {
+    const result = parseDoActionResponse(
+      "RtnCode=10000002&RtnMsg=" +
+        encodeURIComponent("帳戶餘額低於退刷金額"),
+    );
+    const msg = describeDoActionFailure(result);
+    expect(msg).toContain("餘額不足");
+  });
+
+  it("其他失敗給泛用可行動訊息並附綠界回應碼", () => {
+    const result = parseDoActionResponse("RtnCode=10200047&RtnMsg=oops");
+    const msg = describeDoActionFailure(result);
+    expect(msg).not.toContain("oops");
+    expect(msg).toContain("10200047");
   });
 });

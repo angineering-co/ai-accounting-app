@@ -17,6 +17,10 @@ import { getEcpayConfig } from "@/lib/services/ecpay/config";
 import {
   buildDoActionParams,
   parseDoActionResponse,
+  isUncapturedFullRefundError,
+  describeDoActionFailure,
+  type DoActionType,
+  type DoActionResult,
 } from "@/lib/services/ecpay/do-action";
 import {
   isAutoCaptureBlackout,
@@ -158,11 +162,14 @@ export async function createPaymentLink(
  * 注意：
  * - 僅信用卡（本系統收款一律 ChoosePayment=Credit）；DoAction 不支援 ATM/超商退款。
  * - DoAction 僅正式環境可實際執行（測試環境無真實授權，呼叫會失敗）。
- * - Action=R 在「要關帳」與「已關帳」狀態皆可退款（來源：綠界 2883 狀態機）。本帳戶為
- *   每日自動關帳，付款後即進入 要關帳→已關帳，故 R 一路適用，不需先請款。（若帳戶改為
- *   手動請款，已授權未關帳的訂單須先 C 請款或 N 放棄，屆時再擴充。）
+ * - 整筆退款依訂單關帳狀態走兩條路（來源：綠界 2883 狀態機、2885 請退款功能）：
+ *     • 已關帳：Action=R 退刷全額。
+ *     • 要關帳（尚未關帳）：整筆 R 會被綠界回拒（更新失敗，實測 token `error_amount_R`；
+ *       該狀態 R 只能部分退），故改走 取消關帳(E)→放棄授權(N)；授權未請款，款項不會入帳，
+ *       效果等同全額退款。判斷見 isUncapturedFullRefundError（放寬比對，誤判仍安全）。
+ *   本帳戶為每日自動關帳，付款當日（20:15–20:30 關帳前）退款落在要關帳情境，故需自動 fallback。
  * - 每日自動關帳時段（台灣時間 20:15–20:30）綠界要求勿呼叫 DoAction，故此時段擋下退款。
- * - 退款金額不得超過原訂單；綠界帳戶餘額不足會被拒，RtnMsg 照實回報給操作者。
+ * - 退款金額不得超過原訂單；綠界帳戶餘額不足會被拒，失敗時回報操作者可行動的訊息。
  */
 export async function refundPayment(input: {
   firm_id: string;
@@ -212,41 +219,76 @@ export async function refundPayment(input: {
     }
 
     const config = getEcpayConfig();
-    const params = buildDoActionParams(
-      {
-        merchantId: config.merchantId,
-        merchantTradeNo: payment.merchant_trade_no,
-        tradeNo,
-        action: "R",
-        totalAmount: payment.amount, // v1 全額退款
-      },
-      config.credentials,
-    );
 
-    const response = await fetch(config.doActionUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams(params).toString(),
-      cache: "no-store", // 財務 API 明確不快取
-    });
-    // 綠界 5xx 會回 HTML 錯誤頁，落到 parse 會被誤判為「退款失敗」。先擋 HTTP 失敗：
-    // 此時退款是否生效未知，提示操作者至綠界後台確認，勿盲目重試（throw 會 rollback，
-    // 狀態維持 paid 可重試）。
-    if (!response.ok) {
-      throw new Error(
-        `無法連線綠界退款服務（HTTP ${response.status}），請稍後再試，或至綠界後台確認退款狀態`,
+    // 全額退款（v1 只做全額）。merchant_trade_no / tradeNo 已於上方驗證為非空。
+    const doAction = async (action: DoActionType): Promise<DoActionResult> => {
+      const params = buildDoActionParams(
+        {
+          merchantId: config.merchantId,
+          merchantTradeNo: payment.merchant_trade_no as string,
+          tradeNo,
+          action,
+          totalAmount: payment.amount,
+        },
+        config.credentials,
       );
-    }
-    const result = parseDoActionResponse(await response.text());
+      const response = await fetch(config.doActionUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(params).toString(),
+        cache: "no-store", // 財務 API 明確不快取
+      });
+      // 綠界 5xx 會回 HTML 錯誤頁，落到 parse 會被誤判為失敗。先擋 HTTP 失敗：此時退款
+      // 是否生效未知，提示操作者至綠界後台確認，勿盲目重試（throw 會 rollback，狀態維持 paid）。
+      if (!response.ok) {
+        throw new Error(
+          `無法連線綠界退款服務（HTTP ${response.status}），請稍後再試，或至綠界廠商後台確認退款狀態`,
+        );
+      }
+      return parseDoActionResponse(await response.text());
+    };
 
-    if (!result.success) {
+    const logFailure = (result: DoActionResult, action: DoActionType) => {
       console.error("[ecpay] 退款失敗", {
         paymentId: payment.id,
         merchantTradeNo: payment.merchant_trade_no,
+        action,
         rtnCode: result.rtnCode,
         rtnMsg: result.rtnMsg,
       });
-      throw new Error(`退款失敗：${result.rtnMsg || `綠界回應碼 ${result.rtnCode}`}`);
+    };
+
+    // 先嘗試退刷（Action=R）。已關帳訂單整筆退款走這條；要關帳訂單會被回拒，下方 fallback 接手。
+    const result = await doAction("R");
+    // 退款實際採用的動作（供稽核；要關帳訂單會改走 E→N）。
+    let refundAction: "R" | "E+N" = "R";
+
+    if (!result.success && isUncapturedFullRefundError(result)) {
+      // 要關帳訂單整筆退款：取消關帳(E)→放棄授權(N)。授權未請款，款項不會入帳。
+      const cancel = await doAction("E");
+      if (!cancel.success) {
+        // E 失敗代表綠界端未變動，rollback 後維持 paid 可重試。
+        logFailure(cancel, "E");
+        throw new Error(describeDoActionFailure(cancel));
+      }
+      // E 成功＝這筆款項不會被請款入帳，退款已實質生效。N（放棄授權）僅為釋放剩餘授權額度
+      // 的善後：成敗都不影響「不會入帳」的結果，故 N 一律不得 rollback（否則 DB 退回 paid 與
+      // 綠界實況不符，且重試時訂單已非要關帳，會走錯路徑）。doAction 在 fetch/HTTP 失敗時會
+      // throw，故整段以 try/catch 包住，例外只記 log、不外傳。
+      try {
+        const abandon = await doAction("N");
+        if (!abandon.success) logFailure(abandon, "N");
+      } catch (err) {
+        console.error("[ecpay] 放棄授權(N) 發生例外，僅記錄不影響退款結果", {
+          paymentId: payment.id,
+          merchantTradeNo: payment.merchant_trade_no,
+          err,
+        });
+      }
+      refundAction = "E+N";
+    } else if (!result.success) {
+      logFailure(result, "R");
+      throw new Error(describeDoActionFailure(result));
     }
 
     // 已持鎖且狀態確為 paid，WHERE 用 id 即可。status 以 EcpayPaymentStatus 約束
@@ -259,6 +301,8 @@ export async function refundPayment(input: {
         status: nextStatus,
         refunded_amount: payment.amount,
         refunded_at: new Date().toISOString(),
+        // 留下退款實際採用的動作（R 退刷／E+N 取消未關帳授權）供日後對帳稽核。
+        raw_payload: { ...rawPayload, refund_action: refundAction },
       })
       .where(eq(ecpay_payments.id, payment.id));
   });

@@ -1,6 +1,7 @@
 import { extractAccountCode } from "@/lib/data/accounts";
 import type { VoucherType } from "@/lib/domain/journal-entry";
 import type { Allowance, Invoice } from "@/lib/domain/models";
+import { splitEmbeddedTax } from "@/lib/domain/vat";
 
 // Fixed account codes referenced by §5.1 / §5.2.
 // Source of truth: `lib/data/accounts.ts`.
@@ -100,15 +101,21 @@ export function computeEntryFromInvoice(invoice: Invoice): ComputedEntry {
 
   if (invoice.in_or_out === "out") {
     // §5.2 銷項發票 (taxType === '應稅' guaranteed by check above)
+    const { revenue, outputTax } = resolveOutputTax(invoice, totalSales, tax, totalAmount);
+    const lines: ComputedEntryLine[] = [
+      { account_code: settlement, debit: totalAmount, credit: 0, description: null },
+      { account_code: ACCT_REVENUE, debit: 0, credit: revenue, description: null },
+    ];
+    // A tax-inclusive B2C sale below ~NT$11 rounds to 0 embedded tax — there's no
+    // 銷項稅額 to book, so omit the line (a 0/0 line breaks debit_credit_xor).
+    if (outputTax > 0) {
+      lines.push({ account_code: ACCT_OUTPUT_TAX, debit: 0, credit: outputTax, description: null });
+    }
     return {
       voucher_type: "收入",
       entry_date,
       description: buildInvoiceDescription(invoice, "銷項"),
-      lines: [
-        { account_code: settlement, debit: totalAmount, credit: 0, description: null },
-        { account_code: ACCT_REVENUE, debit: 0, credit: totalSales, description: null },
-        { account_code: ACCT_OUTPUT_TAX, debit: 0, credit: tax, description: null },
-      ],
+      lines,
     };
   }
 
@@ -136,17 +143,72 @@ export function computeEntryFromInvoice(invoice: Invoice): ComputedEntry {
     };
   }
 
-  // §5.3 範例 A：可扣抵 → 3 行
+  // §5.3 範例 A：可扣抵 → 3 行 (2 行 when the 憑證 is tax-inclusive with no separable 稅額)
+  const { expense, inputTax } = resolveInputTax(invoice, totalSales, tax, totalAmount);
+  const lines: ComputedEntryLine[] = [
+    { account_code: expenseAccount, debit: expense, credit: 0, description: null },
+  ];
+  if (inputTax > 0) {
+    lines.push({ account_code: ACCT_INPUT_TAX, debit: inputTax, credit: 0, description: null });
+  }
+  lines.push({ account_code: settlement, debit: 0, credit: totalAmount, description: null });
   return {
     voucher_type: "支出",
     entry_date,
     description: buildInvoiceDescription(invoice, "進項(可扣抵)"),
-    lines: [
-      { account_code: expenseAccount, debit: totalSales, credit: 0, description: null },
-      { account_code: ACCT_INPUT_TAX, debit: tax, credit: 0, description: null },
-      { account_code: settlement, debit: 0, credit: totalAmount, description: null },
-    ],
+    lines,
   };
+}
+
+// 銷項稅額 resolution. An 應稅 銷項 normally carries a separate 稅額, but a B2C
+// invoice (買受人為非營業人，無統編) is *tax-inclusive*: OCR extracts tax=0 and the
+// printed total already embeds the 5%. Mirror reports.ts (embeddedOutputTax) and
+// back it out so 4101 is net and 2134 carries the tax.
+function resolveOutputTax(
+  invoice: Invoice,
+  totalSales: number,
+  tax: number,
+  totalAmount: number,
+): { revenue: number; outputTax: number } {
+  if (tax > 0) {
+    return { revenue: totalSales, outputTax: tax };
+  }
+  const data = invoice.extracted_data ?? {};
+  if (!data.buyerTaxId) {
+    const { net, tax: embedded } = splitEmbeddedTax(totalAmount);
+    return { revenue: net, outputTax: embedded };
+  }
+  // 應稅 銷項 with a buyer 統編 but tax=0 is bad data (a B2B total is net+tax, not
+  // tax-inclusive) — fail loud so the row is recorded per-document rather than
+  // booked wrong or crashing the batch insert with a 0/0 稅額 line.
+  throw new Error(
+    `computeEntryFromInvoice(${invoice.id}): 應稅 銷項 with buyerTaxId but tax=0 ` +
+      `(B2B totals are not tax-inclusive; check 稅額 extraction).`,
+  );
+}
+
+// 進項稅額 resolution for deductible inputs. A 二聯式收銀機 / 火車高鐵票根 等憑證 is
+// tax-inclusive (OCR tax=0); mirror reports.ts (embeddedInputTax) and back the 5%
+// out so the expense is net and 1144 carries the tax. A non-二聯式 deductible 應稅
+// input with tax=0 is bad data → fail loud.
+function resolveInputTax(
+  invoice: Invoice,
+  totalSales: number,
+  tax: number,
+  totalAmount: number,
+): { expense: number; inputTax: number } {
+  if (tax > 0) {
+    return { expense: totalSales, inputTax: tax };
+  }
+  const data = invoice.extracted_data ?? {};
+  if (data.invoiceType?.includes("二聯式")) {
+    const { net, tax: embedded } = splitEmbeddedTax(totalAmount);
+    return { expense: net, inputTax: embedded };
+  }
+  throw new Error(
+    `computeEntryFromInvoice(${invoice.id}): 應稅 可扣抵進項 with tax=0 on a non-二聯式 ` +
+      `invoice (only tax-inclusive 二聯式憑證 may omit 稅額; check 進項稅額 extraction).`,
+  );
 }
 
 function buildInvoiceDescription(

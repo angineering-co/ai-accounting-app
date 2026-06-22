@@ -172,6 +172,107 @@ describe("computeEntryFromInvoice — 銷項", () => {
   });
 });
 
+describe("computeEntryFromInvoice — 銷項 B2C 內含稅 (embedded VAT)", () => {
+  // B2C invoice (買受人為非營業人，無統編): the printed total is tax-inclusive and
+  // OCR extracts tax=0. The entry must back out the embedded 5% (mirroring
+  // reports.ts embeddedOutputTax) — NOT book a 2134 0/0 line (which violated
+  // debit_credit_xor). gross 14,940 → tax round(14940/21)=711, revenue 14,229.
+  const invoice = makeInvoice({
+    in_or_out: "out",
+    extracted_data: {
+      date: "2026/03/10",
+      totalSales: 14_940,
+      tax: 0,
+      totalAmount: 14_940,
+      // no buyerTaxId → B2C
+    },
+  });
+
+  const computed = computeEntryFromInvoice(invoice);
+
+  it("breaks out embedded output tax into a valid 2134 line", () => {
+    expect(computed.lines).toEqual([
+      { account_code: ACCT_BANK, debit: 14_940, credit: 0, description: null },
+      { account_code: ACCT_REVENUE, debit: 0, credit: 14_229, description: null },
+      { account_code: ACCT_OUTPUT_TAX, debit: 0, credit: 711, description: null },
+    ]);
+    expect(sumBalance(computed.lines)).toEqual({ debit: 14_940, credit: 14_940 });
+  });
+
+  it("omits the 2134 line when the embedded tax rounds to 0 (sub-NT$11 sale)", () => {
+    const tiny = computeEntryFromInvoice(
+      makeInvoice({
+        in_or_out: "out",
+        extracted_data: { totalSales: 10, tax: 0, totalAmount: 10 },
+      }),
+    );
+    expect(tiny.lines).toEqual([
+      { account_code: ACCT_CASH, debit: 10, credit: 0, description: null },
+      { account_code: ACCT_REVENUE, debit: 0, credit: 10, description: null },
+    ]);
+  });
+
+  it("throws on 應稅 銷項 with a buyer 統編 but tax=0 (B2B total isn't tax-inclusive)", () => {
+    expect(() =>
+      computeEntryFromInvoice(
+        makeInvoice({
+          in_or_out: "out",
+          extracted_data: {
+            totalSales: 14_940,
+            tax: 0,
+            totalAmount: 14_940,
+            buyerTaxId: "12345678",
+          },
+        }),
+      ),
+    ).toThrow(/buyerTaxId but tax=0/);
+  });
+});
+
+describe("computeEntryFromInvoice — 進項可扣抵 二聯式內含稅 (embedded VAT)", () => {
+  // 二聯式收銀機 / 火車高鐵票根 等憑證 are tax-inclusive (OCR tax=0); back out the 5%
+  // (mirroring reports.ts embeddedInputTax) into 1144. gross 1,050 → tax 50, net 1,000.
+  it("breaks out embedded input tax into a valid 1144 line", () => {
+    const computed = computeEntryFromInvoice(
+      makeInvoice({
+        in_or_out: "in",
+        extracted_data: {
+          totalSales: 1_050,
+          tax: 0,
+          totalAmount: 1_050,
+          deductible: true,
+          invoiceType: "二聯式收銀機",
+          account: "6113 旅費",
+        },
+      }),
+    );
+    expect(computed.lines).toEqual([
+      { account_code: "6113", debit: 1_000, credit: 0, description: null },
+      { account_code: ACCT_INPUT_TAX, debit: 50, credit: 0, description: null },
+      { account_code: ACCT_CASH, debit: 0, credit: 1_050, description: null },
+    ]);
+    expect(sumBalance(computed.lines)).toEqual({ debit: 1_050, credit: 1_050 });
+  });
+
+  it("throws on a deductible 應稅 input with tax=0 that isn't 二聯式", () => {
+    expect(() =>
+      computeEntryFromInvoice(
+        makeInvoice({
+          in_or_out: "in",
+          extracted_data: {
+            totalSales: 1_050,
+            tax: 0,
+            totalAmount: 1_050,
+            deductible: true,
+            invoiceType: "電子發票",
+            account: "6113 旅費",
+          },
+        }),
+      ),
+    ).toThrow(/non-二聯式/);
+  });
+});
+
 describe("computeEntryFromInvoice — taxType policy matrix (§5.2.1)", () => {
   // 作廢 / 彙加 always throw regardless of direction.
   for (const taxType of ["作廢", "彙加"] as const) {

@@ -16,6 +16,15 @@ export const ACCT_BANK = "1112"; // 銀行存款
 // §5.1 結算科目門檻：≤ 10,000 → 1111 現金；> 10,000 → 1112 銀行存款。
 export const CASH_THRESHOLD = 10_000;
 
+// 二聯式憑證 (手開 / 收銀機) are tax-inclusive — the 5% is embedded in the printed
+// total, so OCR extracts tax=0. Explicit allowlist (rather than a "二聯式" substring
+// match) so a future invoiceType that merely contains the substring can't silently
+// route through the embedded-tax path.
+const TAX_INCLUSIVE_INVOICE_TYPES: ReadonlySet<string> = new Set([
+  "手開二聯式",
+  "二聯式收銀機",
+]);
+
 export function pickSettlementAccount(total: number): string {
   return total <= CASH_THRESHOLD ? ACCT_CASH : ACCT_BANK;
 }
@@ -206,7 +215,7 @@ function resolveInputTax(
     return { expense: totalSales, inputTax: tax };
   }
   const data = invoice.extracted_data ?? {};
-  if (data.invoiceType?.includes("二聯式")) {
+  if (data.invoiceType != null && TAX_INCLUSIVE_INVOICE_TYPES.has(data.invoiceType)) {
     const { net, tax: embedded } = splitEmbeddedTax(totalAmount);
     return { expense: net, inputTax: embedded };
   }

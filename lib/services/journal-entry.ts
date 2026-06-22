@@ -535,46 +535,46 @@ async function bulkInsertNewEntries(items: DraftEntryItem[], userId: string): Pr
   for (let i = 0; i < items.length; i += NEW_ENTRY_CHUNK) {
     const chunk = items.slice(i, i + NEW_ENTRY_CHUNK);
     try {
-    await db.transaction(async (tx) => {
-      const inserted = await tx
-        .insert(journalEntriesTable)
-        .values(
-          chunk.map((it) => ({
-            firm_id: it.firmId,
-            client_id: it.clientId,
-            document_id: it.documentId,
-            voucher_type: it.computed.voucher_type,
-            entry_date: it.computed.entry_date,
-            description: it.computed.description,
-            status: "draft" as const,
-            voucher_no: null,
-            created_by: userId,
+      await db.transaction(async (tx) => {
+        const inserted = await tx
+          .insert(journalEntriesTable)
+          .values(
+            chunk.map((it) => ({
+              firm_id: it.firmId,
+              client_id: it.clientId,
+              document_id: it.documentId,
+              voucher_type: it.computed.voucher_type,
+              entry_date: it.computed.entry_date,
+              description: it.computed.description,
+              status: "draft" as const,
+              voucher_no: null,
+              created_by: userId,
+            })),
+          )
+          .returning({
+            id: journalEntriesTable.id,
+            document_id: journalEntriesTable.document_id,
+          });
+        // returning order is not guaranteed, so key the line FK by document_id.
+        const idByDoc = new Map(inserted.map((e) => [e.document_id, e.id]));
+        const lines = chunk.flatMap((it) =>
+          it.computed.lines.map((line, idx) => ({
+            journal_entry_id: idByDoc.get(it.documentId)!,
+            line_number: idx + 1,
+            account_code: line.account_code,
+            debit: line.debit,
+            credit: line.credit,
+            description: line.description,
           })),
-        )
-        .returning({
-          id: journalEntriesTable.id,
-          document_id: journalEntriesTable.document_id,
-        });
-      // returning order is not guaranteed, so key the line FK by document_id.
-      const idByDoc = new Map(inserted.map((e) => [e.document_id, e.id]));
-      const lines = chunk.flatMap((it) =>
-        it.computed.lines.map((line, idx) => ({
-          journal_entry_id: idByDoc.get(it.documentId)!,
-          line_number: idx + 1,
-          account_code: line.account_code,
-          debit: line.debit,
-          credit: line.credit,
-          description: line.description,
-        })),
-      );
-      for (let j = 0; j < lines.length; j += LINE_INSERT_CHUNK) {
-        await tx.insert(journalEntryLinesTable).values(lines.slice(j, j + LINE_INSERT_CHUNK));
-      }
-      total += chunk.length;
-    });
-    // Periodic progress for large batches (up to tens of thousands of documents),
-    // so a long-running run is visibly advancing rather than appearing stalled.
-    console.log(`bulkInsertNewEntries: inserted ${total} / ${items.length} draft entries`);
+        );
+        for (let j = 0; j < lines.length; j += LINE_INSERT_CHUNK) {
+          await tx.insert(journalEntryLinesTable).values(lines.slice(j, j + LINE_INSERT_CHUNK));
+        }
+        total += chunk.length;
+      });
+      // Periodic progress for large batches (up to tens of thousands of documents),
+      // so a long-running run is visibly advancing rather than appearing stalled.
+      console.log(`bulkInsertNewEntries: inserted ${total} / ${items.length} draft entries`);
     } catch (e) {
       // A multi-row INSERT aborts on the first offending row, rolling back the
       // whole chunk; the Postgres error reports that row's (now-discarded) values

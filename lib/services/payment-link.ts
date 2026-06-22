@@ -10,8 +10,12 @@ import { db } from "@/lib/db/drizzle";
 import { ecpay_payments, clients } from "@/lib/db/schema";
 import {
   createPaymentLinkSchema,
+  markPaymentIssuedSchema,
+  paymentIssuanceSchema,
   type CreatePaymentLinkInput,
   type EcpayPaymentStatus,
+  type MarkPaymentIssuedInput,
+  type PaymentIssuance,
 } from "@/lib/domain/models";
 import { getEcpayConfig } from "@/lib/services/ecpay/config";
 import {
@@ -73,6 +77,7 @@ export interface FirmPaymentRow {
   charged_at: string | null;
   expires_at: string | null;
   refunded_at: string | null;
+  issuance: PaymentIssuance | null;
 }
 
 /** 撈出某事務所的收款紀錄（含客戶名稱），依建立時間新到舊。 */
@@ -82,7 +87,7 @@ export async function getFirmPayments(
   const { profile } = await requireStaff();
   const firmId = resolveFirmId(profile, requestedFirmId);
 
-  return db
+  const rows = await db
     .select({
       id: ecpay_payments.id,
       type: ecpay_payments.type,
@@ -95,11 +100,18 @@ export async function getFirmPayments(
       charged_at: ecpay_payments.charged_at,
       expires_at: ecpay_payments.expires_at,
       refunded_at: ecpay_payments.refunded_at,
+      issuance: ecpay_payments.issuance,
     })
     .from(ecpay_payments)
     .leftJoin(clients, eq(ecpay_payments.client_id, clients.id))
     .where(eq(ecpay_payments.firm_id, firmId))
     .orderBy(desc(ecpay_payments.created_at));
+
+  // issuance 為 JSONB（Drizzle 型別為 unknown），對齊 FirmPaymentRow 的型別。
+  return rows.map((r) => ({
+    ...r,
+    issuance: (r.issuance as PaymentIssuance | null) ?? null,
+  }));
 }
 
 /**
@@ -265,4 +277,85 @@ export async function refundPayment(input: {
 
   revalidatePath(`/firm/${firmId}/payment-link`);
   return { status: "refunded" };
+}
+
+/**
+ * 標記某筆已付款收款的開立狀態（發票 / 收據 / 免開立），寫入 ecpay_payments.issuance。
+ *
+ * 這是追蹤性 metadata：真正憑證仍由 Amego 手動開立，此處只記錄「開了什麼、號碼與連結碼」。
+ * 連結碼（order_id）建議寫在 Amego 的訂單編號欄，未來自動化時即沿用同一碼。
+ * 可重複呼叫以更正（直接覆寫 kind/number/order_id），並保留既有 allowances（未來折讓用）。
+ */
+export async function markPaymentIssued(
+  input: MarkPaymentIssuedInput,
+): Promise<{ ok: true }> {
+  const parsed = markPaymentIssuedSchema.parse(input);
+  const { userId, profile } = await requireStaff();
+  const firmId = resolveFirmId(profile, parsed.firm_id);
+
+  const [payment] = await db
+    .select()
+    .from(ecpay_payments)
+    .where(
+      and(
+        eq(ecpay_payments.id, parsed.payment_id),
+        eq(ecpay_payments.firm_id, firmId),
+      ),
+    )
+    .limit(1);
+
+  if (!payment) throw new Error("找不到付款紀錄");
+  // 僅實際收過款的訂單需要開立憑證（已退款者仍可記錄，便於日後折讓對帳）。
+  if (payment.status !== "paid" && payment.status !== "refunded") {
+    throw new Error("僅已付款的款項可記錄開立");
+  }
+
+  const existing = (payment.issuance as PaymentIssuance | null) ?? null;
+  const issuance: PaymentIssuance = {
+    kind: parsed.kind,
+    // 免開立不帶連結碼／號碼。
+    ...(parsed.kind !== "none" && parsed.order_id
+      ? { order_id: parsed.order_id }
+      : {}),
+    ...(parsed.kind !== "none" && parsed.number
+      ? { number: parsed.number }
+      : {}),
+    issued_at: new Date().toISOString(),
+    issued_by: userId,
+    // 保留既有折讓紀錄（更正開立資訊不應丟失已開的折讓）。
+    ...(existing?.allowances ? { allowances: existing.allowances } : {}),
+  };
+
+  await db
+    .update(ecpay_payments)
+    .set({ issuance: paymentIssuanceSchema.parse(issuance) })
+    .where(eq(ecpay_payments.id, payment.id));
+
+  revalidatePath(`/firm/${firmId}/payment-link`);
+  return { ok: true };
+}
+
+/** 清除開立紀錄，回到「待開立」（用於誤標）。 */
+export async function clearPaymentIssuance(input: {
+  firm_id: string;
+  payment_id: string;
+}): Promise<{ ok: true }> {
+  const { profile } = await requireStaff();
+  const firmId = resolveFirmId(profile, input.firm_id);
+
+  const result = await db
+    .update(ecpay_payments)
+    .set({ issuance: null })
+    .where(
+      and(
+        eq(ecpay_payments.id, input.payment_id),
+        eq(ecpay_payments.firm_id, firmId),
+      ),
+    )
+    .returning({ id: ecpay_payments.id });
+
+  if (result.length === 0) throw new Error("找不到付款紀錄");
+
+  revalidatePath(`/firm/${firmId}/payment-link`);
+  return { ok: true };
 }

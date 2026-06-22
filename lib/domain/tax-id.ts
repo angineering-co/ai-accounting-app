@@ -27,3 +27,16 @@ export function isValidUBN(taxId: string): boolean {
 
   return false;
 }
+
+/**
+ * Whether an invoice's buyer is a business (B2B) rather than a consumer (B2C).
+ *
+ * A buyer is B2B iff it carries a valid 統一編號. Everything else is B2C:
+ * null/empty, the 10-zero placeholder ("0000000000") that B2C invoices print
+ * for the buyer, carrier codes, and OCR noise. B2C invoices are tax-inclusive,
+ * so this is the discriminator both report generation and journal-entry
+ * generation use to decide whether to back out the embedded 營業稅.
+ */
+export function isBusinessBuyer(buyerTaxId: string | null | undefined): boolean {
+  return buyerTaxId != null && isValidUBN(buyerTaxId);
+}

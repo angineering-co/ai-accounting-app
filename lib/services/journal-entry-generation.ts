@@ -2,6 +2,7 @@ import { extractAccountCode } from "@/lib/data/accounts";
 import type { VoucherType } from "@/lib/domain/journal-entry";
 import type { Allowance, Invoice } from "@/lib/domain/models";
 import { splitEmbeddedTax } from "@/lib/domain/vat";
+import { isBusinessBuyer } from "@/lib/domain/tax-id";
 
 // Fixed account codes referenced by §5.1 / §5.2.
 // Source of truth: `lib/data/accounts.ts`.
@@ -174,23 +175,25 @@ function resolveOutputTax(
     return { revenue: totalSales, outputTax: tax };
   }
   const data = invoice.extracted_data ?? {};
-  if (!data.buyerTaxId) {
+  if (!isBusinessBuyer(data.buyerTaxId)) {
     const { net, tax: embedded } = splitEmbeddedTax(totalAmount);
     return { revenue: net, outputTax: embedded };
   }
-  // 應稅 銷項 with a buyer 統編 but tax=0 is bad data (a B2B total is net+tax, not
-  // tax-inclusive) — fail loud so the row is recorded per-document rather than
-  // booked wrong or crashing the batch insert with a 0/0 稅額 line.
+  // 應稅 銷項 to a business buyer (valid 統編) with tax=0 is bad data (a B2B total
+  // is net+tax, not tax-inclusive) — fail loud so the row is recorded per-document
+  // rather than booked wrong or crashing the batch insert with a 0/0 稅額 line.
   throw new Error(
-    `computeEntryFromInvoice(${invoice.id}): 應稅 銷項 with buyerTaxId but tax=0 ` +
+    `computeEntryFromInvoice(${invoice.id}): 應稅 銷項 to a business buyer but tax=0 ` +
       `(B2B totals are not tax-inclusive; check 稅額 extraction).`,
   );
 }
 
-// 進項稅額 resolution for deductible inputs. A 二聯式收銀機 / 火車高鐵票根 等憑證 is
-// tax-inclusive (OCR tax=0); mirror reports.ts (embeddedInputTax) and back the 5%
-// out so the expense is net and 1144 carries the tax. A non-二聯式 deductible 應稅
-// input with tax=0 is bad data → fail loud.
+// 進項稅額 resolution for deductible inputs. Precondition: only reached on the
+// deductible path — the caller returns the 2-line non-deductible shape (tax merged
+// into the expense, no 1144 line) before getting here, so deductible is guaranteed.
+// A 二聯式收銀機 / 火車高鐵票根 等憑證 is tax-inclusive (OCR tax=0); mirror reports.ts
+// (embeddedInputTax) and back the 5% out so the expense is net and 1144 carries the
+// tax. A non-二聯式 deductible 應稅 input with tax=0 is bad data → fail loud.
 function resolveInputTax(
   invoice: Invoice,
   totalSales: number,

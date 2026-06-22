@@ -212,7 +212,7 @@ describe("computeEntryFromInvoice — 銷項 B2C 內含稅 (embedded VAT)", () =
     ]);
   });
 
-  it("throws on 應稅 銷項 with a buyer 統編 but tax=0 (B2B total isn't tax-inclusive)", () => {
+  it("throws on 應稅 銷項 to a business buyer (valid 統編) but tax=0 (B2B total isn't tax-inclusive)", () => {
     expect(() =>
       computeEntryFromInvoice(
         makeInvoice({
@@ -221,11 +221,30 @@ describe("computeEntryFromInvoice — 銷項 B2C 內含稅 (embedded VAT)", () =
             totalSales: 14_940,
             tax: 0,
             totalAmount: 14_940,
-            buyerTaxId: "12345678",
+            buyerTaxId: "04595257", // valid UBN
           },
         }),
       ),
-    ).toThrow(/buyerTaxId but tax=0/);
+    ).toThrow(/business buyer but tax=0/);
+  });
+
+  it("treats the 10-zero placeholder buyer as B2C (embedded), not a business buyer", () => {
+    const computed = computeEntryFromInvoice(
+      makeInvoice({
+        in_or_out: "out",
+        extracted_data: {
+          totalSales: 14_940,
+          tax: 0,
+          totalAmount: 14_940,
+          buyerTaxId: "0000000000",
+        },
+      }),
+    );
+    expect(computed.lines).toEqual([
+      { account_code: ACCT_BANK, debit: 14_940, credit: 0, description: null },
+      { account_code: ACCT_REVENUE, debit: 0, credit: 14_229, description: null },
+      { account_code: ACCT_OUTPUT_TAX, debit: 0, credit: 711, description: null },
+    ]);
   });
 });
 

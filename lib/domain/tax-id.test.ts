@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isValidUBN } from "./tax-id";
+import { isValidUBN, isBusinessBuyer } from "./tax-id";
 
 describe("isValidUBN", () => {
   it("returns false for non-8-digit strings", () => {
@@ -28,5 +28,20 @@ describe("isValidUBN", () => {
     // UBN with 7 at position 6 where (sum+1)%5===0
     expect(isValidUBN("10458570")).toBe(true);
     expect(isValidUBN("10458575")).toBe(true);
+  });
+});
+
+describe("isBusinessBuyer", () => {
+  it("is true only for a valid 統編", () => {
+    expect(isBusinessBuyer("04595257")).toBe(true);
+    expect(isBusinessBuyer("53212539")).toBe(true);
+  });
+
+  it("treats missing / placeholder / malformed buyer IDs as B2C", () => {
+    expect(isBusinessBuyer(null)).toBe(false);
+    expect(isBusinessBuyer(undefined)).toBe(false);
+    expect(isBusinessBuyer("")).toBe(false);
+    expect(isBusinessBuyer("0000000000")).toBe(false); // 10-zero B2C placeholder
+    expect(isBusinessBuyer("12345678")).toBe(false); // bad checksum
   });
 });

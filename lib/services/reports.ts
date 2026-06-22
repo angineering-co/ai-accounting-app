@@ -20,6 +20,7 @@ import { getInvoiceRanges } from "./invoice-range";
 import { toRocYearMonth } from "@/lib/utils";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { embeddedTax } from "@/lib/domain/vat";
+import { isBusinessBuyer } from "@/lib/domain/tax-id";
 import iconv from "iconv-lite";
 
 function formatX(value: string, length: number): string {
@@ -880,8 +881,9 @@ function aggregateInvoiceData(
     const invoiceType = inv.invoiceType || '';
 
     if (inv.taxType === '應稅') {
-      // B2C 二聯發票 (無買受人統一編號) 稅額要再彙總計算
-      if (!inv.buyerTaxId) {
+      // B2C 二聯發票 (買受人非營業人，無有效統編) 稅額要再彙總計算。
+      // 非有效統編涵蓋空白、10 個 0 的佔位值與 OCR 雜訊，皆視為 B2C。
+      if (!isBusinessBuyer(inv.buyerTaxId)) {
         totalSalesWithoutBuyerTaxId += sales;
       }
 

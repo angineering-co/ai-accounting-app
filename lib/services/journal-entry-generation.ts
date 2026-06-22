@@ -2,7 +2,7 @@ import { extractAccountCode } from "@/lib/data/accounts";
 import type { VoucherType } from "@/lib/domain/journal-entry";
 import type { Allowance, Invoice } from "@/lib/domain/models";
 import { splitEmbeddedTax } from "@/lib/domain/vat";
-import { isBusinessBuyer } from "@/lib/domain/tax-id";
+import { isValidUBN } from "@/lib/domain/tax-id";
 
 // Fixed account codes referenced by §5.1 / §5.2.
 // Source of truth: `lib/data/accounts.ts`.
@@ -175,7 +175,9 @@ function resolveOutputTax(
     return { revenue: totalSales, outputTax: tax };
   }
   const data = invoice.extracted_data ?? {};
-  if (!isBusinessBuyer(data.buyerTaxId)) {
+  // No valid buyer 統編 → B2C (consumer), whose total is tax-inclusive: back out
+  // the embedded 5%. Covers null/empty, the 10-zero placeholder, and OCR noise.
+  if (!isValidUBN(data.buyerTaxId)) {
     const { net, tax: embedded } = splitEmbeddedTax(totalAmount);
     return { revenue: net, outputTax: embedded };
   }

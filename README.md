@@ -86,6 +86,7 @@ App runs at http://localhost:3000.
 | `GEMINI_API_KEY` | Next.js + Edge Fn | Yes | Google Gemini 2.5 Flash API key |
 | `DATABASE_URL` | Tests | For tests | PostgreSQL connection string |
 | `RESEND_API_KEY` | Next.js (server) | No | Resend email API key |
+| `EMAIL_FROM` | Next.js (server) | No | Sender address for transactional mail. Send from the `mail.snapbooks.ai` subdomain (e.g. `SnapBooks <noreply@mail.snapbooks.ai>`), never the root `snapbooks.ai`, so the root domain's reputation stays isolated. |
 
 ## Vault Secrets
 

@@ -484,7 +484,22 @@ function errorReason(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-function assertBalanced(computed: ComputedEntry, documentId: string): void {
+// Validate a computed entry against the DB-level invariants *before* it reaches the
+// batch INSERT. The killer is that a multi-row INSERT aborts on the first bad row,
+// so one invalid line rolls back the whole chunk and the Postgres error names the
+// row's (rolled-back) values but not the source document. Checking here, inside the
+// per-document try/catch, attributes the failure to its `documentId` (recorded in
+// result.failures) and lets the rest of the batch proceed.
+function assertValidEntry(computed: ComputedEntry, documentId: string): void {
+  for (const l of computed.lines) {
+    // debit_credit_xor: exactly one of debit/credit must be > 0 (both >= 0).
+    if (l.debit < 0 || l.credit < 0 || (l.debit > 0) === (l.credit > 0)) {
+      throw new Error(
+        `invalid line for document ${documentId}: account ${l.account_code} has ` +
+          `debit=${l.debit}, credit=${l.credit} (need exactly one > 0, both >= 0)`,
+      );
+    }
+  }
   const debit = computed.lines.reduce((a, l) => a + l.debit, 0);
   const credit = computed.lines.reduce((a, l) => a + l.credit, 0);
   if (debit !== credit) {
@@ -519,43 +534,59 @@ async function bulkInsertNewEntries(items: DraftEntryItem[], userId: string): Pr
   let total = 0;
   for (let i = 0; i < items.length; i += NEW_ENTRY_CHUNK) {
     const chunk = items.slice(i, i + NEW_ENTRY_CHUNK);
-    await db.transaction(async (tx) => {
-      const inserted = await tx
-        .insert(journalEntriesTable)
-        .values(
-          chunk.map((it) => ({
-            firm_id: it.firmId,
-            client_id: it.clientId,
-            document_id: it.documentId,
-            voucher_type: it.computed.voucher_type,
-            entry_date: it.computed.entry_date,
-            description: it.computed.description,
-            status: "draft" as const,
-            voucher_no: null,
-            created_by: userId,
+    try {
+      await db.transaction(async (tx) => {
+        const inserted = await tx
+          .insert(journalEntriesTable)
+          .values(
+            chunk.map((it) => ({
+              firm_id: it.firmId,
+              client_id: it.clientId,
+              document_id: it.documentId,
+              voucher_type: it.computed.voucher_type,
+              entry_date: it.computed.entry_date,
+              description: it.computed.description,
+              status: "draft" as const,
+              voucher_no: null,
+              created_by: userId,
+            })),
+          )
+          .returning({
+            id: journalEntriesTable.id,
+            document_id: journalEntriesTable.document_id,
+          });
+        // returning order is not guaranteed, so key the line FK by document_id.
+        const idByDoc = new Map(inserted.map((e) => [e.document_id, e.id]));
+        const lines = chunk.flatMap((it) =>
+          it.computed.lines.map((line, idx) => ({
+            journal_entry_id: idByDoc.get(it.documentId)!,
+            line_number: idx + 1,
+            account_code: line.account_code,
+            debit: line.debit,
+            credit: line.credit,
+            description: line.description,
           })),
-        )
-        .returning({
-          id: journalEntriesTable.id,
-          document_id: journalEntriesTable.document_id,
-        });
-      // returning order is not guaranteed, so key the line FK by document_id.
-      const idByDoc = new Map(inserted.map((e) => [e.document_id, e.id]));
-      const lines = chunk.flatMap((it) =>
-        it.computed.lines.map((line, idx) => ({
-          journal_entry_id: idByDoc.get(it.documentId)!,
-          line_number: idx + 1,
-          account_code: line.account_code,
-          debit: line.debit,
-          credit: line.credit,
-          description: line.description,
-        })),
+        );
+        for (let j = 0; j < lines.length; j += LINE_INSERT_CHUNK) {
+          await tx.insert(journalEntryLinesTable).values(lines.slice(j, j + LINE_INSERT_CHUNK));
+        }
+        total += chunk.length;
+      });
+      // Periodic progress for large batches (up to tens of thousands of documents),
+      // so a long-running run is visibly advancing rather than appearing stalled.
+      console.log(`bulkInsertNewEntries: inserted ${total} / ${items.length} draft entries`);
+    } catch (e) {
+      // A multi-row INSERT aborts on the first offending row, rolling back the
+      // whole chunk; the Postgres error reports that row's (now-discarded) values
+      // but not its source document. `assertValidEntry` screens the known cases
+      // upstream, so reaching here means an unexpected constraint — log the chunk's
+      // documents so the culprit is at least traceable from the entry/line shapes.
+      console.error(
+        `bulkInsertNewEntries: chunk insert failed for ${chunk.length} document(s): ` +
+          chunk.map((it) => it.documentId).join(", "),
       );
-      for (let j = 0; j < lines.length; j += LINE_INSERT_CHUNK) {
-        await tx.insert(journalEntryLinesTable).values(lines.slice(j, j + LINE_INSERT_CHUNK));
-      }
-      total += chunk.length;
-    });
+      throw e;
+    }
   }
   return total;
 }
@@ -607,7 +638,7 @@ async function processInvoices(
     let computed: ComputedEntry;
     try {
       computed = computeEntryFromInvoice(invoice);
-      assertBalanced(computed, documentId);
+      assertValidEntry(computed, documentId);
     } catch (e) {
       result.failures.push({ documentId, kind: "invoice", reason: errorReason(e) });
       continue;
@@ -658,7 +689,7 @@ async function processAllowances(
               allowance,
               await getComputedEntryForInvoice(supabase, allowance.original_invoice_id),
             );
-      assertBalanced(computed, documentId);
+      assertValidEntry(computed, documentId);
     } catch (e) {
       result.failures.push({ documentId, kind: "allowance", reason: errorReason(e) });
       continue;

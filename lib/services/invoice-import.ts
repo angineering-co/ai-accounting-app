@@ -12,6 +12,7 @@ import { getTaxPeriodByYYYMM } from "@/lib/services/tax-period";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, type Tx } from "@/lib/db/drizzle";
 import { assertCallerCanAccessClient } from "@/lib/db/rls";
+import { isValidUBN } from "@/lib/domain/tax-id";
 import {
   documents as documentsTable,
   invoices as invoicesTable,
@@ -395,7 +396,7 @@ async function processInvoiceExcelFile(
             date: dateStr,
             sellerTaxId,
             sellerName,
-            buyerTaxId: buyerTaxId === "0000000000" ? undefined : buyerTaxId, // B2C：賣方填入統一編號，買方填入 10 個"0"
+            buyerTaxId: isValidUBN(buyerTaxId) ? buyerTaxId : undefined, // B2C：賣方填入統一編號，買方填入 10 個"0"
             buyerName: buyerName,
             totalSales: salesAmount,
             tax: taxAmount,
@@ -591,7 +592,7 @@ function parseAllowanceFromRows(
     date: dateStr,
     sellerTaxId,
     sellerName,
-    buyerTaxId: buyerTaxId === "0000000000" ? undefined : buyerTaxId, // B2C：賣方填入統一編號，買方填入 10 個"0"
+    buyerTaxId: isValidUBN(buyerTaxId) ? buyerTaxId : undefined, // B2C：賣方填入統一編號，買方填入 10 個"0"
     buyerName,
     originalInvoiceSerialCode: originalSerialCode,
     summary,

@@ -10,6 +10,12 @@ describe("isValidUBN", () => {
     expect(isValidUBN("1234 678")).toBe(false);
   });
 
+  it("returns false for nullish input (B2C buyer: null/undefined)", () => {
+    expect(isValidUBN(null)).toBe(false);
+    expect(isValidUBN(undefined)).toBe(false);
+    expect(isValidUBN("0000000000")).toBe(false); // 10-zero B2C placeholder
+  });
+
   it("validates known valid UBNs", () => {
     // Government example
     expect(isValidUBN("04595257")).toBe(true);

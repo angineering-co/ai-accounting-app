@@ -19,6 +19,8 @@ import {
 import { getInvoiceRanges } from "./invoice-range";
 import { toRocYearMonth } from "@/lib/utils";
 import { RocPeriod } from "@/lib/domain/roc-period";
+import { embeddedTax } from "@/lib/domain/vat";
+import { isValidUBN } from "@/lib/domain/tax-id";
 import iconv from "iconv-lite";
 
 function formatX(value: string, length: number): string {
@@ -879,8 +881,9 @@ function aggregateInvoiceData(
     const invoiceType = inv.invoiceType || '';
 
     if (inv.taxType === '應稅') {
-      // B2C 二聯發票 (無買受人統一編號) 稅額要再彙總計算
-      if (!inv.buyerTaxId) {
+      // B2C 二聯發票 (買受人非營業人，無有效統編) 稅額要再彙總計算。
+      // 非有效統編涵蓋空白、10 個 0 的佔位值與 OCR 雜訊，皆視為 B2C。
+      if (!isValidUBN(inv.buyerTaxId)) {
         totalSalesWithoutBuyerTaxId += sales;
       }
 
@@ -949,7 +952,7 @@ function aggregateInvoiceData(
 
   // 銷項統一發票之買受人為非營業人者，其發票所載金額應含營業稅額，於填寫申報書時，再彙總依下列公 式計算應申報之銷售額與稅額。 
   // 銷項稅額 = 當期開立統一發票總額 ÷（１+ 徵收率）× 徵收率（四捨五入）
-  const embeddedOutputTax = Math.round(totalSalesWithoutBuyerTaxId * (0.05 / 1.05));
+  const embeddedOutputTax = embeddedTax(totalSalesWithoutBuyerTaxId);
   result.output.cashRegisterAndElectronic.sales -= embeddedOutputTax;
   result.output.cashRegisterAndElectronic.tax += embeddedOutputTax;
 
@@ -996,8 +999,8 @@ function aggregateInvoiceData(
 
   // 二聯式收銀機統一發票及員工出差取得運輸事業開立 之火（汽）車、高鐵、船舶、飛機等收據或票根之進 項憑證，銷售額應內含營業稅額，
   // 填寫申報書時再彙 總依下列公式計算進項稅額。 進項稅額 = 憑證總計金額 ×（徵收率÷（１＋ 徵收 率））
-  const embeddedInputTax = Math.round(
-    result.input.otherCertificates.purchasesAndExpenses * (0.05 / 1.05)
+  const embeddedInputTax = embeddedTax(
+    result.input.otherCertificates.purchasesAndExpenses
   );
   result.input.otherCertificates.purchasesAndExpenses -= embeddedInputTax;
   result.input.otherCertificates.purchasesAndExpensesTax += embeddedInputTax;

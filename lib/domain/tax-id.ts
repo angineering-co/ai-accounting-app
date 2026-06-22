@@ -9,8 +9,8 @@ const WEIGHTS = [1, 2, 1, 2, 1, 2, 4, 1] as const;
  * Special case: when digit at position 6 is 7 (7×4=28, 2+8=10),
  * also accept (sum + 1) % 5 === 0.
  */
-export function isValidUBN(taxId: string): boolean {
-  if (!/^\d{8}$/.test(taxId)) return false;
+export function isValidUBN(taxId: string | null | undefined): boolean {
+  if (taxId == null || !/^\d{8}$/.test(taxId)) return false;
 
   const digits = taxId.split("").map(Number);
 

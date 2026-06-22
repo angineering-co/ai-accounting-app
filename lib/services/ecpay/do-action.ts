@@ -80,7 +80,8 @@ export function parseDoActionResponse(body: string): DoActionResult {
 function isBalanceShortfall(result: DoActionResult): boolean {
   return (
     result.rtnCode === 10100027 ||
-    /可退刷額度不足|退刷額度不足|帳戶餘額|account.*balance/i.test(result.rtnMsg)
+    // 「退刷額度不足」為「可退刷額度不足」的子字串，比對短的即涵蓋兩種措辭。
+    /退刷額度不足|帳戶餘額|account.*balance/i.test(result.rtnMsg)
   );
 }
 

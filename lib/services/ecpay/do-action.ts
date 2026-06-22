@@ -69,16 +69,27 @@ export function parseDoActionResponse(body: string): DoActionResult {
   };
 }
 
+/** 退款失敗訊息是否為「帳戶餘額不足」（已關帳訂單退刷才會遇到，E→N 幫不上）。 */
+function isBalanceShortfall(result: DoActionResult): boolean {
+  return /餘額|balance/i.test(result.rtnMsg);
+}
+
 /**
- * 判斷退款（Action=R）失敗是否因「訂單尚未關帳（要關帳）」。
+ * 判斷退款（Action=R）失敗是否因「訂單尚未關帳（要關帳）」，亦即是否該改走 取消關帳(E)→放棄授權(N)。
  *
  * 要關帳狀態下，綠界只允許「部分退款」（退款金額 < 原金額）用 Action=R；整筆退款（=原金額）
- * 會被拒，RtnMsg 形如 `更新失敗.(error_amount_R)`。整筆退款此時須改走 取消關帳(E)→放棄授權(N)。
- * 本帳戶為每日自動關帳，付款當日（20:15–20:30 關帳前）退款必落在此情境。
+ * 會被拒。本帳戶為每日自動關帳，付款當日（20:15–20:30 關帳前）退款必落在此情境。
  * 來源：綠界 2883（信用卡請款與退款狀態機）、2885（信用卡請退款功能）。
+ *
+ * 實測正式環境此回拒的 RtnMsg 為 `更新失敗.(error_amount_R)`（RtnCode 10000002），但 error token
+ * `error_amount_R` 綠界文件未明列、也不在 ecpay skill 內，不宜當作唯一硬比對鍵。故放寬為：
+ * 命中 token，或 RtnCode 10000002（更新失敗）且非餘額不足。誤判也安全——E（取消關帳）僅在
+ * 要關帳狀態有效，套錯狀態會直接失敗並回報友善訊息，不會誤動金流（最壞＝與未 fallback 同樣回報失敗）。
  */
 export function isUncapturedFullRefundError(result: DoActionResult): boolean {
-  return /error_amount_R/i.test(result.rtnMsg);
+  if (/error_amount_R/i.test(result.rtnMsg)) return true;
+  if (result.rtnCode !== 10000002) return false;
+  return !isBalanceShortfall(result);
 }
 
 /**
@@ -86,7 +97,10 @@ export function isUncapturedFullRefundError(result: DoActionResult): boolean {
  * 之類的 error token），不適合直接呈現；原始 rtnCode / rtnMsg 由 caller 記入 server log 供查修。
  */
 export function describeDoActionFailure(result: DoActionResult): string {
-  // error_amount_R 正常情況已由 E→N fallback 處理；落到這裡代表訂單狀態異常或 fallback 也失敗。
+  if (isBalanceShortfall(result)) {
+    return "綠界帳戶餘額不足，無法完成退款，請確認綠界帳戶餘額後再試。";
+  }
+  // 要關帳訂單整筆退款正常情況已由 E→N fallback 處理；落到這裡代表 fallback 也失敗或狀態異常。
   if (isUncapturedFullRefundError(result)) {
     return "這筆訂單目前的狀態無法退款，請至綠界廠商後台確認交易狀態後再試。";
   }

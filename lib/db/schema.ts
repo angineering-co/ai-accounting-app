@@ -66,6 +66,7 @@ export const ecpay_payments = pgTable("ecpay_payments", {
 	created_at: timestamp({ withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 	refunded_amount: integer(),
 	refunded_at: timestamp({ withTimezone: true, mode: 'string' }),
+	issuance: jsonb(),
 }, (table) => [
 	index("ecpay_payments_client_id_idx").using("btree", table.client_id.asc().nullsLast().op("uuid_ops")).where(sql`(client_id IS NOT NULL)`),
 	index("ecpay_payments_firm_id_status_idx").using("btree", table.firm_id.asc().nullsLast().op("uuid_ops"), table.status.asc().nullsLast().op("text_ops")),

@@ -171,6 +171,63 @@ export const createPaymentLinkSchema = z.object({
 
 export type CreatePaymentLinkInput = z.infer<typeof createPaymentLinkSchema>;
 
+// ===== 收款開立追蹤（發票/收據）=====
+//
+// 低頻追蹤 metadata，存於 ecpay_payments.issuance (JSONB)。真正憑證由 Amego 開立，
+// 本系統只記「開了沒、開的是發票還是收據、連結碼與號碼」。null = 待處理。
+// 子表化（折讓 allowances）刻意延後到有寫入點時再做（見 issuance.allowances）。
+
+export const PAYMENT_DOC_KINDS = ["invoice", "receipt", "none"] as const;
+export type PaymentDocKind = (typeof PAYMENT_DOC_KINDS)[number];
+
+export const PAYMENT_DOC_KIND_LABELS: Record<PaymentDocKind, string> = {
+  invoice: "發票",
+  receipt: "收據",
+  none: "免開立",
+};
+
+// 未來折讓（針對 kind=invoice）。現階段不寫入，僅先定義形狀供日後沿用。
+export const paymentIssuanceAllowanceSchema = z.object({
+  order_id: z.string().max(40).optional(),
+  number: z.string().max(40).optional(),
+  amount: z.number().int(),
+  issued_at: z.string(),
+  issued_by: z.string().uuid().nullable().optional(),
+});
+
+// ecpay_payments.issuance 的權威形狀（server 寫入端驗證）。
+export const paymentIssuanceSchema = z.object({
+  kind: z.enum(PAYMENT_DOC_KINDS),
+  order_id: z.string().max(40).optional(),
+  number: z.string().max(40).optional(),
+  issued_at: z.string(),
+  issued_by: z.string().uuid().nullable().optional(),
+  allowances: z.array(paymentIssuanceAllowanceSchema).optional(),
+});
+export type PaymentIssuance = z.infer<typeof paymentIssuanceSchema>;
+
+// server action 輸入：標記某筆已付款收款的開立狀態。
+export const markPaymentIssuedSchema = z
+  .object({
+    firm_id: z.string().uuid(),
+    payment_id: z.string().uuid(),
+    kind: z.enum(PAYMENT_DOC_KINDS),
+    // order_id：Amego 訂單編號規則為英數字；長度遠低於 40 上限即可。
+    order_id: z
+      .string()
+      .trim()
+      .max(40)
+      .regex(/^[A-Za-z0-9]+$/, "連結碼僅能用英文與數字")
+      .optional(),
+    number: z.string().trim().max(40).optional(),
+  })
+  // 發票必須有發票號碼，否則「已開立」無法用於對帳（避免與「收據」或漏填混淆）。
+  .refine((v) => v.kind !== "invoice" || !!v.number, {
+    message: "請填寫發票號碼",
+    path: ["number"],
+  });
+export type MarkPaymentIssuedInput = z.infer<typeof markPaymentIssuedSchema>;
+
 // ===== Invoice Schemas =====
 
 // Schema for extracted invoice data (stored in JSONB column)

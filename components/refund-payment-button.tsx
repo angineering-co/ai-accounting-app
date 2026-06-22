@@ -66,8 +66,10 @@ export function RefundPaymentButton({
       setOpen(false);
       router.refresh();
     } catch (error) {
-      // 走到這裡代表非預期錯誤（網路中斷、未授權等），訊息可能已被抹除，給通用提示。
-      toast.error(error instanceof Error ? error.message : "退款失敗，請稍後再試");
+      // 走到這裡代表非預期錯誤（網路中斷、未授權等）。其訊息在正式環境會被 Next.js 抹除成
+      // 英文系統錯誤，不適合示人，故統一給友善中文提示，詳情記入 console 供排查。
+      console.error("退款發生非預期錯誤", error);
+      toast.error("退款失敗，請稍後再試");
     } finally {
       setPending(false);
     }

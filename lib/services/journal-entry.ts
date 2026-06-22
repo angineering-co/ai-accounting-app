@@ -484,7 +484,22 @@ function errorReason(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-function assertBalanced(computed: ComputedEntry, documentId: string): void {
+// Validate a computed entry against the DB-level invariants *before* it reaches the
+// batch INSERT. The killer is that a multi-row INSERT aborts on the first bad row,
+// so one invalid line rolls back the whole chunk and the Postgres error names the
+// row's (rolled-back) values but not the source document. Checking here, inside the
+// per-document try/catch, attributes the failure to its `documentId` (recorded in
+// result.failures) and lets the rest of the batch proceed.
+function assertValidEntry(computed: ComputedEntry, documentId: string): void {
+  for (const l of computed.lines) {
+    // debit_credit_xor: exactly one of debit/credit must be > 0 (both >= 0).
+    if (l.debit < 0 || l.credit < 0 || (l.debit > 0) === (l.credit > 0)) {
+      throw new Error(
+        `invalid line for document ${documentId}: account ${l.account_code} has ` +
+          `debit=${l.debit}, credit=${l.credit} (need exactly one > 0, both >= 0)`,
+      );
+    }
+  }
   const debit = computed.lines.reduce((a, l) => a + l.debit, 0);
   const credit = computed.lines.reduce((a, l) => a + l.credit, 0);
   if (debit !== credit) {
@@ -519,6 +534,7 @@ async function bulkInsertNewEntries(items: DraftEntryItem[], userId: string): Pr
   let total = 0;
   for (let i = 0; i < items.length; i += NEW_ENTRY_CHUNK) {
     const chunk = items.slice(i, i + NEW_ENTRY_CHUNK);
+    try {
     await db.transaction(async (tx) => {
       const inserted = await tx
         .insert(journalEntriesTable)
@@ -556,6 +572,18 @@ async function bulkInsertNewEntries(items: DraftEntryItem[], userId: string): Pr
       }
       total += chunk.length;
     });
+    } catch (e) {
+      // A multi-row INSERT aborts on the first offending row, rolling back the
+      // whole chunk; the Postgres error reports that row's (now-discarded) values
+      // but not its source document. `assertValidEntry` screens the known cases
+      // upstream, so reaching here means an unexpected constraint — log the chunk's
+      // documents so the culprit is at least traceable from the entry/line shapes.
+      console.error(
+        `bulkInsertNewEntries: chunk insert failed for ${chunk.length} document(s): ` +
+          chunk.map((it) => it.documentId).join(", "),
+      );
+      throw e;
+    }
   }
   return total;
 }
@@ -607,7 +635,7 @@ async function processInvoices(
     let computed: ComputedEntry;
     try {
       computed = computeEntryFromInvoice(invoice);
-      assertBalanced(computed, documentId);
+      assertValidEntry(computed, documentId);
     } catch (e) {
       result.failures.push({ documentId, kind: "invoice", reason: errorReason(e) });
       continue;
@@ -658,7 +686,7 @@ async function processAllowances(
               allowance,
               await getComputedEntryForInvoice(supabase, allowance.original_invoice_id),
             );
-      assertBalanced(computed, documentId);
+      assertValidEntry(computed, documentId);
     } catch (e) {
       result.failures.push({ documentId, kind: "allowance", reason: errorReason(e) });
       continue;

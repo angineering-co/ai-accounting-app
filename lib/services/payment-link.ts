@@ -171,10 +171,17 @@ export async function createPaymentLink(
  * - 每日自動關帳時段（台灣時間 20:15–20:30）綠界要求勿呼叫 DoAction，故此時段擋下退款。
  * - 退款金額不得超過原訂單；綠界帳戶餘額不足會被拒，失敗時回報操作者可行動的訊息。
  */
+/**
+ * 退款流程中「操作者該看到的」預期失敗（綠界回拒、狀態不符、餘額不足、連線失敗等）。
+ * 以此型別丟出，由 refundPayment 外層 catch 後**回傳**訊息給前端——Server Action 直接
+ * throw 的訊息在正式環境會被 Next.js 抹除成通用錯誤（dev 不會），唯有「回傳值」不被抹除。
+ */
+class RefundError extends Error {}
+
 export async function refundPayment(input: {
   firm_id: string;
   payment_id: string;
-}): Promise<{ status: "refunded" }> {
+}): Promise<{ ok: true } | { ok: false; error: string }> {
   const { profile } = await requireStaff();
   const firmId = resolveFirmId(profile, input.firm_id);
 
@@ -182,7 +189,7 @@ export async function refundPayment(input: {
   // 取鎖處阻塞，待前者 commit 後讀到 'refunded' 直接冪等返回，不會重複呼叫綠界
   // DoAction（避免第二次被綠界拒退後誤報「退款失敗」）。鎖跨越 DoAction HTTP 呼叫，
   // 對此低頻財務操作可接受。來源：ECPay skill §冪等建議（SELECT … FOR UPDATE）。
-  await db.transaction(async (tx) => {
+  const outcome = await db.transaction(async (tx) => {
     // 限本 firm（Drizzle 繞過 RLS，需顯式把關）。
     const [payment] = await tx
       .select()
@@ -196,14 +203,14 @@ export async function refundPayment(input: {
       .for("update")
       .limit(1);
 
-    if (!payment) throw new Error("找不到付款紀錄");
+    if (!payment) throw new RefundError("找不到付款紀錄");
     // 並行請求已搶先退款：冪等視為成功，不再呼叫 DoAction。
     if (payment.status === "refunded") return;
-    if (payment.status !== "paid") throw new Error("僅已付款的款項可退款");
+    if (payment.status !== "paid") throw new RefundError("僅已付款的款項可退款");
 
     // 每日自動關帳時段綠界禁止呼叫 DoAction，於此時段擋下退款（server 端為權威把關）。
     if (isAutoCaptureBlackout()) {
-      throw new Error(
+      throw new RefundError(
         `綠界每日自動關帳時段（台灣時間 ${AUTO_CAPTURE_BLACKOUT_LABEL}）暫停退款，請於 20:30 後再試`,
       );
     }
@@ -215,7 +222,7 @@ export async function refundPayment(input: {
         : {};
     const tradeNo = rawPayload.TradeNo;
     if (!payment.merchant_trade_no || typeof tradeNo !== "string" || !tradeNo) {
-      throw new Error("缺少綠界交易編號，無法退款");
+      throw new RefundError("缺少綠界交易編號，無法退款");
     }
 
     const config = getEcpayConfig();
@@ -241,7 +248,7 @@ export async function refundPayment(input: {
       // 綠界 5xx 會回 HTML 錯誤頁，落到 parse 會被誤判為失敗。先擋 HTTP 失敗：此時退款
       // 是否生效未知，提示操作者至綠界後台確認，勿盲目重試（throw 會 rollback，狀態維持 paid）。
       if (!response.ok) {
-        throw new Error(
+        throw new RefundError(
           `無法連線綠界退款服務（HTTP ${response.status}），請稍後再試，或至綠界廠商後台確認退款狀態`,
         );
       }
@@ -269,7 +276,7 @@ export async function refundPayment(input: {
       if (!cancel.success) {
         // E 失敗代表綠界端未變動，rollback 後維持 paid 可重試。
         logFailure(cancel, "E");
-        throw new Error(describeDoActionFailure(cancel));
+        throw new RefundError(describeDoActionFailure(cancel));
       }
       // E 成功＝這筆款項不會被請款入帳，退款已實質生效。N（放棄授權）僅為釋放剩餘授權額度
       // 的善後：成敗都不影響「不會入帳」的結果，故 N 一律不得 rollback（否則 DB 退回 paid 與
@@ -288,7 +295,7 @@ export async function refundPayment(input: {
       refundAction = "E+N";
     } else if (!result.success) {
       logFailure(result, "R");
-      throw new Error(describeDoActionFailure(result));
+      throw new RefundError(describeDoActionFailure(result));
     }
 
     // 已持鎖且狀態確為 paid，WHERE 用 id 即可。status 以 EcpayPaymentStatus 約束
@@ -305,8 +312,19 @@ export async function refundPayment(input: {
         raw_payload: { ...rawPayload, refund_action: refundAction },
       })
       .where(eq(ecpay_payments.id, payment.id));
-  });
+  }).then(
+    // 交易 commit（含冪等的「已退款」提前 return）即成功。
+    () => ({ ok: true as const }),
+    (e: unknown) => {
+      // 預期內的退款失敗：回傳友善訊息給前端（直接 throw 在正式環境會被抹除成通用錯誤）。
+      if (e instanceof RefundError) return { ok: false as const, error: e.message };
+      // 非預期錯誤維持拋出（正式環境抹除為通用訊息屬意料內，避免外洩內部細節）。
+      throw e;
+    },
+  );
+
+  if (!outcome.ok) return outcome;
 
   revalidatePath(`/firm/${firmId}/payment-link`);
-  return { status: "refunded" };
+  return { ok: true };
 }

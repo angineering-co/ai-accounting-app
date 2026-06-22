@@ -55,12 +55,21 @@ export function RefundPaymentButton({
   const onConfirm = async () => {
     setPending(true);
     try {
-      await refundPayment({ firm_id: firmId, payment_id: paymentId });
+      // refundPayment 以「回傳值」傳遞預期內的退款失敗訊息：Server Action 直接 throw 的
+      // 訊息在正式環境會被 Next.js 抹除成通用錯誤，回傳值則原樣保留。
+      const result = await refundPayment({ firm_id: firmId, payment_id: paymentId });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
       toast.success(`已退款 NT$${formatNTD(amount)}`);
       setOpen(false);
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "退款失敗");
+      // 走到這裡代表非預期錯誤（網路中斷、未授權等）。其訊息在正式環境會被 Next.js 抹除成
+      // 英文系統錯誤，不適合示人，故統一給友善中文提示，詳情記入 console 供排查。
+      console.error("退款發生非預期錯誤", error);
+      toast.error("退款失敗，請稍後再試");
     } finally {
       setPending(false);
     }

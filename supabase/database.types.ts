@@ -363,6 +363,7 @@ export type Database = {
           firm_id: string
           gwsr: number | null
           id: string
+          issuance: Json | null
           merchant_trade_no: string | null
           raw_payload: Json | null
           refunded_amount: number | null
@@ -382,6 +383,7 @@ export type Database = {
           firm_id: string
           gwsr?: number | null
           id?: string
+          issuance?: Json | null
           merchant_trade_no?: string | null
           raw_payload?: Json | null
           refunded_amount?: number | null
@@ -401,6 +403,7 @@ export type Database = {
           firm_id?: string
           gwsr?: number | null
           id?: string
+          issuance?: Json | null
           merchant_trade_no?: string | null
           raw_payload?: Json | null
           refunded_amount?: number | null

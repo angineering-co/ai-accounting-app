@@ -14,6 +14,7 @@ import {
 import { PaymentStatusBadge } from "@/components/payment-status-badge";
 import { CopyLinkButton } from "@/components/copy-link-button";
 import { RefundPaymentButton } from "@/components/refund-payment-button";
+import { PaymentIssuanceButton } from "@/components/payment-issuance-button";
 import type { FirmPaymentRow } from "@/lib/services/payment-link";
 
 function typeLabel(type: string): string {
@@ -47,6 +48,7 @@ export function PaymentHistoryTable({
             <TableHead>類型</TableHead>
             <TableHead className="text-right">金額</TableHead>
             <TableHead>狀態</TableHead>
+            <TableHead>發票/收據</TableHead>
             <TableHead>建立時間</TableHead>
             <TableHead className="text-right">操作</TableHead>
           </TableRow>
@@ -71,6 +73,25 @@ export function PaymentHistoryTable({
                     </span>
                   )}
                 </div>
+              </TableCell>
+              <TableCell>
+                {row.status === "paid" || row.status === "refunded" ? (
+                  <div className="flex flex-col items-start gap-0.5">
+                    {!row.issuance && (
+                      <span className="text-base text-muted-foreground">
+                        待開立
+                      </span>
+                    )}
+                    <PaymentIssuanceButton
+                      firmId={firmId}
+                      paymentId={row.id}
+                      description={row.description}
+                      issuance={row.issuance}
+                    />
+                  </div>
+                ) : (
+                  <span className="text-sm text-muted-foreground">—</span>
+                )}
               </TableCell>
               <TableCell className="text-base text-muted-foreground">
                 {formatIsoDateTimeZhTW(row.created_at)}

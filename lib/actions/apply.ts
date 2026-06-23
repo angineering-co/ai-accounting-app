@@ -1,6 +1,9 @@
 "use server";
 
+import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendEmail } from "@/lib/services/email";
+import { buildLeadFollowupEmail } from "@/lib/emails/lead-followup";
 
 export type ApplyFormPath = "registration" | "bookkeeping";
 
@@ -125,6 +128,7 @@ export async function submitApplyForm(
 
   try {
     const supabase = createAdminClient();
+    let finalLeadCode = leadCode;
     const { error } = await supabase.from("leads").insert({
       lead_code: leadCode,
       path: formData.path,
@@ -134,9 +138,9 @@ export async function submitApplyForm(
     if (error) {
       // Unique constraint collision on lead_code — retry once
       if (error.code === "23505") {
-        const retryCode = generateLeadCode();
+        finalLeadCode = generateLeadCode();
         const { error: retryError } = await supabase.from("leads").insert({
-          lead_code: retryCode,
+          lead_code: finalLeadCode,
           path: formData.path,
           data,
         });
@@ -144,14 +148,32 @@ export async function submitApplyForm(
           console.error("Lead insert retry failed:", retryError);
           return { success: false, error: "送出失敗，請稍後再試" };
         }
-        return { success: true, leadCode: retryCode };
+      } else {
+        console.error("Lead insert failed:", error);
+        return { success: false, error: "送出失敗，請稍後再試" };
       }
-
-      console.error("Lead insert failed:", error);
-      return { success: false, error: "送出失敗，請稍後再試" };
     }
 
-    return { success: true, leadCode };
+    // Proactive follow-up email so the lead is nudged to join LINE rather than
+    // left to act on their own. Run it after the response is sent: non-blocking
+    // for the user, yet reliable on serverless (a bare un-awaited promise gets
+    // killed when the function freezes). Best-effort — the lead is already saved
+    // and the success screen shows the code, so failure must not fail submit.
+    after(async () => {
+      try {
+        const { subject, html } = buildLeadFollowupEmail({
+          path: formData.path,
+          contactName: formData.contactName,
+          leadCode: finalLeadCode,
+          submission: data,
+        });
+        await sendEmail({ to: formData.email.trim(), subject, html });
+      } catch (emailErr) {
+        console.error("Lead follow-up email failed:", emailErr);
+      }
+    });
+
+    return { success: true, leadCode: finalLeadCode };
   } catch (err) {
     console.error("Unexpected error in submitApplyForm:", err);
     return { success: false, error: "送出失敗，請稍後再試" };

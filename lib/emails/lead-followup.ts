@@ -61,11 +61,12 @@ function escapeHtml(value: string): string {
 function formatValue(value: unknown): string {
   if (Array.isArray(value)) {
     return value
+      .filter((v) => v !== null && v !== undefined && v !== "")
       .map((v) => String(v).trim())
       .filter(Boolean)
       .join("、");
   }
-  return String(value).trim();
+  return value == null ? "" : String(value).trim();
 }
 
 function renderSubmissionRows(submission: Record<string, unknown>): string {
@@ -82,6 +83,18 @@ function renderSubmissionRows(submission: Record<string, unknown>): string {
     .join("");
 }
 
+/** Opening paragraph, branched by path so first-time founders get encouragement. */
+function renderIntro(path: ApplyFormPath): string {
+  const lead =
+    path === "registration"
+      ? "創業的第一步，交給速博。"
+      : "把繁瑣的記帳報稅交給速博，您專心經營本業。";
+  return `
+        <p style="margin: 0 0 24px; font-size: 16px; color: #475569;">
+          ${lead}我們已收到您的申請，並為您保留了專屬服務代碼。現在加入速博 LINE 官方帳號，就能直接和專人對話，不必等候回電。
+        </p>`;
+}
+
 /** Services + pricing copy, branched by the lead's selected path. */
 function renderServicePricing(path: ApplyFormPath): string {
   const bookkeepingLine = `記帳報稅：每月 NT$${PRICES.annual.toLocaleString()}（年繳）／ NT$${PRICES.monthly.toLocaleString()}（月繳）`;
@@ -89,7 +102,7 @@ function renderServicePricing(path: ApplyFormPath): string {
   if (path === "registration") {
     return `
           <p style="margin: 0 0 8px; font-size: 16px; color: #475569;">
-            我們協助您一次完成<strong>公司設立登記</strong>與後續<strong>記帳報稅</strong>，設立完成後只需簽署記帳委任合約即可無縫銜接。
+            我們協助您一次完成<strong>公司設立登記</strong>與後續<strong>記帳報稅</strong>。
           </p>
           <ul style="margin: 0 0 8px; padding-left: 20px; font-size: 16px; color: #475569;">
             <li>設立登記：${escapeHtml(REGISTRATION_PRICING_NOTE)}</li>
@@ -112,8 +125,8 @@ export function buildLeadFollowupEmail({
   leadCode,
   submission,
 }: LeadFollowupParams): { subject: string; html: string } {
-  const subject = "感謝您的申請 — 加入 LINE 完成下一步｜SnapBooks.ai 速博";
-  const greetingName = contactName?.trim() || "您好";
+  const subject = "已收到您的申請！加入 LINE 立即與專人開始｜SnapBooks.ai 速博";
+  const greetingName = contactName.trim() || "您好";
   const summaryRows = renderSubmissionRows(submission);
 
   const html = `<!DOCTYPE html>
@@ -146,43 +159,26 @@ export function buildLeadFollowupEmail({
         <h2 style="margin: 0 0 16px; font-size: 24px; font-weight: 700; color: #0f172a; letter-spacing: -0.02em;">
           ${escapeHtml(greetingName)}，感謝您的申請！
         </h2>
-        <p style="margin: 0 0 24px; font-size: 16px; color: #475569;">
-          我們已收到您的申請。完成下方「加入 LINE」步驟後，我們會盡快與您聯繫。
-        </p>
+        ${renderIntro(path)}
 
-        <h3 style="margin: 0 0 12px; font-size: 17px; font-weight: 700; color: #0f172a;">服務與費用</h3>
-        ${renderServicePricing(path)}
-        <p style="margin: 0 0 24px; font-size: 14px; color: #94a3b8;">
-          費用說明：不論月繳或年繳，每年皆收取 13 個月（第 13 個月為年度結算報稅費用）。
-        </p>
-
-        ${
-          summaryRows
-            ? `<h3 style="margin: 0 0 12px; font-size: 17px; font-weight: 700; color: #0f172a;">您填寫的資料</h3>
-        <table style="width: 100%; border-collapse: collapse; margin: 0 0 24px;">
-          <tbody>${summaryRows}
-          </tbody>
-        </table>`
-            : ""
-        }
-
-        <div style="border-top: 1px solid #e2e8f0; margin: 24px 0;"></div>
-
-        <h3 style="margin: 0 0 12px; font-size: 17px; font-weight: 700; color: #0f172a;">下一步：加入 LINE 好友</h3>
+        <h3 style="margin: 0 0 12px; font-size: 17px; font-weight: 700; color: #0f172a;">下一步：加入 LINE，立即與專人對話</h3>
         <ol style="margin: 0 0 16px; padding-left: 20px; font-size: 16px; color: #475569;">
           <li>點擊下方按鈕，加入速博 LINE 官方帳號</li>
-          <li>傳送您的專屬代碼給我們</li>
-          <li>我們會盡快與您聯繫！</li>
+          <li>在 LINE 傳送您的專屬代碼，專人就能立刻看到您填寫的需求，不必重頭說明</li>
+          <li>直接在 LINE 提出您的問題，我們會立即為您安排專人服務</li>
         </ol>
 
         <p style="margin: 0 0 8px; font-size: 16px; color: #475569;">您的專屬代碼：</p>
-        <p style="margin: 0 0 24px;">
+        <p style="margin: 0 0 6px;">
           <span style="display: inline-block; padding: 12px 20px; background-color: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 10px; font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 22px; font-weight: 700; letter-spacing: 0.08em; color: #047857;">
             ${escapeHtml(leadCode)}
           </span>
         </p>
+        <p style="margin: 0 0 20px; font-size: 14px; color: #94a3b8;">
+          把這組代碼傳到 LINE，專人就能對應到您的申請，立刻接手。
+        </p>
 
-        <p style="margin: 0;">
+        <p style="margin: 0 0 12px;">
           <a
             href="${LINE_URL}"
             style="
@@ -197,9 +193,30 @@ export function buildLeadFollowupEmail({
               box-shadow: 0 4px 14px rgba(6, 199, 85, 0.25);
             "
           >
-            加入 LINE 好友
+            加入 LINE，立即與專人對話
           </a>
         </p>
+        <p style="margin: 0; font-size: 14px; color: #64748b;">
+          免費諮詢，無需預付，也不會有任何約束。
+        </p>
+
+        <div style="border-top: 1px solid #e2e8f0; margin: 28px 0 24px;"></div>
+
+        <h3 style="margin: 0 0 12px; font-size: 17px; font-weight: 700; color: #0f172a;">服務與費用</h3>
+        ${renderServicePricing(path)}
+        <p style="margin: 0 0 24px; font-size: 14px; color: #94a3b8;">
+          費用說明：不論月繳或年繳，每年皆收取 13 個月（第 13 個月為年度結算報稅費用）。
+        </p>
+
+        ${
+          summaryRows
+            ? `<h3 style="margin: 0 0 12px; font-size: 17px; font-weight: 700; color: #0f172a;">您填寫的資料</h3>
+        <table style="width: 100%; border-collapse: collapse; margin: 0 0 8px;">
+          <tbody>${summaryRows}
+          </tbody>
+        </table>`
+            : ""
+        }
 
         <p style="margin: 24px 0 0; font-size: 14px; color: #94a3b8;">
           SnapBooks.ai 速博智慧有限公司

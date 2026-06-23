@@ -63,6 +63,21 @@ describe("buildLeadFollowupEmail", () => {
     expect(html).not.toContain("大華科技、華大科技、");
   });
 
+  it("drops null/undefined/empty entries from array fields", () => {
+    const { html } = buildLeadFollowupEmail({
+      path: "registration",
+      contactName: "測試",
+      leadCode,
+      submission: {
+        companyNames: ["大華科技", null, undefined, "", "華大科技"],
+      },
+    });
+
+    expect(html).toContain("大華科技、華大科技");
+    expect(html).not.toContain("null");
+    expect(html).not.toContain("undefined");
+  });
+
   it("escapes HTML in submitted values and omits unknown keys", () => {
     const { html } = buildLeadFollowupEmail({
       path: "bookkeeping",

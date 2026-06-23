@@ -88,10 +88,10 @@ function renderIntro(path: ApplyFormPath): string {
   const lead =
     path === "registration"
       ? "創業的第一步，交給速博。"
-      : "把繁瑣的記帳報稅交給速博，您專心經營本業。";
+      : "記帳報稅交給速博，您專心本業。";
   return `
         <p style="margin: 0 0 24px; font-size: 16px; color: #475569;">
-          ${lead}我們已收到您的申請，並為您保留了專屬服務代碼。現在加入速博 LINE 官方帳號，就能直接和專人對話，不必等候回電。
+          ${lead}我們已收到您的申請，並為您保留了專屬服務代碼。現在加入速博 LINE 官方帳號，就能直接和我們對話，不必等候回電。
         </p>`;
 }
 
@@ -161,11 +161,11 @@ export function buildLeadFollowupEmail({
         </h2>
         ${renderIntro(path)}
 
-        <h3 style="margin: 0 0 12px; font-size: 17px; font-weight: 700; color: #0f172a;">下一步：加入 LINE，立即與專人對話</h3>
+        <h3 style="margin: 0 0 12px; font-size: 17px; font-weight: 700; color: #0f172a;">下一步：加入 LINE，立即與顧問對話</h3>
         <ol style="margin: 0 0 16px; padding-left: 20px; font-size: 16px; color: #475569;">
           <li>點擊下方按鈕，加入速博 LINE 官方帳號</li>
-          <li>在 LINE 傳送您的專屬代碼，專人就能立刻看到您填寫的需求，不必重頭說明</li>
-          <li>直接在 LINE 提出您的問題，我們會立即為您安排專人服務</li>
+          <li>在 LINE 傳送您的專屬代碼，我們就能立刻看到您填寫的需求，不必重頭說明</li>
+          <li>直接在 LINE 提出您的問題，我們會立即為您安排專人協助</li>
         </ol>
 
         <p style="margin: 0 0 8px; font-size: 16px; color: #475569;">您的專屬代碼：</p>
@@ -175,7 +175,7 @@ export function buildLeadFollowupEmail({
           </span>
         </p>
         <p style="margin: 0 0 20px; font-size: 14px; color: #94a3b8;">
-          把這組代碼傳到 LINE，專人就能對應到您的申請，立刻接手。
+          把這組代碼傳到 LINE，我們就能對應到您的申請，立刻接手。
         </p>
 
         <p style="margin: 0 0 12px;">
@@ -193,11 +193,11 @@ export function buildLeadFollowupEmail({
               box-shadow: 0 4px 14px rgba(6, 199, 85, 0.25);
             "
           >
-            加入 LINE，立即與專人對話
+            加入 LINE，立即諮詢
           </a>
         </p>
         <p style="margin: 0; font-size: 14px; color: #64748b;">
-          免費諮詢，無需預付，也不會有任何約束。
+          免費諮詢，無需預付。
         </p>
 
         <div style="border-top: 1px solid #e2e8f0; margin: 28px 0 24px;"></div>

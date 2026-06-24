@@ -73,6 +73,22 @@ export function PeriodVoucherGeneration({
   const running = genStatus === "running" || isGenerating;
   const pending = (status?.missing ?? 0) + (status?.stale ?? 0);
 
+  const vatCloseMessage = (result: GeneratePeriodResult): string | null => {
+    switch (result.vatClose) {
+      case "created":
+      case "updated":
+        return "已一併產生本期營業稅結算分錄。";
+      case "removed":
+        return "本期無應繳稅額或留抵，已移除先前的結算分錄。";
+      case "skipped-posted":
+        return "本期結算分錄已過帳，未變動。";
+      case "skipped-no-summary":
+        return "尚未產生 .TET_U 申報書，略過營業稅結算分錄。";
+      default:
+        return null;
+    }
+  };
+
   const handleGenerate = async () => {
     setIsGenerating(true);
     try {
@@ -148,6 +164,9 @@ export function PeriodVoucherGeneration({
               {lastResult.failures.length > 0 &&
                 ` ${lastResult.failures.length} 筆未能產生：`}
             </p>
+            {vatCloseMessage(lastResult) && (
+              <p className="text-sm text-slate-600">{vatCloseMessage(lastResult)}</p>
+            )}
             {lastResult.failures.length > 0 && (
               <ul className="space-y-1">
                 {lastResult.failures.map((f) => (

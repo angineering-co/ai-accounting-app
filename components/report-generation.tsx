@@ -42,6 +42,7 @@ import {
 } from "@/lib/domain/models";
 import { generateTxtReport, generateTetUReport } from "@/lib/services/reports";
 import { getFirmSettings } from "@/lib/services/firm";
+import { resolvePriorCarryover } from "@/lib/services/tax-period";
 import { toast } from "sonner";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { Download, FileText, Loader2 } from "lucide-react";
@@ -116,6 +117,23 @@ export function ReportGeneration({
     fillIfEmpty("declarerPhone", s.declarer_phone);
     fillIfEmpty("declarerPhoneExtension", s.declarer_phone_extension);
   }, [firm, tetUForm]);
+
+  // Suggest 上期累積留抵稅額 (Field 88) from the previous period's filed summary,
+  // falling back to the posted 1145 ledger balance. Pre-filled once and only while
+  // the field is still 0, so a value the user typed is never clobbered.
+  const { data: suggestedCarryover } = useSWR(
+    ["prior-carryover", clientId, period.toString()],
+    () => resolvePriorCarryover(clientId, period.toString()),
+  );
+  const hasPrefilledCarryoverRef = useRef(false);
+  useEffect(() => {
+    if (hasPrefilledCarryoverRef.current) return;
+    if (suggestedCarryover == null) return;
+    hasPrefilledCarryoverRef.current = true;
+    if (!tetUForm.getValues("previousPeriodCarryForwardTax")) {
+      tetUForm.setValue("previousPeriodCarryForwardTax", suggestedCarryover);
+    }
+  }, [suggestedCarryover, tetUForm]);
 
   const downloadFile = (content: string, filename: string) => {
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });

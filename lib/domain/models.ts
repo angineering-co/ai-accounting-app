@@ -490,6 +490,12 @@ export const taxFilingSummarySchema = z.object({
   total_purchases: z.number().int(),   // .TET_U Field 58: 合計-進貨及費用
   tax_payable: z.number().int(),       // .TET_U Field 91: 本期應實繳稅額
   credit_carryover: z.number().int(),  // .TET_U Field 95: 本期累積留抵稅額
+  // Tax-account balances needed to build the period-close journal entry. Optional
+  // so snapshots taken before this field existed still parse — the close entry is
+  // skipped (with a note) when they're absent until the .TET_U is regenerated.
+  output_tax: z.number().int().optional(),       // .TET_U Field 82: 本期銷項稅額合計
+  input_tax: z.number().int().optional(),        // .TET_U Field 87: 得扣抵進項稅額合計
+  prior_carryover: z.number().int().optional(),  // .TET_U Field 88: 上期累積留抵稅額
 });
 
 export const taxFilingSchema = z

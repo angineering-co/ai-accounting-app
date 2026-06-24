@@ -22,9 +22,12 @@ import type { Database } from "@/supabase/database.types";
 import {
   editEntry,
   deleteDraftEntry,
+  createManualEntry,
   type EntryPatch,
   type EditEntryLine,
+  type CreateManualEntryInput,
 } from "@/lib/services/journal-entry";
+import { OPENING_ENTRY_DESCRIPTION } from "@/lib/domain/journal-entry";
 import { auditTrailSchema, type AuditTrail } from "@/lib/domain/audit-trail";
 import {
   journalEntrySchema,
@@ -401,4 +404,59 @@ export async function deleteDraftEntryAction(
   entryId: string,
 ): Promise<void> {
   await deleteDraftEntry(clientId, entryId);
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// 手動建立傳票 (新增傳票 / 期初開帳)
+// ───────────────────────────────────────────────────────────────────────────
+
+// Create a hand-entered draft voucher (no source document). The caller redirects
+// to the entry's detail page to review and post it via the existing post path.
+export async function createManualEntryAction(
+  clientId: string,
+  input: CreateManualEntryInput,
+): Promise<{ entryId: string }> {
+  const entryId = await createManualEntry(clientId, input);
+  return { entryId };
+}
+
+// The client's 期初開帳 entry, if one exists — found by the reserved 摘要 marker
+// on a manual (document_id NULL) entry. Drives the one-per-client guard and the
+// "已開帳，改為編輯" redirect. Returns its id + status, or null when unopened.
+export async function getOpeningEntry(
+  clientId: string,
+): Promise<{ id: string; status: "draft" | "posted" | "reversed" } | null> {
+  const supabase = await assertClientAccess(clientId);
+  const { data, error } = await supabase
+    .from("journal_entries")
+    .select("id, status")
+    .eq("client_id", clientId)
+    .is("document_id", null)
+    .eq("description", OPENING_ENTRY_DESCRIPTION)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return { id: data.id, status: data.status as "draft" | "posted" | "reversed" };
+}
+
+// Create the 期初開帳 draft: a 轉帳 entry stamped with the reserved marker 摘要.
+// Guards one-per-client (the opening trial balance is a single entry); re-opening
+// an existing one is an edit on its detail page, not a second create.
+export async function createOpeningEntryAction(
+  clientId: string,
+  input: { entry_date: string; lines: EditEntryLine[] },
+): Promise<{ entryId: string }> {
+  const existing = await getOpeningEntry(clientId);
+  if (existing) {
+    throw new Error("此客戶已建立期初開帳傳票，請改用編輯。");
+  }
+  const entryId = await createManualEntry(clientId, {
+    voucher_type: "轉帳",
+    entry_date: input.entry_date,
+    description: OPENING_ENTRY_DESCRIPTION,
+    lines: input.lines,
+  });
+  return { entryId };
 }

@@ -7,11 +7,14 @@ import {
   ACCT_OTHER_INCOME,
   ACCT_OUTPUT_TAX,
   ACCT_REVENUE,
+  ACCT_TAX_CREDIT,
+  ACCT_TAX_PAYABLE,
   CASH_THRESHOLD,
   type ComputedEntry,
   computeDefaultEntryFromAllowance,
   computeEntryFromAllowance,
   computeEntryFromInvoice,
+  computeVatCloseEntry,
   shouldCreateEntry,
   pickSettlementAccount,
 } from "./journal-entry-generation";
@@ -884,5 +887,104 @@ describe("shouldCreateEntry — skip predicate", () => {
     expect(shouldCreateEntry(makeInvoice({ in_or_out: "in", extracted_data: { taxType: "應稅" } }))).toBe(true);
     expect(shouldCreateEntry(makeInvoice({ in_or_out: "out", extracted_data: {} }))).toBe(true);
     expect(shouldCreateEntry(makeInvoice({ in_or_out: "in", extracted_data: null }))).toBe(true);
+  });
+});
+
+describe("computeVatCloseEntry — 營業稅結算", () => {
+  const DATE = "2026-02-28";
+  const DESC = "115年01-02月 營業稅結算";
+  const base = { entryDate: DATE, description: DESC };
+
+  it("payable, no prior 留抵: Dr 2134 / Cr 1144 / Cr 2132 (3 lines)", () => {
+    // 銷項 50,000 − 進項 30,000 = 20,000 應繳
+    const entry = computeVatCloseEntry({
+      ...base,
+      outputTax: 50_000,
+      inputTax: 30_000,
+      priorCarryover: 0,
+    });
+    expect(entry).not.toBeNull();
+    expect(entry!.voucher_type).toBe("轉帳");
+    expect(entry!.entry_date).toBe(DATE);
+    expect(entry!.description).toBe(DESC);
+    expect(entry!.lines).toEqual([
+      { account_code: ACCT_OUTPUT_TAX, debit: 50_000, credit: 0, description: null },
+      { account_code: ACCT_INPUT_TAX, debit: 0, credit: 30_000, description: null },
+      { account_code: ACCT_TAX_PAYABLE, debit: 0, credit: 20_000, description: null },
+    ]);
+    expect(sumBalance(entry!.lines)).toEqual({ debit: 50_000, credit: 50_000 });
+  });
+
+  it("payable, prior 留抵 fully consumed: Dr 2134 / Cr 1144 / Cr 1145 / Cr 2132 (4 lines)", () => {
+    // 銷項 50,000 − 進項 30,000 − 上期留抵 8,000 = 12,000 應繳；留抵歸零
+    const entry = computeVatCloseEntry({
+      ...base,
+      outputTax: 50_000,
+      inputTax: 30_000,
+      priorCarryover: 8_000,
+    });
+    expect(entry!.lines).toEqual([
+      { account_code: ACCT_OUTPUT_TAX, debit: 50_000, credit: 0, description: null },
+      { account_code: ACCT_INPUT_TAX, debit: 0, credit: 30_000, description: null },
+      { account_code: ACCT_TAX_CREDIT, debit: 0, credit: 8_000, description: null },
+      { account_code: ACCT_TAX_PAYABLE, debit: 0, credit: 12_000, description: null },
+    ]);
+    expect(sumBalance(entry!.lines)).toEqual({ debit: 50_000, credit: 50_000 });
+  });
+
+  it("pure carryover (input > output): Dr 2134 / Cr 1144 / Dr 1145 (3 lines)", () => {
+    // 進項 30,000 − 銷項 20,000 = 10,000 新增留抵
+    const entry = computeVatCloseEntry({
+      ...base,
+      outputTax: 20_000,
+      inputTax: 30_000,
+      priorCarryover: 0,
+    });
+    expect(entry!.lines).toEqual([
+      { account_code: ACCT_OUTPUT_TAX, debit: 20_000, credit: 0, description: null },
+      { account_code: ACCT_INPUT_TAX, debit: 0, credit: 30_000, description: null },
+      { account_code: ACCT_TAX_CREDIT, debit: 10_000, credit: 0, description: null },
+    ]);
+    expect(sumBalance(entry!.lines)).toEqual({ debit: 30_000, credit: 30_000 });
+  });
+
+  it("output > input but still creditable via prior 留抵: 1145 partially consumed (Cr)", () => {
+    // 銷項 25,000 > 進項 20,000，但 + 上期留抵 10,000 仍為留抵；本期消耗留抵 5,000
+    const entry = computeVatCloseEntry({
+      ...base,
+      outputTax: 25_000,
+      inputTax: 20_000,
+      priorCarryover: 10_000,
+    });
+    // ending carryover = 20,000 + 10,000 − 25,000 = 5,000 → delta −5,000 → Cr 1145
+    expect(entry!.lines).toEqual([
+      { account_code: ACCT_OUTPUT_TAX, debit: 25_000, credit: 0, description: null },
+      { account_code: ACCT_INPUT_TAX, debit: 0, credit: 20_000, description: null },
+      { account_code: ACCT_TAX_CREDIT, debit: 0, credit: 5_000, description: null },
+    ]);
+    expect(sumBalance(entry!.lines)).toEqual({ debit: 25_000, credit: 25_000 });
+    // no 應付稅捐 line
+    expect(entry!.lines.some((l) => l.account_code === ACCT_TAX_PAYABLE)).toBe(false);
+  });
+
+  it("carries prior 留抵 forward unchanged when 銷項 = 進項", () => {
+    // 銷項 = 進項 → no payable, no carryover change; 留抵 stays put (no 1145 line)
+    const entry = computeVatCloseEntry({
+      ...base,
+      outputTax: 10_000,
+      inputTax: 10_000,
+      priorCarryover: 4_000,
+    });
+    expect(entry!.lines).toEqual([
+      { account_code: ACCT_OUTPUT_TAX, debit: 10_000, credit: 0, description: null },
+      { account_code: ACCT_INPUT_TAX, debit: 0, credit: 10_000, description: null },
+    ]);
+    expect(sumBalance(entry!.lines)).toEqual({ debit: 10_000, credit: 10_000 });
+  });
+
+  it("returns null when there is nothing to record (all zero)", () => {
+    expect(
+      computeVatCloseEntry({ ...base, outputTax: 0, inputTax: 0, priorCarryover: 0 }),
+    ).toBeNull();
   });
 });

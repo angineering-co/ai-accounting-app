@@ -987,4 +987,12 @@ describe("computeVatCloseEntry — 營業稅結算", () => {
       computeVatCloseEntry({ ...base, outputTax: 0, inputTax: 0, priorCarryover: 0 }),
     ).toBeNull();
   });
+
+  it("returns null for a dormant period with only a prior 留抵 (carryover rolls forward unchanged)", () => {
+    // No 銷項/進項 this period but an existing 留抵: nothing to book — the 1145 balance
+    // already reflects the carryover, so produce no (line-less) voucher.
+    expect(
+      computeVatCloseEntry({ ...base, outputTax: 0, inputTax: 0, priorCarryover: 5_000 }),
+    ).toBeNull();
+  });
 });

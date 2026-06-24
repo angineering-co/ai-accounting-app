@@ -471,11 +471,12 @@ export interface VatCloseEntryInput {
 //
 // Mid-year-closure adjustments (Field 85 補徵 / Field 89 應退, 中途歇業) are not
 // modeled; refunds (Field 94) are folded into 留抵. Built from 82/87/88 so it always
-// balances. Returns null when there's nothing to record (all three inputs 0), so the
-// caller skips creating an empty voucher.
+// balances. Returns null when there's nothing to book — no output/input tax this period,
+// so the only movement (if any) is the prior 留抵 rolling forward unchanged. That covers
+// both the all-zero case and a dormant client (no transactions) carrying a credit, so the
+// caller never tries to write a line-less voucher.
 export function computeVatCloseEntry(input: VatCloseEntryInput): ComputedEntry | null {
   const { outputTax, inputTax, priorCarryover, entryDate, description } = input;
-  if (outputTax === 0 && inputTax === 0 && priorCarryover === 0) return null;
 
   const payable = Math.max(0, outputTax - inputTax - priorCarryover);
   const endingCarryover = Math.max(0, inputTax + priorCarryover - outputTax);
@@ -496,6 +497,10 @@ export function computeVatCloseEntry(input: VatCloseEntryInput): ComputedEntry |
   if (payable > 0) {
     lines.push({ account_code: ACCT_TAX_PAYABLE, debit: 0, credit: payable, description: null });
   }
+
+  // No lines means nothing to book (all-zero, or a pure prior-留抵 roll-forward). Return
+  // null so the caller skips the voucher rather than inserting an invalid line-less entry.
+  if (lines.length === 0) return null;
 
   return { voucher_type: "轉帳", entry_date: entryDate, description, lines };
 }

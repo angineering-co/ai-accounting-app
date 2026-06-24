@@ -813,7 +813,7 @@ export async function generateDraftEntriesByPeriod(
 // 營業稅結算 (VAT period close): one system draft entry per period
 // ───────────────────────────────────────────────────────────────────────────
 
-const VAT_CLOSE_KIND = "vat_close";
+const VAT_CLOSE_TYPE = "vat_close";
 
 async function loadPeriodForClose(
   supabase: SupabaseClient<Database>,
@@ -842,7 +842,7 @@ function vatCloseDateAndDescription(yearMonth: string): {
 
 /**
  * Compute and upsert the period-close draft entry from `period.filing.summary`.
- * Idempotent on `(client_id, system_entry_kind='vat_close', system_entry_key=year_month)`:
+ * Idempotent on `(client_id, system_entry_type='vat_close', system_entry_key=year_month)`:
  * inserts when absent, replaces the draft's lines when present, and leaves a posted entry
  * untouched (regenerating it would mutate a numbered voucher). When the figures net to
  * nothing the existing draft is removed. No-summary returns a note rather than throwing so
@@ -879,7 +879,7 @@ async function buildAndUpsertVatClose(
       .where(
         and(
           eq(journalEntriesTable.client_id, period.client_id),
-          eq(journalEntriesTable.system_entry_kind, VAT_CLOSE_KIND),
+          eq(journalEntriesTable.system_entry_type, VAT_CLOSE_TYPE),
           eq(journalEntriesTable.system_entry_key, period.year_month),
         ),
       )
@@ -931,7 +931,7 @@ async function buildAndUpsertVatClose(
           firm_id: period.firm_id,
           client_id: period.client_id,
           document_id: null,
-          system_entry_kind: VAT_CLOSE_KIND,
+          system_entry_type: VAT_CLOSE_TYPE,
           system_entry_key: period.year_month,
           voucher_type: computed.voucher_type,
           entry_date: computed.entry_date,
@@ -1000,7 +1000,7 @@ export async function deleteVatCloseEntry(
     .where(
       and(
         eq(journalEntriesTable.client_id, period.client_id),
-        eq(journalEntriesTable.system_entry_kind, VAT_CLOSE_KIND),
+        eq(journalEntriesTable.system_entry_type, VAT_CLOSE_TYPE),
         eq(journalEntriesTable.system_entry_key, period.year_month),
         eq(journalEntriesTable.status, "draft"),
       ),

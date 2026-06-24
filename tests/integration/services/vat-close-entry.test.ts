@@ -27,7 +27,7 @@ const hasDbEnv = Boolean(
 );
 
 // The period-close (營業稅結算) system entry: one draft per (client, year_month), keyed on
-// system_entry_kind/key (no source document). markPeriodAsFiled / unfilePeriod use the
+// system_entry_type/key (no source document). markPeriodAsFiled / unfilePeriod use the
 // cookie client and aren't reachable here, so we drive the same logic through the
 // injectable-client helpers they call: generateDraftEntriesByPeriod, upsertVatCloseEntry,
 // deleteVatCloseEntry.
@@ -81,7 +81,7 @@ describe.skipIf(!hasDbEnv)("VAT close entry — 營業稅結算", () => {
       .from("journal_entries")
       .select("*")
       .eq("client_id", fixture.clientId)
-      .eq("system_entry_kind", "vat_close")
+      .eq("system_entry_type", "vat_close")
       .eq("system_entry_key", yearMonth)
       .maybeSingle();
     if (!entry) return null;

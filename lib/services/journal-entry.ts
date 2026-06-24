@@ -25,11 +25,14 @@ import type { Database } from "@/supabase/database.types";
 import {
   extractedInvoiceDataSchema,
   extractedAllowanceDataSchema,
+  taxFilingPeriodSchema,
   type Invoice,
   type Allowance,
   type ExtractedInvoiceData,
   type ExtractedAllowanceData,
+  type TaxFilingPeriod,
 } from "@/lib/domain/models";
+import { RocPeriod } from "@/lib/domain/roc-period";
 import { z } from "zod";
 import {
   ACCOUNT_CODE_REGEX,
@@ -44,6 +47,7 @@ import {
   computeDefaultEntryFromAllowance,
   computeEntryFromAllowance,
   computeEntryFromInvoice,
+  computeVatCloseEntry,
 } from "@/lib/services/journal-entry-generation";
 import {
   assertPeriodReadable,
@@ -451,6 +455,14 @@ export async function getPeriodGenerationStatus(
   return (data.voucher_generation_status ?? "idle") as VoucherGenerationStatus;
 }
 
+export type VatCloseOutcome =
+  | "created" // a new draft close entry was inserted
+  | "updated" // an existing draft close entry's lines were replaced
+  | "removed" // the figures now net to nothing; the draft was deleted
+  | "skipped-posted" // an existing close entry is already posted; left untouched
+  | "skipped-no-summary" // .TET_U not generated yet, so no figures to book
+  | "none"; // nothing to book and nothing existed
+
 export type GeneratePeriodResult = {
   /** new draft entries created */
   generated: number;
@@ -458,6 +470,8 @@ export type GeneratePeriodResult = {
   regenerated: number;
   /** per-document failures (non-fatal; the rest of the batch still runs) */
   failures: { documentId: string; kind: "invoice" | "allowance"; reason: string }[];
+  /** outcome of the period-close (營業稅結算) entry upsert */
+  vatClose: VatCloseOutcome;
 };
 
 type DraftEntryItem = {
@@ -756,7 +770,12 @@ export async function generateDraftEntriesByPeriod(
     throw new Error("另一個傳票產生作業正在進行中，請稍候再試。");
   }
 
-  const result: GeneratePeriodResult = { generated: 0, regenerated: 0, failures: [] };
+  const result: GeneratePeriodResult = {
+    generated: 0,
+    regenerated: 0,
+    failures: [],
+    vatClose: "none",
+  };
   try {
     // One SQL work-list for the whole period, computed up front. Invoices first
     // (self-contained), then allowances (mirror the now-existing invoice entries) —
@@ -775,6 +794,12 @@ export async function generateDraftEntriesByPeriod(
       userId,
       result,
     );
+    // The period-close (營業稅結算) entry joins the same draft batch so staff post it
+    // alongside the invoice/allowance vouchers. It needs the .TET_U figures — when those
+    // aren't generated yet the upsert returns "skipped-no-summary" (non-fatal note),
+    // not an error, so 產生傳票 can legitimately run before report generation.
+    const period = await loadPeriodForClose(supabase, periodId);
+    result.vatClose = await buildAndUpsertVatClose(period, userId);
   } finally {
     await db
       .update(taxFilingPeriodsTable)
@@ -782,6 +807,204 @@ export async function generateDraftEntriesByPeriod(
       .where(eq(taxFilingPeriodsTable.id, periodId));
   }
   return result;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// 營業稅結算 (VAT period close): one system draft entry per period
+// ───────────────────────────────────────────────────────────────────────────
+
+const VAT_CLOSE_KIND = "vat_close";
+
+async function loadPeriodForClose(
+  supabase: SupabaseClient<Database>,
+  periodId: string,
+): Promise<TaxFilingPeriod> {
+  const { data, error } = await supabase
+    .from("tax_filing_periods")
+    .select("*")
+    .eq("id", periodId)
+    .single();
+  if (error || !data) throw new Error("找不到此期別");
+  return taxFilingPeriodSchema.parse(data);
+}
+
+function vatCloseDateAndDescription(yearMonth: string): {
+  entryDate: string;
+  description: string;
+} {
+  const p = RocPeriod.fromYYYMM(yearMonth);
+  const end = p.endDate; // last day of the period's end month, local time
+  const entryDate = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
+  const sm = String(p.startMonth).padStart(2, "0");
+  const em = String(p.endMonth).padStart(2, "0");
+  return { entryDate, description: `${p.rocYear}年${sm}-${em}月 營業稅結算` };
+}
+
+/**
+ * Compute and upsert the period-close draft entry from `period.filing.summary`.
+ * Idempotent on `(client_id, system_entry_kind='vat_close', system_entry_key=year_month)`:
+ * inserts when absent, replaces the draft's lines when present, and leaves a posted entry
+ * untouched (regenerating it would mutate a numbered voucher). When the figures net to
+ * nothing the existing draft is removed. No-summary returns a note rather than throwing so
+ * the period-batch caller can run before .TET_U exists. Drizzle writes bypass RLS; the
+ * caller (generateDraftEntriesByPeriod / upsertVatCloseEntry) owns the auth + firm gate.
+ */
+async function buildAndUpsertVatClose(
+  period: TaxFilingPeriod,
+  userId: string,
+): Promise<VatCloseOutcome> {
+  const summary = period.filing.summary;
+  if (
+    !summary ||
+    summary.output_tax == null ||
+    summary.input_tax == null ||
+    summary.prior_carryover == null
+  ) {
+    return "skipped-no-summary";
+  }
+
+  const { entryDate, description } = vatCloseDateAndDescription(period.year_month);
+  const computed = computeVatCloseEntry({
+    outputTax: summary.output_tax,
+    inputTax: summary.input_tax,
+    priorCarryover: summary.prior_carryover,
+    entryDate,
+    description,
+  });
+
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select({ id: journalEntriesTable.id, status: journalEntriesTable.status })
+      .from(journalEntriesTable)
+      .where(
+        and(
+          eq(journalEntriesTable.client_id, period.client_id),
+          eq(journalEntriesTable.system_entry_kind, VAT_CLOSE_KIND),
+          eq(journalEntriesTable.system_entry_key, period.year_month),
+        ),
+      )
+      .for("update")
+      .limit(1);
+
+    if (computed === null) {
+      // Nothing to record (all of 銷項/進項/留抵 are 0). Drop a stale draft if one exists.
+      if (existing && existing.status === "draft") {
+        await tx
+          .delete(journalEntriesTable)
+          .where(eq(journalEntriesTable.id, existing.id)); // lines cascade
+        return "removed";
+      }
+      return existing ? "skipped-posted" : "none";
+    }
+
+    const totalDebit = computed.lines.reduce((a, l) => a + l.debit, 0);
+    const totalCredit = computed.lines.reduce((a, l) => a + l.credit, 0);
+    if (totalDebit !== totalCredit) {
+      throw new Error(
+        `unbalanced VAT close entry for period ${period.year_month}: ` +
+          `debit ${totalDebit} != credit ${totalCredit}`,
+      );
+    }
+
+    let entryId: string;
+    let outcome: VatCloseOutcome;
+    if (existing) {
+      if (existing.status !== "draft") return "skipped-posted";
+      entryId = existing.id;
+      outcome = "updated";
+      await tx
+        .update(journalEntriesTable)
+        .set({
+          voucher_type: computed.voucher_type,
+          entry_date: computed.entry_date,
+          description: computed.description,
+          updated_at: sql`now()`,
+        })
+        .where(eq(journalEntriesTable.id, entryId));
+      await tx
+        .delete(journalEntryLinesTable)
+        .where(eq(journalEntryLinesTable.journal_entry_id, entryId));
+    } else {
+      const [inserted] = await tx
+        .insert(journalEntriesTable)
+        .values({
+          firm_id: period.firm_id,
+          client_id: period.client_id,
+          document_id: null,
+          system_entry_kind: VAT_CLOSE_KIND,
+          system_entry_key: period.year_month,
+          voucher_type: computed.voucher_type,
+          entry_date: computed.entry_date,
+          description: computed.description,
+          status: "draft",
+          voucher_no: null,
+          created_by: userId,
+        })
+        .returning({ id: journalEntriesTable.id });
+      entryId = inserted.id;
+      outcome = "created";
+    }
+
+    await tx.insert(journalEntryLinesTable).values(
+      computed.lines.map((line, idx) => ({
+        journal_entry_id: entryId,
+        line_number: idx + 1,
+        account_code: line.account_code,
+        debit: line.debit,
+        credit: line.credit,
+        description: line.description,
+      })),
+    );
+
+    return outcome;
+  });
+}
+
+/**
+ * Public entry point used at filing time (`markPeriodAsFiled`). Resolves auth + the
+ * firm-scope boundary, then upserts the period-close draft. Throws if the .TET_U figures
+ * are missing (at filing time they are always present), so the UI surfaces a clear message
+ * rather than silently skipping the entry.
+ */
+export async function upsertVatCloseEntry(
+  periodId: string,
+  options?: JournalEntryServiceOptions,
+): Promise<VatCloseOutcome> {
+  const { supabase, userId } = await resolveAuth(options);
+  await assertStaffRole(supabase, userId);
+  await assertPeriodReadable(supabase, periodId);
+
+  const period = await loadPeriodForClose(supabase, periodId);
+  const outcome = await buildAndUpsertVatClose(period, userId);
+  if (outcome === "skipped-no-summary") {
+    throw new Error("請先重新產生 .TET_U 申報書以取得稅額摘要，再產生結算分錄。");
+  }
+  return outcome;
+}
+
+/**
+ * Removes the period-close draft entry (e.g. on 取消申報). Only deletes when still a draft;
+ * a posted close entry stays so unfiling never punches a hole in the voucher numbering.
+ */
+export async function deleteVatCloseEntry(
+  periodId: string,
+  options?: JournalEntryServiceOptions,
+): Promise<void> {
+  const { supabase, userId } = await resolveAuth(options);
+  await assertStaffRole(supabase, userId);
+  await assertPeriodReadable(supabase, periodId);
+
+  const period = await loadPeriodForClose(supabase, periodId);
+  await db
+    .delete(journalEntriesTable)
+    .where(
+      and(
+        eq(journalEntriesTable.client_id, period.client_id),
+        eq(journalEntriesTable.system_entry_kind, VAT_CLOSE_KIND),
+        eq(journalEntriesTable.system_entry_key, period.year_month),
+        eq(journalEntriesTable.status, "draft"),
+      ),
+    );
 }
 
 // ───────────────────────────────────────────────────────────────────────────

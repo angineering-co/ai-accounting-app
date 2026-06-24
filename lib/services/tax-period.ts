@@ -11,6 +11,12 @@ import {
   TaxPeriodStatus,
 } from "@/lib/domain/models";
 import { RocPeriod } from "@/lib/domain/roc-period";
+import { getAccountLedger } from "@/lib/services/voucher";
+import { ACCT_TAX_CREDIT } from "@/lib/services/journal-entry-generation";
+import {
+  upsertVatCloseEntry,
+  deleteVatCloseEntry,
+} from "@/lib/services/journal-entry";
 import { sendLineMessage } from "@/lib/services/line";
 import { sanitizeFilenameForStorage } from "@/lib/utils";
 import { revalidatePath } from "next/cache";
@@ -120,6 +126,42 @@ export async function updateTaxPeriodStatus(
 
   if (error) throw error;
   return taxFilingPeriodSchema.parse(data);
+}
+
+function toDashDate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Resolves the 上期累積留抵稅額 (.TET_U Field 88) carried into `yearMonth`:
+ *   1. the previous period's filed `filing.summary.credit_carryover` (Field 95) if
+ *      present — posting-independent, matches the prior filed return;
+ *   2. else the posted 1145 留抵稅額 ledger balance as-of the previous period end —
+ *      covers a mid-year-transferred client whose carryover was set up via an
+ *      onboarding opening-balance entry;
+ *   3. else 0.
+ * Feeds both the .TET_U Field 88 default and (via the stored summary) the period-close
+ * journal entry, keeping the entry consistent with the filing.
+ */
+export async function resolvePriorCarryover(
+  clientId: string,
+  yearMonth: string,
+  options?: TaxPeriodServiceTestOptions,
+): Promise<number> {
+  const prev = RocPeriod.fromYYYMM(yearMonth).previousPeriod();
+  const prevPeriod = await getTaxPeriodByYYYMM(clientId, prev.toString(), options);
+  const filedCarryover = prevPeriod?.filing.summary?.credit_carryover;
+  if (filedCarryover != null) return filedCarryover;
+
+  const ledger = await getAccountLedger(
+    clientId,
+    ACCT_TAX_CREDIT,
+    toDashDate(prev.endDate),
+  );
+  return Math.max(0, ledger.closingBalance);
 }
 
 // TODO: use period_id instead of clientId + yearMonth to check period lock
@@ -415,6 +457,12 @@ export async function markPeriodAsFiled(
     throw new Error("請至少上傳一份國稅局申報附件");
   }
 
+  // Generate the 營業稅結算 draft entry *before* flipping to 'filed' so a missing
+  // tax summary (e.g. a .TET_U produced before the summary fields existed) blocks
+  // filing with a truthful message instead of marking the period filed and failing
+  // afterwards. Idempotent — re-running just refreshes the existing draft.
+  await upsertVatCloseEntry(periodId);
+
   const nextFiling = {
     ...filing,
     filed_at: new Date().toISOString(),
@@ -438,9 +486,13 @@ export async function unfilePeriod(
   const nextFiling = { ...period.filing };
   delete nextFiling.filed_at;
 
-  return await updateFiling(periodId, nextFiling, supabase, {
+  const updated = await updateFiling(periodId, nextFiling, supabase, {
     status: "open",
   });
+  // Drop the period-close draft so an unfiled period carries no stale 結算分錄;
+  // re-filing (or 產生傳票) recreates it. A posted close entry is left intact.
+  await deleteVatCloseEntry(periodId);
+  return updated;
 }
 
 /**

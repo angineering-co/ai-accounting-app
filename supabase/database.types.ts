@@ -653,6 +653,8 @@ export type Database = {
           posted_by: string | null
           reverses_entry_id: string | null
           status: string
+          system_entry_key: string | null
+          system_entry_type: string | null
           updated_at: string
           voucher_no: string | null
           voucher_type: string
@@ -670,6 +672,8 @@ export type Database = {
           posted_by?: string | null
           reverses_entry_id?: string | null
           status?: string
+          system_entry_key?: string | null
+          system_entry_type?: string | null
           updated_at?: string
           voucher_no?: string | null
           voucher_type: string
@@ -687,6 +691,8 @@ export type Database = {
           posted_by?: string | null
           reverses_entry_id?: string | null
           status?: string
+          system_entry_key?: string | null
+          system_entry_type?: string | null
           updated_at?: string
           voucher_no?: string | null
           voucher_type?: string

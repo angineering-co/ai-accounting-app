@@ -144,12 +144,15 @@ export const journal_entries = pgTable("journal_entries", {
 	created_by: uuid(),
 	created_at: timestamp({ withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 	updated_at: timestamp({ withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	system_entry_type: text(),
+	system_entry_key: text(),
 }, (table) => [
 	index("journal_entries_client_entry_date_idx").using("btree", table.client_id.asc().nullsLast().op("date_ops"), table.entry_date.asc().nullsLast().op("uuid_ops")),
 	index("journal_entries_client_status_idx").using("btree", table.client_id.asc().nullsLast().op("uuid_ops"), table.status.asc().nullsLast().op("uuid_ops")),
 	uniqueIndex("journal_entries_client_voucher_no_idx").using("btree", table.client_id.asc().nullsLast().op("uuid_ops"), table.voucher_no.asc().nullsLast().op("text_ops")).where(sql`(voucher_no IS NOT NULL)`),
 	index("journal_entries_document_id_idx").using("btree", table.document_id.asc().nullsLast().op("uuid_ops")).where(sql`(document_id IS NOT NULL)`),
 	index("journal_entries_reverses_entry_id_idx").using("btree", table.reverses_entry_id.asc().nullsLast().op("uuid_ops")).where(sql`(reverses_entry_id IS NOT NULL)`),
+	uniqueIndex("journal_entries_system_entry_idx").using("btree", table.client_id.asc().nullsLast().op("text_ops"), table.system_entry_type.asc().nullsLast().op("text_ops"), table.system_entry_key.asc().nullsLast().op("text_ops")).where(sql`(system_entry_type IS NOT NULL)`),
 	foreignKey({
 			columns: [table.client_id],
 			foreignColumns: [clients.id],

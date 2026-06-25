@@ -64,6 +64,9 @@ export default async function DashboardPage({
             <CardTitle className="flex items-center gap-2">
               <Inbox className="h-5 w-5 text-emerald-600" />
               申請名單（{leads.length}）
+              <span className="text-sm font-normal text-muted-foreground">
+                · 已加 LINE {leads.filter((lead) => lead.has_line).length} / {leads.length}
+              </span>
             </CardTitle>
           </CardHeader>
           <CardContent>

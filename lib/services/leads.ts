@@ -11,6 +11,12 @@ export interface LeadRecord {
   data: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+  /**
+   * Whether this lead has joined our LINE channel — true when a `line_accounts`
+   * row is linked to this lead (the person followed our OA and sent their lead
+   * code). Lets admins spot leads to follow up with by phone.
+   */
+  has_line: boolean;
 }
 
 /**
@@ -50,9 +56,26 @@ export async function listLeads(limit = 15): Promise<LeadRecord[]> {
       return [];
     }
 
+    const leadIds = (data ?? []).map((row) => row.id);
+    const linkedLeadIds = new Set<string>();
+    if (leadIds.length > 0) {
+      const { data: lineRows, error: lineError } = await admin
+        .from("line_accounts")
+        .select("lead_id")
+        .in("lead_id", leadIds);
+      if (lineError) {
+        console.error("listLeads line_accounts lookup failed:", lineError);
+      } else {
+        for (const row of lineRows ?? []) {
+          if (row.lead_id) linkedLeadIds.add(row.lead_id);
+        }
+      }
+    }
+
     return (data ?? []).map((row) => ({
       ...row,
       data: (row.data ?? {}) as Record<string, unknown>,
+      has_line: linkedLeadIds.has(row.id),
     }));
   } catch (err) {
     console.error("listLeads unexpected error:", err);

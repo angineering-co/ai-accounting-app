@@ -3,7 +3,7 @@
 import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
-import { ArrowLeft, CalendarIcon, ChevronDown, Filter, Plus, X } from "lucide-react";
+import { ArrowLeft, CalendarIcon, Filter, Plus, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 
@@ -33,12 +33,6 @@ import {
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { TablePagination } from "@/components/table-pagination";
 import { RecordStateCard } from "@/components/record-state-card";
 import { VoucherBatchPostDialog } from "@/components/voucher-batch-post-dialog";
@@ -282,33 +276,15 @@ export default function VoucherListPage({
             </p>
           )}
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button className="ml-auto">
-              <Plus className="size-4 mr-1" />
-              新增傳票
-              <ChevronDown className="size-4 ml-1" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onClick={() =>
-                router.push(`/firm/${firmId}/client/${clientId}/voucher/new`)
-              }
-            >
-              一般傳票
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() =>
-                router.push(
-                  `/firm/${firmId}/client/${clientId}/voucher/new?mode=opening`,
-                )
-              }
-            >
-              期初開帳
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Button
+          className="ml-auto"
+          onClick={() =>
+            router.push(`/firm/${firmId}/client/${clientId}/voucher/new`)
+          }
+        >
+          <Plus className="size-4 mr-1" />
+          新增傳票
+        </Button>
       </div>
 
       <Card>

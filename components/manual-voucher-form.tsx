@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFieldArray, useForm } from "react-hook-form";
 import { format } from "date-fns";
@@ -9,6 +9,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -34,16 +35,17 @@ import {
 } from "@/components/ui/popover";
 import { cn, formatNTD } from "@/lib/utils";
 import { ACCOUNT_LIST } from "@/lib/data/accounts";
-import { VOUCHER_TYPE, type VoucherType } from "@/lib/domain/journal-entry";
 import {
-  createManualEntryAction,
-  createOpeningEntryAction,
-} from "@/lib/services/voucher";
+  OPENING_ENTRY_DESCRIPTION,
+  VOUCHER_TYPE,
+  type VoucherType,
+} from "@/lib/domain/journal-entry";
+import { createManualEntryAction } from "@/lib/services/voucher";
 
-// The five buckets the accountant transcribes from the 資產負債表 (資產/負債/權益)
-// and 損益表 (收入/成本費用). Grouping mirrors the two source statements so data
-// entry follows them top-to-bottom.
-const GROUPS = [
+// The five buckets the opening trial balance is read from — 資產/負債/權益 off the
+// 資產負債表, 收入/成本費用 off the 損益表. In 期初開帳 mode the lines render
+// grouped this way (live, by the chosen account's leading digit).
+const BUCKETS = [
   { key: "asset", label: "資產", test: (c: string) => c[0] === "1" },
   { key: "liability", label: "負債", test: (c: string) => c[0] === "2" },
   { key: "equity", label: "權益", test: (c: string) => c[0] === "3" },
@@ -55,27 +57,20 @@ const GROUPS = [
   },
 ] as const;
 
-type GroupKey = (typeof GROUPS)[number]["key"];
-
-const ALL_OPTIONS = ACCOUNT_LIST.map((s) => {
-  const code = s.split(" ")[0];
-  return { code, label: s };
-});
-
-// 3440 本期損益 is synthesised by the balance sheet from the P&L accounts and any
-// stored 3440 balance is dropped (financial-statements.ts) — so the opening entry
-// must never write it. Prior-years retained earnings go to 3432 累積盈虧 instead.
-const RESERVED_OPENING_CODES = new Set(["3440"]);
-
-function optionsForGroup(key: GroupKey) {
-  const g = GROUPS.find((x) => x.key === key)!;
-  return ALL_OPTIONS.filter(
-    (o) => g.test(o.code) && !RESERVED_OPENING_CODES.has(o.code),
-  );
+function bucketOf(code: string): string | null {
+  if (!code) return null;
+  return BUCKETS.find((b) => b.test(code))?.key ?? null;
 }
 
+// 3440 本期損益 is synthesised by the balance sheet from the P&L accounts and any
+// stored 3440 balance is dropped (financial-statements.ts) — so never let a manual
+// entry write it. Prior-years retained earnings go to 3432 累積盈虧 instead.
+const ACCOUNT_OPTIONS = ACCOUNT_LIST.map((s) => {
+  const code = s.split(" ")[0];
+  return { code, label: s };
+}).filter((o) => o.code !== "3440");
+
 type LineField = {
-  group: GroupKey | "";
   account_code: string;
   debit: number;
   credit: number;
@@ -89,43 +84,46 @@ type FormValues = {
   lines: LineField[];
 };
 
-function emptyLine(group: GroupKey | ""): LineField {
-  return { group, account_code: "", debit: 0, credit: 0, description: "" };
+function emptyLine(): LineField {
+  return { account_code: "", debit: 0, credit: 0, description: "" };
 }
 
 interface ManualVoucherFormProps {
   firmId: string;
   clientId: string;
-  mode: "general" | "opening";
 }
 
-export function ManualVoucherForm({
-  firmId,
-  clientId,
-  mode,
-}: ManualVoucherFormProps) {
+export function ManualVoucherForm({ firmId, clientId }: ManualVoucherFormProps) {
   const router = useRouter();
-  const isOpening = mode === "opening";
 
-  const defaultValues: FormValues = useMemo(
-    () => ({
-      voucher_type: isOpening ? "轉帳" : "轉帳",
+  // 期初開帳 is just a preset on the one form: it pins 傳票類型=轉帳, locks the
+  // 摘要 to the marker text (read-only, so a human reviewer can spot the opening
+  // entry in the list), switches the lines to the grouped view, and shows the
+  // opening guidance. Submission is the same createManualEntry path either way.
+  const [opening, setOpening] = useState(false);
+
+  const form = useForm<FormValues>({
+    defaultValues: {
+      voucher_type: "轉帳",
       entry_date: format(new Date(), "yyyy-MM-dd"),
       description: "",
-      // opening: one blank row per group so the structure is visible; general: two
-      // blank rows (the minimum a balanced entry needs).
-      lines: isOpening
-        ? GROUPS.map((g) => emptyLine(g.key))
-        : [emptyLine(""), emptyLine("")],
-    }),
-    [isOpening],
-  );
-
-  const form = useForm<FormValues>({ defaultValues });
+      lines: [emptyLine(), emptyLine()],
+    },
+  });
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "lines",
   });
+
+  const toggleOpening = (next: boolean) => {
+    setOpening(next);
+    if (next) {
+      form.setValue("voucher_type", "轉帳");
+      form.setValue("description", OPENING_ENTRY_DESCRIPTION);
+    } else {
+      form.setValue("description", "");
+    }
+  };
 
   const watchedLines = form.watch("lines");
   const { debitTotal, creditTotal } = useMemo(() => {
@@ -147,11 +145,14 @@ export function ManualVoucherForm({
   })();
 
   const onSubmit = async (values: FormValues) => {
-    // Drop fully-empty rows (an unfilled section placeholder), then validate what's
-    // left. The server re-validates (parse + balance + min 2), so this is just for
-    // friendly inline errors.
+    // Drop fully-empty rows, then validate what's left. The server re-validates
+    // (parse + XOR + balance + min 2), so this is just for friendly inline errors.
     const lines = values.lines
-      .filter((l) => l.account_code && ((Number(l.debit) || 0) > 0 || (Number(l.credit) || 0) > 0))
+      .filter(
+        (l) =>
+          l.account_code &&
+          ((Number(l.debit) || 0) > 0 || (Number(l.credit) || 0) > 0),
+      )
       .map((l) => ({
         account_code: l.account_code,
         debit: Number(l.debit) || 0,
@@ -173,25 +174,20 @@ export function ManualVoucherForm({
     }
 
     try {
-      const { entryId } = isOpening
-        ? await createOpeningEntryAction(clientId, {
-            entry_date: values.entry_date,
-            lines,
-          })
-        : await createManualEntryAction(clientId, {
-            voucher_type: values.voucher_type,
-            entry_date: values.entry_date,
-            description: values.description ? values.description : null,
-            lines,
-          });
-      toast.success(isOpening ? "期初開帳草稿已建立" : "傳票草稿已建立");
+      const { entryId } = await createManualEntryAction(clientId, {
+        voucher_type: values.voucher_type,
+        entry_date: values.entry_date,
+        description: values.description ? values.description : null,
+        lines,
+      });
+      toast.success(opening ? "期初開帳草稿已建立" : "傳票草稿已建立");
       router.push(`/firm/${firmId}/client/${clientId}/voucher/${entryId}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "建立失敗");
     }
   };
 
-  const renderLineRow = (idx: number, options: { code: string; label: string }[]) => (
+  const renderLineRow = (idx: number) => (
     <TableRow key={fields[idx].id}>
       <TableCell>
         <Select
@@ -202,7 +198,7 @@ export function ManualVoucherForm({
             <SelectValue placeholder="選擇科目" />
           </SelectTrigger>
           <SelectContent className="max-h-72">
-            {options.map((opt) => (
+            {ACCOUNT_OPTIONS.map((opt) => (
               <SelectItem key={opt.code} value={opt.code}>
                 {opt.label}
               </SelectItem>
@@ -251,7 +247,7 @@ export function ManualVoucherForm({
           variant="ghost"
           size="icon"
           onClick={() => remove(idx)}
-          disabled={!isOpening && fields.length <= 2}
+          disabled={fields.length <= 2}
         >
           <Trash2 className="size-4" />
         </Button>
@@ -259,58 +255,129 @@ export function ManualVoucherForm({
     </TableRow>
   );
 
-  const indexedFields = fields.map((f, idx) => ({ f, idx }));
+  const lineHeader = (
+    <TableHeader>
+      <TableRow>
+        <TableHead>科目</TableHead>
+        <TableHead className="w-36 text-right">借方</TableHead>
+        <TableHead className="w-36 text-right">貸方</TableHead>
+        <TableHead>備註</TableHead>
+        <TableHead className="w-12" />
+      </TableRow>
+    </TableHeader>
+  );
+
+  // Grouped (opening) view: bucket every row live by the chosen account's class.
+  // Rows without an account yet collect in a trailing 未選擇科目 section so they
+  // stay editable until a code is picked, then jump to their category.
+  const groupedRender = () => {
+    const byBucket = new Map<string, number[]>();
+    for (const b of BUCKETS) byBucket.set(b.key, []);
+    const unassigned: number[] = [];
+    watchedLines.forEach((l, idx) => {
+      const k = bucketOf(l.account_code);
+      if (k) byBucket.get(k)!.push(idx);
+      else unassigned.push(idx);
+    });
+
+    return (
+      <div className="space-y-6">
+        {BUCKETS.map((b) => {
+          const idxs = byBucket.get(b.key)!;
+          let d = 0;
+          let c = 0;
+          for (const i of idxs) {
+            d += Number(watchedLines[i]?.debit) || 0;
+            c += Number(watchedLines[i]?.credit) || 0;
+          }
+          return (
+            <div key={b.key}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-base font-medium">{b.label}</span>
+                <span className="text-sm font-mono text-muted-foreground">
+                  {formatNTD(d)} / {formatNTD(c)}
+                </span>
+              </div>
+              <div className="rounded-md border">
+                <Table>
+                  {lineHeader}
+                  <TableBody>
+                    {idxs.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={5}
+                          className="text-center text-sm text-muted-foreground py-3"
+                        >
+                          尚無分錄
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      idxs.map((idx) => renderLineRow(idx))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          );
+        })}
+
+        {unassigned.length > 0 && (
+          <div>
+            <div className="text-base font-medium mb-2 text-muted-foreground">
+              尚未選擇科目
+            </div>
+            <div className="rounded-md border">
+              <Table>
+                {lineHeader}
+                <TableBody>{unassigned.map((idx) => renderLineRow(idx))}</TableBody>
+              </Table>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-      {isOpening && (
-        <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-base text-sky-900 flex gap-2 items-start">
-          <Info className="size-5 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <div className="font-medium">依客戶的資產負債表與損益表逐項輸入期初餘額</div>
-            <ul className="text-sm list-disc pl-5 space-y-0.5">
-              <li>期中開帳：請一併輸入損益科目（收入、成本費用）的本年度累計數。</li>
-              <li>期初保留盈餘請記入 3432 累積盈虧；系統保留 3440 本期損益 由報表自動計算。</li>
-              <li>累積留抵稅額請記入 1145 留抵稅額。</li>
-              <li>開帳日請選在營業稅申報期間起點。</li>
-            </ul>
-          </div>
-        </div>
-      )}
-
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">
-            {isOpening ? "期初開帳" : "傳票資訊"}
-          </CardTitle>
+          <CardTitle className="text-base">傳票資訊</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <label className="flex items-center gap-2 text-base cursor-pointer">
+            <Checkbox
+              checked={opening}
+              onCheckedChange={(v) => toggleOpening(v === true)}
+            />
+            此為期初開帳（鎖定摘要為「{OPENING_ENTRY_DESCRIPTION}」、依科目分類輸入）
+          </label>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {!isOpening && (
-              <div className="flex flex-col gap-1">
-                <Label>傳票類型</Label>
-                <Select
-                  value={form.watch("voucher_type")}
-                  onValueChange={(v) =>
-                    form.setValue("voucher_type", v as VoucherType)
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="請選擇" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {VOUCHER_TYPE.map((v) => (
-                      <SelectItem key={v} value={v}>
-                        {v}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            <div className="flex flex-col gap-1">
+              <Label>傳票類型</Label>
+              <Select
+                value={form.watch("voucher_type")}
+                onValueChange={(v) =>
+                  form.setValue("voucher_type", v as VoucherType)
+                }
+                disabled={opening}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="請選擇" />
+                </SelectTrigger>
+                <SelectContent>
+                  {VOUCHER_TYPE.map((v) => (
+                    <SelectItem key={v} value={v}>
+                      {v}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
             <div className="flex flex-col gap-1">
-              <Label>{isOpening ? "開帳日" : "記帳日期"}</Label>
+              <Label>{opening ? "開帳日" : "記帳日期"}</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
@@ -339,17 +406,29 @@ export function ManualVoucherForm({
               </Popover>
             </div>
 
-            {!isOpening && (
-              <div className="flex flex-col gap-1">
-                <Label>摘要</Label>
-                <Input
-                  placeholder="（選填）"
-                  value={form.watch("description")}
-                  onChange={(e) => form.setValue("description", e.target.value)}
-                />
-              </div>
-            )}
+            <div className="flex flex-col gap-1">
+              <Label>摘要</Label>
+              <Input
+                placeholder="（選填）"
+                value={form.watch("description")}
+                onChange={(e) => form.setValue("description", e.target.value)}
+                readOnly={opening}
+                className={cn(opening && "bg-muted text-muted-foreground")}
+              />
+            </div>
           </div>
+
+          {opening && (
+            <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900 flex gap-2 items-start">
+              <Info className="size-5 shrink-0 mt-0.5" />
+              <ul className="list-disc pl-5 space-y-0.5">
+                <li>依客戶的資產負債表與損益表逐項輸入期初餘額。</li>
+                <li>期中開帳：請一併輸入損益科目（收入、成本費用）的本年度累計數。</li>
+                <li>期初保留盈餘記入 3432 累積盈虧；3440 本期損益 由報表自動計算（已從選單移除）。</li>
+                <li>累積留抵稅額記入 1145 留抵稅額；開帳日請選在營業稅申報期間起點。</li>
+              </ul>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -368,101 +447,36 @@ export function ManualVoucherForm({
             </span>
           </span>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {isOpening ? (
-            GROUPS.map((g) => {
-              const rows = indexedFields.filter(({ f }) => f.group === g.key);
-              const options = optionsForGroup(g.key);
-              return (
-                <div key={g.key}>
-                  <div className="text-base font-medium mb-2">{g.label}</div>
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>科目</TableHead>
-                          <TableHead className="w-36 text-right">借方</TableHead>
-                          <TableHead className="w-36 text-right">貸方</TableHead>
-                          <TableHead>備註</TableHead>
-                          <TableHead className="w-12" />
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {rows.length === 0 ? (
-                          <TableRow>
-                            <TableCell
-                              colSpan={5}
-                              className="text-center text-sm text-muted-foreground py-3"
-                            >
-                              尚無分錄
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          rows.map(({ idx }) => renderLineRow(idx, options))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="mt-2"
-                    onClick={() => append(emptyLine(g.key))}
-                  >
-                    <Plus className="size-4 mr-1" />
-                    新增{g.label}科目
-                  </Button>
-                </div>
-              );
-            })
+        <CardContent className="space-y-3">
+          {opening ? (
+            groupedRender()
           ) : (
-            <div>
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>科目</TableHead>
-                      <TableHead className="w-36 text-right">借方</TableHead>
-                      <TableHead className="w-36 text-right">貸方</TableHead>
-                      <TableHead>備註</TableHead>
-                      <TableHead className="w-12" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {indexedFields.map(({ idx }) => renderLineRow(idx, ALL_OPTIONS))}
-                  </TableBody>
-                </Table>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="mt-2"
-                onClick={() => append(emptyLine(""))}
-              >
-                <Plus className="size-4 mr-1" />
-                新增一行
-              </Button>
+            <div className="rounded-md border">
+              <Table>
+                {lineHeader}
+                <TableBody>{fields.map((_, idx) => renderLineRow(idx))}</TableBody>
+              </Table>
             </div>
           )}
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => append(emptyLine())}
+          >
+            <Plus className="size-4 mr-1" />
+            新增一行
+          </Button>
         </CardContent>
       </Card>
 
       <div className="flex justify-end gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => router.back()}
-        >
+        <Button type="button" variant="outline" onClick={() => router.back()}>
           取消
         </Button>
         <Button type="submit" disabled={!isBalanced || form.formState.isSubmitting}>
-          {form.formState.isSubmitting
-            ? "建立中…"
-            : isOpening
-              ? "建立期初開帳草稿"
-              : "建立草稿"}
+          {form.formState.isSubmitting ? "建立中…" : "建立草稿"}
         </Button>
       </div>
     </form>

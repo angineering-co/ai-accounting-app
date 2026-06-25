@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Minus } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -88,6 +88,7 @@ export function LeadsTable({ leads }: { leads: LeadRecord[] }) {
           <TableHead>聯絡人</TableHead>
           <TableHead>電子信箱</TableHead>
           <TableHead>電話</TableHead>
+          <TableHead className="text-center">加 LINE</TableHead>
           <TableHead>狀態</TableHead>
         </TableRow>
       </TableHeader>
@@ -128,6 +129,19 @@ export function LeadsTable({ leads }: { leads: LeadRecord[] }) {
                 <TableCell className="font-medium">{contactName}</TableCell>
                 <TableCell className="text-sm">{email}</TableCell>
                 <TableCell className="text-sm tabular-nums">{phone}</TableCell>
+                <TableCell className="text-center">
+                  {lead.has_line ? (
+                    <Check
+                      className="mx-auto h-4 w-4 text-emerald-600"
+                      aria-label="已加入 LINE"
+                    />
+                  ) : (
+                    <Minus
+                      className="mx-auto h-4 w-4 text-muted-foreground"
+                      aria-label="尚未加入 LINE"
+                    />
+                  )}
+                </TableCell>
                 <TableCell>
                   <Badge variant={statusVariant(lead.status)}>
                     {statusLabel}
@@ -137,7 +151,7 @@ export function LeadsTable({ leads }: { leads: LeadRecord[] }) {
               {isOpen && (
                 <TableRow className="bg-slate-50/60 hover:bg-slate-50/60">
                   <TableCell />
-                  <TableCell colSpan={7} className="py-3">
+                  <TableCell colSpan={8} className="py-3">
                     {dataEntries.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
                         無其他表單欄位。

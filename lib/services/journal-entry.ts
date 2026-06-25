@@ -1193,18 +1193,19 @@ export async function editEntry(
   });
 }
 
-/** Header for a hand-created (manual) journal entry — no source document. */
+/** Header for a hand-created (manual) journal entry — no source document. The
+ * entry-level 摘要 is mandatory (the per-line 備註 stays optional). */
 export type CreateManualEntryInput = {
   voucher_type: VoucherType;
   entry_date: string; // YYYY-MM-DD
-  description: string | null;
+  description: string;
   lines: EditEntryLine[];
 };
 
 const createManualEntryHeaderSchema = z.object({
   voucher_type: z.enum(VOUCHER_TYPE),
   entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期格式錯誤 (YYYY-MM-DD)"),
-  description: z.string().nullable(),
+  description: z.string().trim().min(1, "摘要為必填"),
 });
 
 /**

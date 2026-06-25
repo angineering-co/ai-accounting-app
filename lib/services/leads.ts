@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isLeadStatus } from "@/lib/domain/lead-status";
 
 export interface LeadRecord {
   id: string;
@@ -20,29 +21,35 @@ export interface LeadRecord {
 }
 
 /**
+ * Returns true when the signed-in user is a firm admin or super_admin. Leads
+ * are SnapBooks-wide (not firm-scoped), so staff and clients must not see or
+ * mutate them.
+ */
+async function isLeadsAdmin(): Promise<boolean> {
+  const authed = await createClient();
+  const {
+    data: { user },
+  } = await authed.auth.getUser();
+  if (!user) return false;
+
+  const { data: profile } = await authed
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  return !!profile && ["admin", "super_admin"].includes(profile.role ?? "");
+}
+
+/**
  * List leads from /apply form submissions, newest first.
  *
- * Gated to firm admins and super_admins — leads are SnapBooks-wide, not
- * firm-scoped, so staff and clients should not see them. Uses the admin
- * client to bypass RLS (the `leads` table has no SELECT policy).
+ * Gated to firm admins and super_admins. Uses the admin client to bypass RLS
+ * (the `leads` table has no SELECT policy).
  */
 export async function listLeads(limit = 15): Promise<LeadRecord[]> {
   try {
-    const authed = await createClient();
-    const {
-      data: { user },
-    } = await authed.auth.getUser();
-    if (!user) return [];
-
-    const { data: profile } = await authed
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile || !["admin", "super_admin"].includes(profile.role ?? "")) {
-      return [];
-    }
+    if (!(await isLeadsAdmin())) return [];
 
     const admin = createAdminClient();
     const { data, error } = await admin
@@ -80,5 +87,41 @@ export async function listLeads(limit = 15): Promise<LeadRecord[]> {
   } catch (err) {
     console.error("listLeads unexpected error:", err);
     return [];
+  }
+}
+
+/**
+ * Update a lead's pipeline status. Admin-gated; validates the status against
+ * the allowed set before writing (the DB `leads_status_check` constraint is
+ * the backstop). Returns an `ok`/`error` result for the caller to surface.
+ */
+export async function updateLeadStatus(
+  leadId: string,
+  status: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    if (!(await isLeadsAdmin())) {
+      return { ok: false, error: "沒有權限變更申請狀態。" };
+    }
+
+    if (!isLeadStatus(status)) {
+      return { ok: false, error: "無效的狀態值。" };
+    }
+
+    const admin = createAdminClient();
+    const { error } = await admin
+      .from("leads")
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq("id", leadId);
+
+    if (error) {
+      console.error("updateLeadStatus failed:", error);
+      return { ok: false, error: "更新失敗，請稍後再試。" };
+    }
+
+    return { ok: true };
+  } catch (err) {
+    console.error("updateLeadStatus unexpected error:", err);
+    return { ok: false, error: "更新失敗，請稍後再試。" };
   }
 }

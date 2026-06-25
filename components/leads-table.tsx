@@ -1,6 +1,8 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Check, ChevronDown, ChevronRight, Minus } from "lucide-react";
 import {
   Table,
@@ -10,19 +12,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn, formatDateTimeZhTW } from "@/lib/utils";
-import type { LeadRecord } from "@/lib/services/leads";
+import { updateLeadStatus, type LeadRecord } from "@/lib/services/leads";
+import {
+  LEAD_STATUSES,
+  LEAD_STATUS_LABELS,
+} from "@/lib/domain/lead-status";
 
 const PATH_LABELS: Record<string, string> = {
   registration: "設立 + 記帳",
   bookkeeping: "委託記帳",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  new: "新進",
-  contacted: "已聯絡",
-  converted: "已成交",
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -43,12 +49,6 @@ const FIELD_LABELS: Record<string, string> = {
   monthlyInvoiceVolume: "每月發票量",
 };
 
-function statusVariant(status: string): "default" | "secondary" | "outline" {
-  if (status === "converted") return "default";
-  if (status === "contacted") return "secondary";
-  return "outline";
-}
-
 function formatValue(value: unknown): string {
   if (value == null) return "—";
   if (Array.isArray(value)) {
@@ -60,7 +60,14 @@ function formatValue(value: unknown): string {
 }
 
 export function LeadsTable({ leads }: { leads: LeadRecord[] }) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Optimistic per-lead status overrides, applied instantly on change and
+  // reconciled from the server once the action resolves.
+  const [statusOverrides, setStatusOverrides] = useState<
+    Record<string, string>
+  >({});
 
   if (leads.length === 0) {
     return (
@@ -74,6 +81,26 @@ export function LeadsTable({ leads }: { leads: LeadRecord[] }) {
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
+    });
+  };
+
+  const handleStatusChange = (
+    leadId: string,
+    previousStatus: string,
+    nextStatus: string,
+  ) => {
+    if (nextStatus === previousStatus) return;
+    setStatusOverrides((prev) => ({ ...prev, [leadId]: nextStatus }));
+    startTransition(async () => {
+      const result = await updateLeadStatus(leadId, nextStatus);
+      if (!result.ok) {
+        // Revert the optimistic value and tell the user.
+        setStatusOverrides((prev) => ({ ...prev, [leadId]: previousStatus }));
+        toast.error(result.error ?? "更新失敗，請稍後再試。");
+        return;
+      }
+      // Re-sync the server component so the override can be dropped safely.
+      router.refresh();
     });
   };
 
@@ -100,7 +127,7 @@ export function LeadsTable({ leads }: { leads: LeadRecord[] }) {
           const email = (data.email as string) ?? "—";
           const phone = (data.phone as string) ?? "—";
           const pathLabel = PATH_LABELS[lead.path] ?? lead.path;
-          const statusLabel = STATUS_LABELS[lead.status] ?? lead.status;
+          const status = statusOverrides[lead.id] ?? lead.status;
 
           const dataEntries = Object.entries(data).filter(
             ([key]) => !["contactName", "email", "phone"].includes(key),
@@ -142,10 +169,27 @@ export function LeadsTable({ leads }: { leads: LeadRecord[] }) {
                     />
                   )}
                 </TableCell>
-                <TableCell>
-                  <Badge variant={statusVariant(lead.status)}>
-                    {statusLabel}
-                  </Badge>
+                <TableCell
+                  onClick={(e) => e.stopPropagation()}
+                  className="cursor-default"
+                >
+                  <Select
+                    value={status}
+                    onValueChange={(next) =>
+                      handleStatusChange(lead.id, status, next)
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-28">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {LEAD_STATUSES.map((value) => (
+                        <SelectItem key={value} value={value}>
+                          {LEAD_STATUS_LABELS[value]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </TableCell>
               </TableRow>
               {isOpen && (

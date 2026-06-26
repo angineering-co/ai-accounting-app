@@ -24,6 +24,8 @@ import { updateLeadStatus, type LeadRecord } from "@/lib/services/leads";
 import {
   LEAD_STATUSES,
   LEAD_STATUS_LABELS,
+  LEAD_STATUS_COLORS,
+  isLeadStatus,
 } from "@/lib/domain/lead-status";
 
 const PATH_LABELS: Record<string, string> = {
@@ -200,7 +202,12 @@ export function LeadsTable({ leads }: { leads: LeadRecord[] }) {
                     }
                     disabled={isPending}
                   >
-                    <SelectTrigger className="h-8 w-28">
+                    <SelectTrigger
+                      className={cn(
+                        "h-8 w-28 font-medium",
+                        isLeadStatus(status) && LEAD_STATUS_COLORS[status],
+                      )}
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

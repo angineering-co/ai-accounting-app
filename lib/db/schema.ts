@@ -1,5 +1,5 @@
 import { authUsers as users } from "drizzle-orm/supabase";
-import { pgTable, index, unique, check, uuid, text, jsonb, timestamp, uniqueIndex, foreignKey, boolean, pgPolicy, integer, bigint, date, smallint, varchar, primaryKey } from "drizzle-orm/pg-core"
+import { pgTable, index, unique, uuid, text, jsonb, timestamp, uniqueIndex, foreignKey, boolean, pgPolicy, check, integer, bigint, date, smallint, varchar, primaryKey } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 
@@ -16,7 +16,6 @@ export const leads = pgTable("leads", {
 	index("idx_leads_created_at").using("btree", table.created_at.desc().nullsFirst().op("timestamptz_ops")),
 	index("idx_leads_status").using("btree", table.status.asc().nullsLast().op("text_ops")),
 	unique("leads_lead_code_key").on(table.lead_code),
-	check("leads_status_check", sql`status = ANY (ARRAY['new'::text, 'contacted'::text, 'converted'::text])`),
 ]);
 
 export const line_accounts = pgTable("line_accounts", {

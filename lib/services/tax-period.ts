@@ -139,27 +139,41 @@ function toDashDate(date: Date): string {
  * Resolves the 上期累積留抵稅額 (.TET_U Field 88) carried into `yearMonth`:
  *   1. the previous period's filed `filing.summary.credit_carryover` (Field 95) if
  *      present — posting-independent, matches the prior filed return;
- *   2. else the posted 1145 留抵稅額 ledger balance as-of the previous period end —
- *      covers a mid-year-transferred client whose carryover was set up via an
- *      onboarding opening-balance entry;
+ *   2. else the posted 1145 留抵稅額 ledger balance as-of THIS period's start (inclusive)
+ *      — covers a mid-year-transferred client whose opening 留抵 is booked at the first
+ *      filing period's 期初 (the period boundary, per the 開帳 convention). Reading from
+ *      the period start rather than the prior period end catches that boundary-dated
+ *      opening entry (the prior period end is one day earlier), and still precedes this
+ *      period's own close entry (dated period end), so the current close is naturally
+ *      excluded — no double-count;
  *   3. else 0.
  * Feeds both the .TET_U Field 88 default and (via the stored summary) the period-close
  * journal entry, keeping the entry consistent with the filing.
+ *
+ * The ledger fallback excludes drafts, so it assumes every prior 1145-affecting entry
+ * (opening balance, prior closes) is already posted. Continuing periods normally resolve
+ * via path 1 and never reach the ledger; if one does (filed but missing summary) while a
+ * prior close is still a draft, the carryover would be understated — a draft-visibility
+ * limitation a date can't fix.
  */
 export async function resolvePriorCarryover(
   clientId: string,
   yearMonth: string,
   options?: TaxPeriodServiceTestOptions,
 ): Promise<number> {
-  const prev = RocPeriod.fromYYYMM(yearMonth).previousPeriod();
-  const prevPeriod = await getTaxPeriodByYYYMM(clientId, prev.toString(), options);
+  const period = RocPeriod.fromYYYMM(yearMonth);
+  const prevPeriod = await getTaxPeriodByYYYMM(
+    clientId,
+    period.previousPeriod().toString(),
+    options,
+  );
   const filedCarryover = prevPeriod?.filing.summary?.credit_carryover;
   if (filedCarryover != null) return filedCarryover;
 
   const ledger = await getAccountLedger(
     clientId,
     ACCT_TAX_CREDIT,
-    toDashDate(prev.endDate),
+    toDashDate(period.startDate),
   );
   return Math.max(0, ledger.closingBalance);
 }

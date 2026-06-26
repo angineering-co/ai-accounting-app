@@ -872,6 +872,19 @@ async function buildAndUpsertVatClose(
     description,
   });
 
+  // Balance is a pure property of `computed`, so assert it before opening the
+  // transaction — an unbalanced entry fails loud without any DB round-trip.
+  if (computed !== null) {
+    const totalDebit = computed.lines.reduce((a, l) => a + l.debit, 0);
+    const totalCredit = computed.lines.reduce((a, l) => a + l.credit, 0);
+    if (totalDebit !== totalCredit) {
+      throw new Error(
+        `unbalanced VAT close entry for period ${period.year_month}: ` +
+          `debit ${totalDebit} != credit ${totalCredit}`,
+      );
+    }
+  }
+
   return db.transaction(async (tx) => {
     const [existing] = await tx
       .select({ id: journalEntriesTable.id, status: journalEntriesTable.status })
@@ -895,15 +908,6 @@ async function buildAndUpsertVatClose(
         return "removed";
       }
       return existing ? "skipped-posted" : "none";
-    }
-
-    const totalDebit = computed.lines.reduce((a, l) => a + l.debit, 0);
-    const totalCredit = computed.lines.reduce((a, l) => a + l.credit, 0);
-    if (totalDebit !== totalCredit) {
-      throw new Error(
-        `unbalanced VAT close entry for period ${period.year_month}: ` +
-          `debit ${totalDebit} != credit ${totalCredit}`,
-      );
     }
 
     let entryId: string;

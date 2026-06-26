@@ -40,7 +40,20 @@ import {
   VOUCHER_TYPE,
   type VoucherType,
 } from "@/lib/domain/journal-entry";
+import { RocPeriod } from "@/lib/domain/roc-period";
 import { createManualEntryAction } from "@/lib/services/voucher";
+
+// Snap a YYYY-MM-DD to the 1st of its bi-monthly filing period (the odd start
+// month). The opening entry's 1145 留抵 must sit on this exact boundary: the VAT
+// 結算 close (PR #255) reads 上期累積留抵 from the ledger as-of `RocPeriod.startDate`
+// (inclusive), so an off-boundary opening date would be missed. Same RocPeriod
+// class both sides, so they can't drift apart.
+function snapToPeriodStart(dateStr: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  if (!m) return dateStr;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return format(RocPeriod.fromDate(d).startDate, "yyyy-MM-dd");
+}
 
 // 3440 本期損益 is synthesised by the balance sheet from the P&L accounts and any
 // stored 3440 balance is dropped (financial-statements.ts) — so never let a manual
@@ -100,6 +113,9 @@ export function ManualVoucherForm({ firmId, clientId }: ManualVoucherFormProps) 
     if (next) {
       form.setValue("voucher_type", "轉帳");
       form.setValue("description", OPENING_ENTRY_DESCRIPTION);
+      // Opening balances must sit on the filing-period boundary (see
+      // snapToPeriodStart) — snap whatever date is currently in the field.
+      form.setValue("entry_date", snapToPeriodStart(form.getValues("entry_date")));
     } else {
       form.setValue("description", "");
     }
@@ -159,10 +175,14 @@ export function ManualVoucherForm({ firmId, clientId }: ManualVoucherFormProps) 
       return;
     }
 
+    // Opening entry must land on the filing-period boundary; snap defensively in
+    // case the field was set programmatically. Keep the general voucher's date as-is.
+    const entryDate = opening ? snapToPeriodStart(values.entry_date) : values.entry_date;
+
     try {
       const { entryId } = await createManualEntryAction(clientId, {
         voucher_type: values.voucher_type,
-        entry_date: values.entry_date,
+        entry_date: entryDate,
         description,
         lines,
       });
@@ -233,7 +253,11 @@ export function ManualVoucherForm({ firmId, clientId }: ManualVoucherFormProps) 
                     selected={entryDateAsDate}
                     onSelect={(d) => {
                       if (!d) return;
-                      form.setValue("entry_date", format(d, "yyyy-MM-dd"));
+                      const picked = format(d, "yyyy-MM-dd");
+                      form.setValue(
+                        "entry_date",
+                        opening ? snapToPeriodStart(picked) : picked,
+                      );
                     }}
                     autoFocus
                   />
@@ -262,7 +286,8 @@ export function ManualVoucherForm({ firmId, clientId }: ManualVoucherFormProps) 
                 <li>依客戶的資產負債表與損益表逐項輸入期初餘額。</li>
                 <li>期中開帳：請一併輸入損益科目（收入、成本費用）的本年度累計數。</li>
                 <li>期初保留盈餘記入 3432 累積盈虧；3440 本期損益 由報表自動計算（已從選單移除）。</li>
-                <li>累積留抵稅額記入 1145 留抵稅額；開帳日請選在營業稅申報期間起點。</li>
+                <li>累積留抵稅額記入 1145 留抵稅額。</li>
+                <li>開帳日會自動對齊營業稅申報期間起點（雙月期的單月 1 號），以正確銜接留抵稅額。</li>
               </ul>
             </div>
           )}

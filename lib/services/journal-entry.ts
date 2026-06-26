@@ -1420,6 +1420,102 @@ export async function editEntry(
   });
 }
 
+/** Header for a hand-created (manual) journal entry — no source document. The
+ * entry-level 摘要 is mandatory (the per-line 備註 stays optional). */
+export type CreateManualEntryInput = {
+  voucher_type: VoucherType;
+  entry_date: string; // YYYY-MM-DD
+  description: string;
+  lines: EditEntryLine[];
+};
+
+const createManualEntryHeaderSchema = z.object({
+  voucher_type: z.enum(VOUCHER_TYPE),
+  entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期格式錯誤 (YYYY-MM-DD)"),
+  description: z.string().trim().min(1, "摘要為必填"),
+});
+
+/**
+ * Create a brand-new DRAFT journal entry with no source document
+ * (`document_id` NULL) — the write behind the manual 新增傳票 / 期初開帳 flows.
+ * The 1:1 document UNIQUE constraint doesn't apply (it's partial on NOT NULL),
+ * so a client can have many manual entries.
+ *
+ * Same boundary as `editEntry`: the Drizzle writes bypass RLS, so
+ * `assertStaffCanAccessClient` is the role + firm gate; `firm_id` is read from
+ * the (now-authorized) client. Inputs are parsed server-side (a Server Action
+ * caller can bypass the form), the lines must balance, and the entry_date's
+ * fiscal year must be open. Returns the new entry id; the caller posts it
+ * through the normal `postJournalEntries` path (so it gets a no-gap voucher_no).
+ */
+export async function createManualEntry(
+  clientId: string,
+  input: CreateManualEntryInput,
+  options?: JournalEntryServiceOptions,
+): Promise<string> {
+  const { supabase, userId } = await resolveAuth(options);
+  await assertStaffCanAccessClient(supabase, userId, clientId);
+
+  const header = createManualEntryHeaderSchema.parse(input);
+  const parsedLines = editEntryLinesSchema.parse(input.lines);
+  if (!isLinesBalanced(parsedLines)) {
+    throw new Error("借貸不平衡，無法建立傳票");
+  }
+
+  // firm_id for the row (clients is RLS-scoped; access already asserted above).
+  const { data: client, error: clientErr } = await supabase
+    .from("clients")
+    .select("firm_id")
+    .eq("id", clientId)
+    .single();
+  if (clientErr) throw clientErr;
+  if (!client?.firm_id) throw new Error("找不到客戶");
+  const firmId = client.firm_id;
+
+  const year = Number(header.entry_date.slice(0, 4));
+
+  return db.transaction(async (tx) => {
+    // Fiscal-year close guard — reject an entry_date in a closed year (mirrors
+    // editEntry / postJournalEntries).
+    const closedRows = await tx
+      .select({ year: fiscalYearClosesTable.gregorian_year })
+      .from(fiscalYearClosesTable)
+      .where(eq(fiscalYearClosesTable.client_id, clientId));
+    if (new Set(closedRows.map((r) => r.year)).has(year)) {
+      throw new Error("該年度已關帳，無法建立傳票");
+    }
+
+    const [inserted] = await tx
+      .insert(journalEntriesTable)
+      .values({
+        firm_id: firmId,
+        client_id: clientId,
+        document_id: null,
+        voucher_type: header.voucher_type,
+        entry_date: header.entry_date,
+        description: header.description,
+        status: "draft",
+        voucher_no: null,
+        created_by: userId,
+      })
+      .returning({ id: journalEntriesTable.id });
+    const entryId = inserted.id;
+
+    await tx.insert(journalEntryLinesTable).values(
+      parsedLines.map((line, idx) => ({
+        journal_entry_id: entryId,
+        line_number: idx + 1,
+        account_code: line.account_code,
+        debit: line.debit,
+        credit: line.credit,
+        description: line.description,
+      })),
+    );
+
+    return entryId;
+  });
+}
+
 /**
  * Delete a DRAFT journal entry (lines cascade via the FK). Posted / reversed
  * entries are immutable bookkeeping records — they are unwound through reverse

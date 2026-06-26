@@ -4,6 +4,13 @@ export const VOUCHER_TYPE = ["收入", "支出", "轉帳"] as const;
 
 export const ENTRY_STATUS = ["draft", "posted", "reversed"] as const;
 
+// The fixed 摘要 that marks a client's 期初開帳 (opening) entry. We deliberately
+// avoid a dedicated schema column / clearing account: the opening entry is an
+// ordinary 轉帳 voucher (document_id NULL) and the 開帳 flow finds, guards
+// (one per client), and re-opens it by this exact description. See
+// docs/開帳流程設計討論.md.
+export const OPENING_ENTRY_DESCRIPTION = "期初開帳";
+
 export const ACCOUNT_CODE_REGEX = /^\d{4,6}$/;
 
 // Mirrors §3.4 DB CHECK: each line must be debit-only or credit-only.

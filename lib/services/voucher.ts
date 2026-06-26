@@ -22,8 +22,10 @@ import type { Database } from "@/supabase/database.types";
 import {
   editEntry,
   deleteDraftEntry,
+  createManualEntry,
   type EntryPatch,
   type EditEntryLine,
+  type CreateManualEntryInput,
 } from "@/lib/services/journal-entry";
 import { auditTrailSchema, type AuditTrail } from "@/lib/domain/audit-trail";
 import {
@@ -401,4 +403,20 @@ export async function deleteDraftEntryAction(
   entryId: string,
 ): Promise<void> {
   await deleteDraftEntry(clientId, entryId);
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// 手動建立傳票 (新增傳票 / 期初開帳)
+// ───────────────────────────────────────────────────────────────────────────
+
+// Create a hand-entered draft voucher (no source document) — backs both the plain
+// 新增傳票 and the 期初開帳 preset (which is just this with voucher_type=轉帳 and
+// description=期初開帳, set on the client). The caller redirects to the entry's
+// detail page to review and post it via the existing post path.
+export async function createManualEntryAction(
+  clientId: string,
+  input: CreateManualEntryInput,
+): Promise<{ entryId: string }> {
+  const entryId = await createManualEntry(clientId, input);
+  return { entryId };
 }

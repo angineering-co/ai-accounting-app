@@ -3,7 +3,7 @@
 import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
-import { ArrowLeft, CalendarIcon, Filter, X } from "lucide-react";
+import { ArrowLeft, CalendarIcon, Filter, Plus, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 
@@ -276,6 +276,15 @@ export default function VoucherListPage({
             </p>
           )}
         </div>
+        <Button
+          className="ml-auto"
+          onClick={() =>
+            router.push(`/firm/${firmId}/client/${clientId}/voucher/new`)
+          }
+        >
+          <Plus className="size-4 mr-1" />
+          新增傳票
+        </Button>
       </div>
 
       <Card>

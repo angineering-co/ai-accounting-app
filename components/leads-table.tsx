@@ -61,13 +61,28 @@ function formatValue(value: unknown): string {
 
 export function LeadsTable({ leads }: { leads: LeadRecord[] }) {
   const router = useRouter();
-  const [, startTransition] = useTransition();
+  const [isPending, startTransition] = useTransition();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   // Optimistic per-lead status overrides, applied instantly on change and
   // reconciled from the server once the action resolves.
   const [statusOverrides, setStatusOverrides] = useState<
     Record<string, string>
   >({});
+
+  // Once the refreshed server data matches an optimistic override, drop it so
+  // a stale override can never permanently mask a newer server status (e.g. a
+  // change another admin made). React supports this "adjust state during
+  // render" pattern — it converges because the next render finds no match.
+  const reconciledIds = leads
+    .filter((l) => l.id in statusOverrides && statusOverrides[l.id] === l.status)
+    .map((l) => l.id);
+  if (reconciledIds.length > 0) {
+    setStatusOverrides((prev) => {
+      const next = { ...prev };
+      for (const id of reconciledIds) delete next[id];
+      return next;
+    });
+  }
 
   if (leads.length === 0) {
     return (
@@ -94,8 +109,13 @@ export function LeadsTable({ leads }: { leads: LeadRecord[] }) {
     startTransition(async () => {
       const result = await updateLeadStatus(leadId, nextStatus);
       if (!result.ok) {
-        // Revert the optimistic value and tell the user.
-        setStatusOverrides((prev) => ({ ...prev, [leadId]: previousStatus }));
+        // Drop the optimistic value (falls back to the unchanged server
+        // status) and tell the user.
+        setStatusOverrides((prev) => {
+          const next = { ...prev };
+          delete next[leadId];
+          return next;
+        });
         toast.error(result.error ?? "更新失敗，請稍後再試。");
         return;
       }
@@ -178,6 +198,7 @@ export function LeadsTable({ leads }: { leads: LeadRecord[] }) {
                     onValueChange={(next) =>
                       handleStatusChange(lead.id, status, next)
                     }
+                    disabled={isPending}
                   >
                     <SelectTrigger className="h-8 w-28">
                       <SelectValue />

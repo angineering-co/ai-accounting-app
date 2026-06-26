@@ -18,7 +18,14 @@ interface PeriodCardProps {
   actionLabel?: string;
 }
 
-const SUMMARY_FIELDS: ReadonlyArray<{ label: string; key: keyof TaxFilingSummary }> = [
+// The headline figures shown on the card — the always-present required fields. The
+// optional tax-account fields (output_tax / input_tax / prior_carryover) drive the
+// period-close entry, not this summary, so the key type stays narrowed to the four
+// required keys (keeps summary[key] a `number`, not `number | undefined`).
+const SUMMARY_FIELDS: ReadonlyArray<{
+  label: string;
+  key: "total_sales" | "total_purchases" | "tax_payable" | "credit_carryover";
+}> = [
   { label: "總銷售額", key: "total_sales" },
   { label: "總進項", key: "total_purchases" },
   { label: "應繳稅額", key: "tax_payable" },

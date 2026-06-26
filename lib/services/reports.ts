@@ -813,6 +813,11 @@ export async function generateTetUReport(
       total_purchases: aggregated.input.totalPurchasesAndExpenses,
       tax_payable: field91,
       credit_carryover: field95,
+      // Tax-account balances the period-close journal entry nets (2134/1144) and
+      // the prior 留抵 (1145) it draws down — see computeVatCloseEntry.
+      output_tax: field82,
+      input_tax: field87,
+      prior_carryover: field88,
     };
 
     await saveReportSnapshot(

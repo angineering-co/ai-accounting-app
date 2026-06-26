@@ -8,6 +8,8 @@ import { isValidUBN } from "@/lib/domain/tax-id";
 // Source of truth: `lib/data/accounts.ts`.
 export const ACCT_INPUT_TAX = "1144"; // 進項稅額
 export const ACCT_OUTPUT_TAX = "2134"; // 銷項稅額
+export const ACCT_TAX_CREDIT = "1145"; // 留抵稅額
+export const ACCT_TAX_PAYABLE = "2132"; // 應付稅捐
 export const ACCT_REVENUE = "4101"; // 營業收入
 export const ACCT_OTHER_INCOME = "7044"; // 其他收入
 export const ACCT_CASH = "1111"; // 現金
@@ -445,6 +447,62 @@ export function computeDefaultEntryFromAllowance(allowance: Allowance): Computed
     description: buildAllowanceDescription(allowance, "銷項折讓"),
     lines,
   };
+}
+
+// ---------- VAT period close ----------
+
+export interface VatCloseEntryInput {
+  outputTax: number; // .TET_U Field 82 本期銷項稅額 (accrued credit balance of 2134)
+  inputTax: number; // .TET_U Field 87 得扣抵進項稅額 (accrued debit balance of 1144)
+  priorCarryover: number; // .TET_U Field 88 上期累積留抵 (debit balance carried in 1145)
+  entryDate: string; // YYYY-MM-DD (last day of the period's end month)
+  description: string;
+}
+
+// Period-close entry netting the VAT accounts at filing time. It clears the
+// period's 銷項稅額 (2134) against 進項稅額 (1144) and routes the result to either
+// 應付稅捐 (2132, tax payable) or 留抵稅額 (1145, credit carried forward), drawing
+// down any prior 留抵 along the way. Pure 轉帳 reclassification — no cash leg
+// (payment of 2132 is booked separately when it actually happens).
+//
+//   payable          = max(0, output - input - prior)        → Cr 2132
+//   ending_carryover = max(0, input + prior - output)        → 1145 target balance
+//   carryover_delta  = ending_carryover - prior              → Dr 1145 if >0, Cr if <0
+//
+// Mid-year-closure adjustments (Field 85 補徵 / Field 89 應退, 中途歇業) are not
+// modeled; refunds (Field 94) are folded into 留抵. Built from 82/87/88 so it always
+// balances. Returns null when there's nothing to book — no output/input tax this period,
+// so the only movement (if any) is the prior 留抵 rolling forward unchanged. That covers
+// both the all-zero case and a dormant client (no transactions) carrying a credit, so the
+// caller never tries to write a line-less voucher.
+export function computeVatCloseEntry(input: VatCloseEntryInput): ComputedEntry | null {
+  const { outputTax, inputTax, priorCarryover, entryDate, description } = input;
+
+  const payable = Math.max(0, outputTax - inputTax - priorCarryover);
+  const endingCarryover = Math.max(0, inputTax + priorCarryover - outputTax);
+  const carryoverDelta = endingCarryover - priorCarryover;
+
+  const lines: ComputedEntryLine[] = [];
+  if (outputTax > 0) {
+    lines.push({ account_code: ACCT_OUTPUT_TAX, debit: outputTax, credit: 0, description: null });
+  }
+  if (inputTax > 0) {
+    lines.push({ account_code: ACCT_INPUT_TAX, debit: 0, credit: inputTax, description: null });
+  }
+  if (carryoverDelta > 0) {
+    lines.push({ account_code: ACCT_TAX_CREDIT, debit: carryoverDelta, credit: 0, description: null });
+  } else if (carryoverDelta < 0) {
+    lines.push({ account_code: ACCT_TAX_CREDIT, debit: 0, credit: -carryoverDelta, description: null });
+  }
+  if (payable > 0) {
+    lines.push({ account_code: ACCT_TAX_PAYABLE, debit: 0, credit: payable, description: null });
+  }
+
+  // No lines means nothing to book (all-zero, or a pure prior-留抵 roll-forward). Return
+  // null so the caller skips the voucher rather than inserting an invalid line-less entry.
+  if (lines.length === 0) return null;
+
+  return { voucher_type: "轉帳", entry_date: entryDate, description, lines };
 }
 
 // Whether confirming this invoice should generate a journal entry. 作廢 (voided)

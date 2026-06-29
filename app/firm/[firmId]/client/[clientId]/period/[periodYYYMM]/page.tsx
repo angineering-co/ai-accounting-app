@@ -13,6 +13,7 @@ import { AllowanceTable } from "@/components/allowance-table";
 import { RangeManagement } from "@/components/range-management";
 import { ReportGeneration } from "@/components/report-generation";
 import { PeriodFilingCard } from "@/components/period-filing-card";
+import { PeriodVatPaymentCard } from "@/components/period-vat-payment-card";
 import { PeriodVoucherGeneration } from "@/components/period-voucher-generation";
 import { StatusFilterBar } from "@/components/status-filter-bar";
 import { TablePagination } from "@/components/table-pagination";
@@ -641,6 +642,11 @@ export default function PeriodDetailPage({
             onGenerated={() => mutatePeriod()}
           />
           <PeriodFilingCard period={period} onChanged={() => mutatePeriod()} />
+          <PeriodVatPaymentCard
+            periodId={period.id}
+            firmId={firmId}
+            clientId={clientId}
+          />
         </TabsContent>
       </Tabs>
 

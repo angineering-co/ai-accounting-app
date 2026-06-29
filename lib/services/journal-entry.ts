@@ -38,6 +38,7 @@ import {
   ACCOUNT_CODE_REGEX,
   isLinesBalanced,
   VOUCHER_TYPE,
+  type EntryStatus,
   type JournalEntry,
   type VoucherType,
 } from "@/lib/domain/journal-entry";
@@ -1005,6 +1006,270 @@ export async function deleteVatCloseEntry(
       and(
         eq(journalEntriesTable.client_id, period.client_id),
         eq(journalEntriesTable.system_entry_type, VAT_CLOSE_TYPE),
+        eq(journalEntriesTable.system_entry_key, period.year_month),
+        eq(journalEntriesTable.status, "draft"),
+      ),
+    );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// 營業稅繳款 (VAT payment): one system draft entry per period that clears the
+// 2132 應付稅捐 liability the close entry booked. Unlike vat_close (auto-computed
+// from the .TET_U summary and idempotently regenerated), this is user-initiated
+// when the client reports the tax paid — the date / amount / 付款方式 come from
+// the承辦人, so we never silently regenerate or remove it.
+// ───────────────────────────────────────────────────────────────────────────
+
+const VAT_PAYMENT_TYPE = "vat_payment";
+const ACCT_TAX_PAYABLE = "2132"; // 應付稅捐 (debited on payment)
+const VAT_PAYMENT_CREDIT_ACCOUNTS = ["1111", "1112"] as const; // 現金 / 銀行存款
+
+export type VatPaymentInfo = {
+  /** 本期應繳: the 2132 credit booked by the period's close entry (draft or posted), 0 if none.
+   *  Authoritative — this is what the payment clears. */
+  payable: number;
+  /** Field 91 本期應實繳稅額 from the filed .TET_U summary, for cross-check only; null if no summary.
+   *  Normally equals `payable`; a divergence means the close entry was edited or carries a 應退稅額
+   *  adjustment, so the card warns the承辦人 to look closer (it never blocks — paying `payable` is
+   *  always the correct booked amount). */
+  summaryPayable: number | null;
+  /** The existing payment entry for this period, if one has been recorded. */
+  payment: {
+    id: string;
+    status: EntryStatus;
+    amount: number;
+    entry_date: string;
+    voucher_no: string | null;
+    /** Credit account (1112/1111) recovered from the entry's credit line; null if somehow missing. */
+    account_code: string | null;
+  } | null;
+};
+
+export type RecordVatPaymentInput = {
+  entryDate: string; // YYYY-MM-DD, the actual payment date
+  amount: number;
+  creditAccountCode: (typeof VAT_PAYMENT_CREDIT_ACCOUNTS)[number];
+};
+
+const recordVatPaymentSchema = z.object({
+  entryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "繳款日期格式錯誤"),
+  amount: z.number().int().positive("金額必須大於 0"),
+  creditAccountCode: z.enum(VAT_PAYMENT_CREDIT_ACCOUNTS),
+});
+
+function vatPaymentDescription(yearMonth: string): string {
+  const p = RocPeriod.fromYYYMM(yearMonth);
+  const sm = String(p.startMonth).padStart(2, "0");
+  const em = String(p.endMonth).padStart(2, "0");
+  return `${p.rocYear}年${sm}-${em}月 營業稅繳款`;
+}
+
+/**
+ * Read what the period owes (the 2132 credit on its close entry) and the recorded
+ * payment, if any. Drives the 營業稅繳款 card: it stays hidden when there is nothing
+ * to pay (`payable === 0 && payment === null`).
+ */
+export async function getVatPaymentInfo(
+  periodId: string,
+  options?: JournalEntryServiceOptions,
+): Promise<VatPaymentInfo> {
+  const { supabase, userId } = await resolveAuth(options);
+  await assertStaffRole(supabase, userId);
+  await assertPeriodReadable(supabase, periodId);
+  const period = await loadPeriodForClose(supabase, periodId);
+
+  // payable = the 2132 應付稅捐 credit on the period's close entry. Sourcing from
+  // the actual booked line (not summary.tax_payable) guarantees the payment clears
+  // exactly what was recorded.
+  const closeLines = await db
+    .select({ credit: journalEntryLinesTable.credit })
+    .from(journalEntryLinesTable)
+    .innerJoin(
+      journalEntriesTable,
+      eq(journalEntryLinesTable.journal_entry_id, journalEntriesTable.id),
+    )
+    .where(
+      and(
+        eq(journalEntriesTable.client_id, period.client_id),
+        eq(journalEntriesTable.system_entry_type, VAT_CLOSE_TYPE),
+        eq(journalEntriesTable.system_entry_key, period.year_month),
+        eq(journalEntryLinesTable.account_code, ACCT_TAX_PAYABLE),
+      ),
+    );
+  const payable = closeLines.reduce((a, l) => a + l.credit, 0);
+  const summaryPayable = period.filing.summary?.tax_payable ?? null;
+
+  const [payEntry] = await db
+    .select({
+      id: journalEntriesTable.id,
+      status: journalEntriesTable.status,
+      entry_date: journalEntriesTable.entry_date,
+      voucher_no: journalEntriesTable.voucher_no,
+    })
+    .from(journalEntriesTable)
+    .where(
+      and(
+        eq(journalEntriesTable.client_id, period.client_id),
+        eq(journalEntriesTable.system_entry_type, VAT_PAYMENT_TYPE),
+        eq(journalEntriesTable.system_entry_key, period.year_month),
+      ),
+    )
+    .limit(1);
+
+  let payment: VatPaymentInfo["payment"] = null;
+  if (payEntry) {
+    const lines = await db
+      .select({
+        account_code: journalEntryLinesTable.account_code,
+        debit: journalEntryLinesTable.debit,
+        credit: journalEntryLinesTable.credit,
+      })
+      .from(journalEntryLinesTable)
+      .where(eq(journalEntryLinesTable.journal_entry_id, payEntry.id));
+    // The credit account (1112/1111) lives on the entry's credit line, not the header —
+    // a 繳款 entry is `借 2132 / 貸 1112|1111`, so the credit line is where 付款方式 is stored.
+    const creditLine = lines.find((l) => l.credit > 0);
+    payment = {
+      id: payEntry.id,
+      status: payEntry.status as EntryStatus,
+      amount: lines.reduce((a, l) => a + l.debit, 0),
+      entry_date: payEntry.entry_date,
+      voucher_no: payEntry.voucher_no,
+      account_code: creditLine?.account_code ?? null,
+    };
+  }
+
+  return { payable, summaryPayable, payment };
+}
+
+/**
+ * Record (or update the still-draft) 繳款 entry for a period: `借 2132 / 貸 1112|1111`.
+ * Idempotent on `(client_id, 'vat_payment', year_month)` — inserts a draft when absent,
+ * replaces a draft's header + lines on re-record, and refuses to touch a posted entry
+ * (already paid). Returns the entry id; the caller posts it through the normal path so it
+ * gets a no-gap voucher_no. Same period-scoped auth gate as the vat_close helpers.
+ */
+export async function recordVatPayment(
+  periodId: string,
+  input: RecordVatPaymentInput,
+  options?: JournalEntryServiceOptions,
+): Promise<string> {
+  const { supabase, userId } = await resolveAuth(options);
+  await assertStaffRole(supabase, userId);
+  await assertPeriodReadable(supabase, periodId);
+  const period = await loadPeriodForClose(supabase, periodId);
+
+  const { entryDate, amount, creditAccountCode } =
+    recordVatPaymentSchema.parse(input);
+  const description = vatPaymentDescription(period.year_month);
+  const year = Number(entryDate.slice(0, 4));
+
+  return db.transaction(async (tx) => {
+    // Fiscal-year close guard — reject a payment dated into a closed year
+    // (mirrors createManualEntry / postJournalEntries).
+    const closedRows = await tx
+      .select({ year: fiscalYearClosesTable.gregorian_year })
+      .from(fiscalYearClosesTable)
+      .where(eq(fiscalYearClosesTable.client_id, period.client_id));
+    if (new Set(closedRows.map((r) => r.year)).has(year)) {
+      throw new Error("該年度已關帳，無法記錄繳款");
+    }
+
+    const [existing] = await tx
+      .select({
+        id: journalEntriesTable.id,
+        status: journalEntriesTable.status,
+      })
+      .from(journalEntriesTable)
+      .where(
+        and(
+          eq(journalEntriesTable.client_id, period.client_id),
+          eq(journalEntriesTable.system_entry_type, VAT_PAYMENT_TYPE),
+          eq(journalEntriesTable.system_entry_key, period.year_month),
+        ),
+      )
+      .for("update")
+      .limit(1);
+
+    let entryId: string;
+    if (existing) {
+      if (existing.status !== "draft") {
+        throw new Error("本期繳款分錄已過帳，無法再次記錄");
+      }
+      entryId = existing.id;
+      await tx
+        .update(journalEntriesTable)
+        .set({
+          voucher_type: "支出",
+          entry_date: entryDate,
+          description,
+          updated_at: sql`now()`,
+        })
+        .where(eq(journalEntriesTable.id, entryId));
+      await tx
+        .delete(journalEntryLinesTable)
+        .where(eq(journalEntryLinesTable.journal_entry_id, entryId));
+    } else {
+      const [inserted] = await tx
+        .insert(journalEntriesTable)
+        .values({
+          firm_id: period.firm_id,
+          client_id: period.client_id,
+          document_id: null,
+          system_entry_type: VAT_PAYMENT_TYPE,
+          system_entry_key: period.year_month,
+          voucher_type: "支出",
+          entry_date: entryDate,
+          description,
+          status: "draft",
+          voucher_no: null,
+          created_by: userId,
+        })
+        .returning({ id: journalEntriesTable.id });
+      entryId = inserted.id;
+    }
+
+    await tx.insert(journalEntryLinesTable).values([
+      {
+        journal_entry_id: entryId,
+        line_number: 1,
+        account_code: ACCT_TAX_PAYABLE,
+        debit: amount,
+        credit: 0,
+        description: null,
+      },
+      {
+        journal_entry_id: entryId,
+        line_number: 2,
+        account_code: creditAccountCode,
+        debit: 0,
+        credit: amount,
+        description: null,
+      },
+    ]);
+
+    return entryId;
+  });
+}
+
+/**
+ * Remove the still-draft 繳款 entry (mistaken record, before posting). A posted entry
+ * is an immutable numbered voucher — left intact, unwound via reverse if needed.
+ */
+export async function deleteVatPaymentDraft(
+  periodId: string,
+  options?: JournalEntryServiceOptions,
+): Promise<void> {
+  const { supabase, userId } = await resolveAuth(options);
+  await assertStaffRole(supabase, userId);
+  await assertPeriodReadable(supabase, periodId);
+  const period = await loadPeriodForClose(supabase, periodId);
+  await db
+    .delete(journalEntriesTable)
+    .where(
+      and(
+        eq(journalEntriesTable.client_id, period.client_id),
+        eq(journalEntriesTable.system_entry_type, VAT_PAYMENT_TYPE),
         eq(journalEntriesTable.system_entry_key, period.year_month),
         eq(journalEntriesTable.status, "draft"),
       ),

@@ -132,7 +132,30 @@ describe.skipIf(!hasDbEnv)("VAT payment entry — 營業稅繳款", () => {
     const { id } = await createPayablePeriod(20_000);
     const info = await getVatPaymentInfo(id, opts());
     expect(info.payable).toBe(20_000);
+    expect(info.summaryPayable).toBe(20_000); // agrees with Field 91, no mismatch
     expect(info.payment).toBeNull();
+  });
+
+  it("surfaces summaryPayable so the card can flag a booked-vs-filed divergence", async () => {
+    const { id, yearMonth } = await createPayablePeriod(20_000);
+    // Simulate an edited close entry: bump the 2132 credit so the booked liability (21,000)
+    // no longer matches Field 91 (20,000) still in the summary.
+    const close = await supabase
+      .from("journal_entries")
+      .select("id")
+      .eq("client_id", fixture.clientId)
+      .eq("system_entry_type", "vat_close")
+      .eq("system_entry_key", yearMonth)
+      .single();
+    await supabase
+      .from("journal_entry_lines")
+      .update({ credit: 21_000 })
+      .eq("journal_entry_id", close.data!.id)
+      .eq("account_code", ACCT_TAX_PAYABLE);
+
+    const info = await getVatPaymentInfo(id, opts());
+    expect(info.payable).toBe(21_000); // booked is authoritative
+    expect(info.summaryPayable).toBe(20_000); // ≠ payable → card warns
   });
 
   it("records a balanced draft 借 2132 / 貸 1112", async () => {

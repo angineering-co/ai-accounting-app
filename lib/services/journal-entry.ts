@@ -1025,8 +1025,14 @@ const ACCT_TAX_PAYABLE = "2132"; // 應付稅捐 (debited on payment)
 const VAT_PAYMENT_CREDIT_ACCOUNTS = ["1111", "1112"] as const; // 現金 / 銀行存款
 
 export type VatPaymentInfo = {
-  /** 本期應繳: the 2132 credit booked by the period's close entry (draft or posted), 0 if none. */
+  /** 本期應繳: the 2132 credit booked by the period's close entry (draft or posted), 0 if none.
+   *  Authoritative — this is what the payment clears. */
   payable: number;
+  /** Field 91 本期應實繳稅額 from the filed .TET_U summary, for cross-check only; null if no summary.
+   *  Normally equals `payable`; a divergence means the close entry was edited or carries a 應退稅額
+   *  adjustment, so the card warns the承辦人 to look closer (it never blocks — paying `payable` is
+   *  always the correct booked amount). */
+  summaryPayable: number | null;
   /** The existing payment entry for this period, if one has been recorded. */
   payment: {
     id: string;
@@ -1034,7 +1040,8 @@ export type VatPaymentInfo = {
     amount: number;
     entry_date: string;
     voucher_no: string | null;
-    account_code: string;
+    /** Credit account (1112/1111) recovered from the entry's credit line; null if somehow missing. */
+    account_code: string | null;
   } | null;
 };
 
@@ -1090,6 +1097,7 @@ export async function getVatPaymentInfo(
       ),
     );
   const payable = closeLines.reduce((a, l) => a + l.credit, 0);
+  const summaryPayable = period.filing.summary?.tax_payable ?? null;
 
   const [payEntry] = await db
     .select({
@@ -1118,6 +1126,8 @@ export async function getVatPaymentInfo(
       })
       .from(journalEntryLinesTable)
       .where(eq(journalEntryLinesTable.journal_entry_id, payEntry.id));
+    // The credit account (1112/1111) lives on the entry's credit line, not the header —
+    // a 繳款 entry is `借 2132 / 貸 1112|1111`, so the credit line is where 付款方式 is stored.
     const creditLine = lines.find((l) => l.credit > 0);
     payment = {
       id: payEntry.id,
@@ -1125,11 +1135,11 @@ export async function getVatPaymentInfo(
       amount: lines.reduce((a, l) => a + l.debit, 0),
       entry_date: payEntry.entry_date,
       voucher_no: payEntry.voucher_no,
-      account_code: creditLine?.account_code ?? "",
+      account_code: creditLine?.account_code ?? null,
     };
   }
 
-  return { payable, payment };
+  return { payable, summaryPayable, payment };
 }
 
 /**

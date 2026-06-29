@@ -5,6 +5,7 @@ import Link from "next/link";
 import useSWR from "swr";
 import { format } from "date-fns";
 import {
+  AlertTriangle,
   CalendarIcon,
   CheckCircle2,
   Loader2,
@@ -88,11 +89,15 @@ export function PeriodVatPaymentCard({
   // Nothing to render until loaded; hidden entirely for 留抵 / dormant periods
   // (nothing owed and nothing recorded).
   if (isLoading || !data) return null;
-  const { payable, payment } = data;
+  const { payable, summaryPayable, payment } = data;
   if (payable === 0 && !payment) return null;
 
   const isPosted = payment?.status === "posted";
   const isDraft = payment?.status === "draft";
+  // Booked 2132 vs the filed .TET_U Field 91 — a divergence (edited close entry / 應退稅額)
+  // is worth a look before paying, but never blocks: `payable` is the real booked liability.
+  const payableMismatch =
+    summaryPayable != null && summaryPayable !== payable;
 
   const openDialog = () => {
     setEntryDate(format(new Date(), "yyyy-MM-dd"));
@@ -163,6 +168,19 @@ export function PeriodVatPaymentCard({
           。客戶完成繳款後，於此記錄繳款分錄（借 2132 應付稅捐 / 貸 銀行存款或現金），沖銷結算分錄所掛的應付稅捐。
         </p>
 
+        {payableMismatch && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-base text-amber-700">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              帳上應付稅捐{" "}
+              <span className="font-mono">{formatNTD(payable)}</span>{" "}
+              與申報書應實繳{" "}
+              <span className="font-mono">{formatNTD(summaryPayable!)}</span>{" "}
+              不一致，可能結算分錄被調整或有應退稅額，請先確認金額後再記錄繳款。
+            </span>
+          </div>
+        )}
+
         {payment && (
           <div className="space-y-1 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-base text-slate-700">
             <div className="flex justify-between">
@@ -175,7 +193,9 @@ export function PeriodVatPaymentCard({
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">付款方式</span>
-              <span className="text-slate-900">{accountLabel(payment.account_code)}</span>
+              <span className="text-slate-900">
+                {payment.account_code ? accountLabel(payment.account_code) : "—"}
+              </span>
             </div>
           </div>
         )}
@@ -242,7 +262,9 @@ export function PeriodVatPaymentCard({
                 <PopoverContent className="w-auto p-0" align="start">
                   <Calendar
                     mode="single"
-                    selected={entryDate ? new Date(entryDate) : undefined}
+                    selected={
+                      entryDate ? new Date(entryDate + "T00:00:00") : undefined
+                    }
                     onSelect={(d) => d && setEntryDate(format(d, "yyyy-MM-dd"))}
                     initialFocus
                   />
@@ -256,6 +278,7 @@ export function PeriodVatPaymentCard({
                 id="vat-payment-amount"
                 type="number"
                 min={1}
+                step={1}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 className="text-right font-mono"

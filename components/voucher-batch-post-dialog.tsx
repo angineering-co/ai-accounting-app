@@ -106,17 +106,35 @@ export function VoucherBatchPostDialog({
     try {
       const ids = snapshot.map((e) => e.id);
       const res: PostResult[] = [];
+      // Post the chunks sequentially. A chunk that throws (network drop / db timeout)
+      // aborts the remaining chunks, but the ones that already committed must still be
+      // honoured — surface them in the results view and report them up so their rows
+      // leave the draft selection. The un-sent entries simply stay selected for retry.
+      let abortError: string | null = null;
       for (let i = 0; i < ids.length; i += POST_CHUNK_SIZE) {
-        const chunk = await postJournalEntriesAction(
-          clientId,
-          ids.slice(i, i + POST_CHUNK_SIZE),
-        );
-        res.push(...chunk);
+        try {
+          const chunk = await postJournalEntriesAction(
+            clientId,
+            ids.slice(i, i + POST_CHUNK_SIZE),
+          );
+          res.push(...chunk);
+        } catch (err) {
+          abortError = err instanceof Error ? err.message : String(err);
+          break;
+        }
       }
+      // Failed before anything committed — treat as a clean failure (roll the snapshot
+      // back via the outer catch, no half-rendered results view).
+      if (abortError && res.length === 0) throw new Error(abortError);
+
       setResults(res);
       const successCount = res.filter((r) => !r.error).length;
       const failCount = res.length - successCount;
-      if (failCount === 0) {
+      if (abortError) {
+        toast.error(
+          `已過帳 ${successCount} 筆後中斷：${abortError}（其餘尚未送出，請重試）`,
+        );
+      } else if (failCount === 0) {
         toast.success(`成功過帳 ${successCount} 筆`);
       } else {
         toast.warning(`成功 ${successCount} 筆、失敗 ${failCount} 筆`);

@@ -422,33 +422,6 @@ export const profiles = pgTable("profiles", {
 	check("profiles_role_check", sql`role = ANY (ARRAY['admin'::text, 'staff'::text, 'super_admin'::text, 'client'::text])`),
 ]);
 
-export const clients = pgTable("clients", {
-	id: uuid().defaultRandom().primaryKey().notNull(),
-	firm_id: uuid(),
-	name: text().notNull(),
-	contact_person: text(),
-	tax_id: text().notNull(),
-	tax_payer_id: text().notNull(),
-	industry: text(),
-	created_at: timestamp({ withTimezone: true, mode: 'string' }).defaultNow(),
-	address: text(),
-	phone: text(),
-	email: text(),
-	responsible_person: jsonb(),
-	shareholders: jsonb(),
-	platform_credentials: jsonb(),
-	landlord: jsonb(),
-	invoice_purchasing: jsonb(),
-	mailing_address: text(),
-}, (table) => [
-	foreignKey({
-			columns: [table.firm_id],
-			foreignColumns: [firms.id],
-			name: "clients_firm_id_fkey"
-		}).onDelete("cascade"),
-	pgPolicy("Users can manage clients in their firm", { as: "permissive", for: "all", to: ["public"], using: sql`(((firm_id = get_auth_user_firm_id()) AND ((get_auth_user_client_id() IS NULL) OR (id = get_auth_user_client_id()))) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`, withCheck: sql`(((firm_id = get_auth_user_firm_id()) AND ((get_auth_user_client_id() IS NULL) OR (id = get_auth_user_client_id()))) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`  }),
-]);
-
 export const fiscal_year_closes = pgTable("fiscal_year_closes", {
 	id: uuid().defaultRandom().primaryKey().notNull(),
 	firm_id: uuid().notNull(),
@@ -504,6 +477,34 @@ export const audit_trails = pgTable("audit_trails", {
 	pgPolicy("Users can insert audit_trails in their firm", { as: "permissive", for: "insert", to: ["public"], withCheck: sql`((firm_id = get_auth_user_firm_id()) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`  }),
 	pgPolicy("Users can view audit_trails in their firm", { as: "permissive", for: "select", to: ["public"] }),
 	check("audit_trails_action_check", sql`action = ANY (ARRAY['created'::text, 'updated'::text, 'deleted'::text, 'posted'::text, 'reversed'::text])`),
+]);
+
+export const clients = pgTable("clients", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	firm_id: uuid(),
+	name: text().notNull(),
+	contact_person: text(),
+	tax_id: text().notNull(),
+	tax_payer_id: text().notNull(),
+	industry: text(),
+	created_at: timestamp({ withTimezone: true, mode: 'string' }).defaultNow(),
+	address: text(),
+	phone: text(),
+	email: text(),
+	responsible_person: jsonb(),
+	shareholders: jsonb(),
+	platform_credentials: jsonb(),
+	landlord: jsonb(),
+	invoice_purchasing: jsonb(),
+	mailing_address: text(),
+	tax_filing_config: jsonb(),
+}, (table) => [
+	foreignKey({
+			columns: [table.firm_id],
+			foreignColumns: [firms.id],
+			name: "clients_firm_id_fkey"
+		}).onDelete("cascade"),
+	pgPolicy("Users can manage clients in their firm", { as: "permissive", for: "all", to: ["public"], using: sql`(((firm_id = get_auth_user_firm_id()) AND ((get_auth_user_client_id() IS NULL) OR (id = get_auth_user_client_id()))) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`, withCheck: sql`(((firm_id = get_auth_user_firm_id()) AND ((get_auth_user_client_id() IS NULL) OR (id = get_auth_user_client_id()))) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`  }),
 ]);
 
 export const voucher_sequences = pgTable("voucher_sequences", {

@@ -1,6 +1,7 @@
 "use client";
 
 import { CompanyBasicsSection } from "./company-basics-section";
+import { FilingConfigSection } from "./filing-config-section";
 import { PeopleSection } from "./people-section";
 import { CredentialsSection } from "./credentials-section";
 import { LandlordSection } from "./landlord-section";
@@ -28,6 +29,13 @@ export function ClientSettingsSections({
         isPortal={isPortal}
         onSaveSuccess={onSaveSuccess}
       />
+      {!isPortal && (
+        <FilingConfigSection
+          clientId={clientId}
+          client={client}
+          onSaveSuccess={onSaveSuccess}
+        />
+      )}
       <PeopleSection
         clientId={clientId}
         client={client}

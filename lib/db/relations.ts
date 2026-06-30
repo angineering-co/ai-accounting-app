@@ -23,11 +23,11 @@ export const clientsRelations = relations(clients, ({one, many}) => ({
 	invoice_ranges: many(invoice_ranges),
 	tax_filing_periods: many(tax_filing_periods),
 	profiles: many(profiles),
+	fiscal_year_closes: many(fiscal_year_closes),
 	firm: one(firms, {
 		fields: [clients.firm_id],
 		references: [firms.id]
 	}),
-	fiscal_year_closes: many(fiscal_year_closes),
 	voucher_sequences: many(voucher_sequences),
 }));
 
@@ -55,9 +55,9 @@ export const firmsRelations = relations(firms, ({many}) => ({
 	invoice_ranges: many(invoice_ranges),
 	tax_filing_periods: many(tax_filing_periods),
 	profiles: many(profiles),
-	clients: many(clients),
 	fiscal_year_closes: many(fiscal_year_closes),
 	audit_trails: many(audit_trails),
+	clients: many(clients),
 }));
 
 export const documentsRelations = relations(documents, ({one, many}) => ({

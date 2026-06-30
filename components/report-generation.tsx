@@ -39,6 +39,7 @@ import {
   type Client,
   tetUConfigSchema,
   type TetUConfig,
+  COUNTY_CITY_NAMES,
 } from "@/lib/domain/models";
 import { generateTxtReport, generateTetUReport } from "@/lib/services/reports";
 import { getFirmSettings } from "@/lib/services/firm";
@@ -78,9 +79,12 @@ export function ReportGeneration({
       consolidatedDeclarationCode: "0",
       declarationCode: "",
       taxPayerId: client.tax_payer_id || "",
-      declarationType: "1",
-      countyCity: "臺北市",
-      declarationMethod: "1",
+      // 客戶層級預設值，僅在掛載時讀取一次。申報書設定與本期別頁是不同路由，
+      // 修改設定後再進來會重新掛載並帶到新值；故不另加 useEffect 同步 —
+      // 否則 SWR 重新驗證時會覆蓋使用者在對話框內已改的選擇。
+      declarationType: client.tax_filing_config?.declaration_type ?? "1",
+      countyCity: client.tax_filing_config?.county_city ?? "臺北市",
+      declarationMethod: client.tax_filing_config?.declaration_method ?? "1",
       declarerId: "",
       declarerName: "",
       declarerPhoneAreaCode: "",
@@ -323,12 +327,7 @@ export function ReportGeneration({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {[
-                            "臺北市", "新北市", "桃園市", "臺中市", "臺南市", "高雄市",
-                            "基隆市", "新竹市", "嘉義市", "新竹縣", "苗栗縣", "彰化縣",
-                            "南投縣", "雲林縣", "嘉義縣", "屏東縣", "宜蘭縣", "花蓮縣",
-                            "臺東縣", "澎湖縣", "金門縣", "連江縣"
-                          ].map((city) => (
+                          {COUNTY_CITY_NAMES.map((city) => (
                             <SelectItem key={city} value={city}>
                               {city}
                             </SelectItem>

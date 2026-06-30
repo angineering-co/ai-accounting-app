@@ -23,16 +23,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { updateClientSettings } from "@/lib/services/client-settings";
-import { COUNTY_CITY_NAMES, type Client } from "@/lib/domain/models";
+import {
+  COUNTY_CITY_NAMES,
+  taxFilingConfigSchema,
+  type Client,
+} from "@/lib/domain/models";
 
 const formSchema = z.object({
-  tax_filing_config: z.object({
-    declaration_type: z.enum(["1", "2"]),
-    county_city: z.string().min(1, "請選擇縣市別"),
-  }),
+  tax_filing_config: taxFilingConfigSchema,
 });
 
-type FormValues = z.infer<typeof formSchema>;
+// taxFilingConfigSchema 內含 .default()，故 input/output 型別不同：
+// 表單欄位用 input（欄位可為 undefined），送出後 onSubmit 收到 output。
+type FormInput = z.input<typeof formSchema>;
+type FormValues = z.output<typeof formSchema>;
 
 interface FilingConfigSectionProps {
   clientId: string;
@@ -45,7 +49,7 @@ export function FilingConfigSection({
   client,
   onSaveSuccess,
 }: FilingConfigSectionProps) {
-  const form = useForm<FormValues>({
+  const form = useForm<FormInput, unknown, FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       tax_filing_config: {
@@ -126,7 +130,12 @@ export function FilingConfigSection({
           <CardFooter>
             <Button
               type="submit"
-              disabled={form.formState.isSubmitting || !form.formState.isDirty}
+              // 尚未存過設定 (config 為 null) 時，即使表單未變動也允許按下，
+              // 讓事務所可直接把預設值落地存檔。
+              disabled={
+                form.formState.isSubmitting ||
+                (!form.formState.isDirty && client.tax_filing_config != null)
+              }
             >
               {form.formState.isSubmitting && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -79,6 +79,9 @@ export function ReportGeneration({
       consolidatedDeclarationCode: "0",
       declarationCode: "",
       taxPayerId: client.tax_payer_id || "",
+      // 客戶層級預設值，僅在掛載時讀取一次。申報書設定與本期別頁是不同路由，
+      // 修改設定後再進來會重新掛載並帶到新值；故不另加 useEffect 同步 —
+      // 否則 SWR 重新驗證時會覆蓋使用者在對話框內已改的選擇。
       declarationType: client.tax_filing_config?.declaration_type ?? "1",
       countyCity: client.tax_filing_config?.county_city ?? "臺北市",
       declarationMethod: "1",

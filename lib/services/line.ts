@@ -310,6 +310,49 @@ export async function getClientLineBindingCount(
 }
 
 // ---------------------------------------------------------------------------
+// Assignable LINE accounts (for the dashboard TODO widget)
+// ---------------------------------------------------------------------------
+
+export type AssignableLineAccount = {
+  id: string;
+  display_name: string | null;
+  client_id: string | null;
+  client_name: string | null;
+};
+
+// Lists real LINE accounts (those with a line_user_id — excludes pending
+// binding-code placeholder rows) for assigning tasks. line_accounts has no
+// firm_id and its RLS is closed to the anon/auth roles, so this reads via the
+// admin client; SnapBooks is effectively single-firm so all real accounts are
+// listed. The client name is embedded for context (admin client bypasses RLS).
+export async function listAssignableLineAccounts(): Promise<
+  AssignableLineAccount[]
+> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("line_accounts")
+    .select("id, display_name, client_id, client:clients(name)")
+    .not("line_user_id", "is", null)
+    .order("display_name", { nullsFirst: false });
+
+  if (error) {
+    console.error("Failed to list LINE accounts:", error);
+    return [];
+  }
+
+  return (data ?? []).map((row) => {
+    const client = row.client as { name: string } | { name: string }[] | null;
+    const clientName = Array.isArray(client) ? (client[0]?.name ?? null) : (client?.name ?? null);
+    return {
+      id: row.id,
+      display_name: row.display_name,
+      client_id: row.client_id,
+      client_name: clientName,
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Event handling
 // ---------------------------------------------------------------------------
 

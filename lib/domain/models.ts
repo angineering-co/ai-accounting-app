@@ -149,6 +149,42 @@ export type UpdateClientInput = z.infer<typeof updateClientSchema>;
 export type CreateClientInput = z.infer<typeof createClientSchema>;
 export type UpdateClientSettingsInput = z.infer<typeof updateClientSettingsSchema>;
 
+// ===== TODO Schemas =====
+// Tasks shown on the firm dashboard. Validation lives here (not in the DB):
+// `status` is constrained to the enum below and every task must target a LINE
+// account (`line_account_id` is required, not nullable, on create/update).
+export const TODO_STATUSES = ["open", "done"] as const;
+export type TodoStatus = (typeof TODO_STATUSES)[number];
+
+export const todoSchema = z.object({
+  id: z.string().uuid(),
+  firm_id: z.string().uuid(),
+  title: z.string().min(1, "標題為必填"),
+  description: z.string().nullable().optional(),
+  line_account_id: z.string().uuid({ message: "請指定一個 LINE 帳號" }),
+  due_date: z.string().nullable().optional(), // YYYY-MM-DD
+  status: z.enum(TODO_STATUSES),
+});
+
+export const createTodoSchema = todoSchema.pick({
+  firm_id: true,
+  title: true,
+  description: true,
+  line_account_id: true,
+  due_date: true,
+});
+
+export const updateTodoSchema = todoSchema.pick({
+  title: true,
+  description: true,
+  line_account_id: true,
+  due_date: true,
+});
+
+export type Todo = z.infer<typeof todoSchema>;
+export type CreateTodoInput = z.infer<typeof createTodoSchema>;
+export type UpdateTodoInput = z.infer<typeof updateTodoSchema>;
+
 // ===== ECPay 收款連結 Schemas =====
 
 // 一次性收款連結三種用途：訂金（簽約前可無 client）、訂閱期費、加購。

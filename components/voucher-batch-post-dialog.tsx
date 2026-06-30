@@ -27,6 +27,12 @@ import { cn, formatNTD } from "@/lib/utils";
 import { postJournalEntriesAction } from "@/lib/services/voucher-posting";
 import type { PostResult } from "@/lib/services/journal-entry";
 
+// The server action rejects batches over MAX_POST_BATCH (1000). "全部過帳" can hand us
+// every draft a client has, so chunk well under that cap and post the chunks
+// sequentially — each call locks the voucher_sequences row, so running them in
+// parallel would just contend on that lock.
+const POST_CHUNK_SIZE = 500;
+
 // The minimal shape the dialog needs to render + post an entry. Both the list's
 // `VoucherListRow` and the single entry the detail page builds satisfy it (the
 // debit/credit are per-entry line sums, so balance can be shown pre-post).
@@ -76,6 +82,21 @@ export function VoucherBatchPostDialog({
   );
 
   const balancedCount = summaries.filter((s) => s.balanced).length;
+  // Only the rows that need the reviewer's eyes get listed; the rest collapse into
+  // a count. Pre-post that's the unbalanced drafts (which will be skipped); post-run
+  // it's the entries the server rejected, paired back to their snapshot for context.
+  const unbalanced = useMemo(
+    () => summaries.filter((s) => !s.balanced),
+    [summaries],
+  );
+  const failed = useMemo(() => {
+    if (!results) return [];
+    const byId = new Map((posted ?? []).map((e) => [e.id, e]));
+    return results
+      .filter((r) => r.error)
+      .map((r) => ({ result: r, entry: byId.get(r.entry_id) ?? null }));
+  }, [results, posted]);
+  const successCount = results ? results.length - failed.length : 0;
 
   const handleSubmit = async () => {
     if (!reviewed || entries.length === 0 || submitting) return;
@@ -83,10 +104,15 @@ export function VoucherBatchPostDialog({
     const snapshot = entries;
     setPosted(snapshot);
     try {
-      const res = await postJournalEntriesAction(
-        clientId,
-        snapshot.map((e) => e.id),
-      );
+      const ids = snapshot.map((e) => e.id);
+      const res: PostResult[] = [];
+      for (let i = 0; i < ids.length; i += POST_CHUNK_SIZE) {
+        const chunk = await postJournalEntriesAction(
+          clientId,
+          ids.slice(i, i + POST_CHUNK_SIZE),
+        );
+        res.push(...chunk);
+      }
       setResults(res);
       const successCount = res.filter((r) => !r.error).length;
       const failCount = res.length - successCount;
@@ -129,81 +155,146 @@ export function VoucherBatchPostDialog({
           <DialogTitle>批次過帳</DialogTitle>
           <DialogDescription className="text-base">
             {results
-              ? "過帳結果如下，請逐筆確認。"
-              : `將為以下 ${entries.length} 筆草稿賦予傳票編號並進入帳本。過帳後不可直接刪除，當年度未關帳前可更新（需填修改原因）；跨年度後不可改。`}
+              ? "過帳結果如下。"
+              : `將為這 ${entries.length} 筆草稿賦予傳票編號並進入帳本。過帳後不可直接刪除，當年度未關帳前可更新（需填修改原因）；跨年度後不可改。`}
           </DialogDescription>
         </DialogHeader>
 
+        {/* Pre-post: a one-line tally, then only the unbalanced drafts spelled out
+            so the reviewer can go fix them — balanced rows stay collapsed. */}
         {!results && entries.length > 0 && (
-          <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-base text-amber-900 flex gap-2 items-start">
-            <AlertCircle className="size-5 shrink-0 mt-0.5" />
+          <div
+            className={cn(
+              "rounded-md border p-3 text-base flex gap-2 items-start",
+              unbalanced.length > 0
+                ? "border-amber-300 bg-amber-50 text-amber-900"
+                : "border-emerald-300 bg-emerald-50 text-emerald-900",
+            )}
+          >
+            {unbalanced.length > 0 ? (
+              <AlertCircle className="size-5 shrink-0 mt-0.5" />
+            ) : (
+              <CheckCircle2 className="size-5 shrink-0 mt-0.5" />
+            )}
             <div>
-              其中 <strong>{balancedCount}</strong> 筆借貸平衡可成功過帳；
-              <strong>{entries.length - balancedCount}</strong> 筆不平衡將被略過（不消耗傳票編號）。
+              共 <strong>{entries.length}</strong> 筆草稿，
+              <strong>{balancedCount}</strong> 筆借貸平衡可過帳
+              {unbalanced.length > 0 && (
+                <>
+                  ，<strong>{unbalanced.length}</strong>{" "}
+                  筆不平衡將被略過（不消耗傳票編號）
+                </>
+              )}
+              。
             </div>
           </div>
         )}
 
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>日期</TableHead>
-                <TableHead>類型</TableHead>
-                <TableHead>摘要</TableHead>
-                <TableHead className="text-right">借 / 貸</TableHead>
-                <TableHead className="w-32">結果</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {summaries.map((s) => {
-                const r = results?.find((x) => x.entry_id === s.entry.id);
-                return (
-                  <TableRow key={s.entry.id}>
+        {!results && unbalanced.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-base font-medium text-destructive">
+              以下 {unbalanced.length} 筆借貸不平衡，將被略過：
+            </p>
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>日期</TableHead>
+                    <TableHead>類型</TableHead>
+                    <TableHead>摘要</TableHead>
+                    <TableHead className="text-right">借 / 貸</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {unbalanced.map((s) => (
+                    <TableRow key={s.entry.id}>
+                      <TableCell className="font-mono text-base">
+                        {s.entry.entry_date}
+                      </TableCell>
+                      <TableCell className="text-base">
+                        {s.entry.voucher_type}
+                      </TableCell>
+                      <TableCell className="text-base max-w-[360px]">
+                        <div className="line-clamp-2">
+                          {s.entry.description ?? "—"}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-base">
+                        {formatNTD(s.entry.debit)} / {formatNTD(s.entry.credit)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        )}
+
+        {/* Post-run: same shape — a tally, then only the failures listed. The
+            successfully-posted entries collapse into the success count. */}
+        {results && (
+          <div
+            className={cn(
+              "rounded-md border p-3 text-base flex gap-2 items-start",
+              failed.length > 0
+                ? "border-amber-300 bg-amber-50 text-amber-900"
+                : "border-emerald-300 bg-emerald-50 text-emerald-900",
+            )}
+          >
+            {failed.length > 0 ? (
+              <AlertCircle className="size-5 shrink-0 mt-0.5" />
+            ) : (
+              <CheckCircle2 className="size-5 shrink-0 mt-0.5" />
+            )}
+            <div>
+              成功過帳 <strong>{successCount}</strong> 筆
+              {failed.length > 0 && (
+                <>
+                  ，<strong>{failed.length}</strong> 筆失敗（如下，未消耗傳票編號）
+                </>
+              )}
+              。
+            </div>
+          </div>
+        )}
+
+        {results && failed.length > 0 && (
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>日期</TableHead>
+                  <TableHead>類型</TableHead>
+                  <TableHead>摘要</TableHead>
+                  <TableHead className="w-40">原因</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {failed.map(({ result, entry }) => (
+                  <TableRow key={result.entry_id}>
                     <TableCell className="font-mono text-base">
-                      {s.entry.entry_date}
+                      {entry?.entry_date ?? "—"}
                     </TableCell>
                     <TableCell className="text-base">
-                      {s.entry.voucher_type}
+                      {entry?.voucher_type ?? "—"}
                     </TableCell>
                     <TableCell className="text-base max-w-[360px]">
                       <div className="line-clamp-2">
-                        {s.entry.description ?? "—"}
+                        {entry?.description ?? "—"}
                       </div>
                     </TableCell>
-                    <TableCell className="text-right font-mono text-base">
-                      {formatNTD(s.entry.debit)} / {formatNTD(s.entry.credit)}
-                    </TableCell>
                     <TableCell>
-                      {r ? (
-                        r.error ? (
-                          <span className="inline-flex items-center gap-1 text-destructive text-base">
-                            <XCircle className="size-4" />
-                            {r.error}
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-emerald-700 text-base font-mono">
-                            <CheckCircle2 className="size-4" />
-                            {r.voucher_no}
-                          </span>
-                        )
-                      ) : (
-                        <span
-                          className={cn(
-                            "text-sm",
-                            s.balanced ? "text-emerald-700" : "text-destructive",
-                          )}
-                        >
-                          {s.balanced ? "可過帳" : "不平衡"}
-                        </span>
-                      )}
+                      <span className="inline-flex items-center gap-1 text-destructive text-base">
+                        <XCircle className="size-4 shrink-0" />
+                        {result.error}
+                      </span>
                     </TableCell>
                   </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
 
         {!results && (
           <label className="flex items-start gap-2 cursor-pointer">

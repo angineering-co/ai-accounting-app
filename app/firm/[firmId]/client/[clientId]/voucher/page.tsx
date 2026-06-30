@@ -130,6 +130,14 @@ export default function VoucherListPage({
   const [page, setPage] = useState(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [postOpen, setPostOpen] = useState(false);
+  // Frozen at the moment a post dialog opens, so the dialog posts exactly what the
+  // clicked button promised even if the live selection / filters shift underneath.
+  const [postEntries, setPostEntries] = useState<VoucherListRow[]>([]);
+
+  const openPost = (entries: VoucherListRow[]) => {
+    setPostEntries(entries);
+    setPostOpen(true);
+  };
 
   // Apply the ?period= range to the date filters whenever the param changes — including
   // soft navigations that keep this page mounted (arriving from 查看草稿傳票, switching
@@ -202,6 +210,14 @@ export default function VoucherListPage({
   const selectedDraftEntries = useMemo(
     () => filtered.filter((r) => r.status === "draft" && selectedIds.has(r.id)),
     [filtered, selectedIds],
+  );
+
+  // Every draft in the current filtered view (all pages) — the source for 全部過帳,
+  // so "post all" means "post all the drafts you can currently see", honouring the
+  // active status/date/period/keyword filters rather than reaching past them.
+  const allDraftEntries = useMemo(
+    () => filtered.filter((r) => r.status === "draft"),
+    [filtered],
   );
 
   // Header select-all toggles only the draft rows on the current page.
@@ -441,12 +457,20 @@ export default function VoucherListPage({
                 清除篩選
               </Button>
               <Button
-                onClick={() => setPostOpen(true)}
+                variant="outline"
+                onClick={() => openPost(selectedDraftEntries)}
                 disabled={selectedDraftEntries.length === 0}
               >
-                批次過帳
+                過帳所選
                 {selectedDraftEntries.length > 0 &&
-                  `（已選 ${selectedDraftEntries.length} 筆）`}
+                  `（${selectedDraftEntries.length} 筆）`}
+              </Button>
+              <Button
+                onClick={() => openPost(allDraftEntries)}
+                disabled={allDraftEntries.length === 0}
+              >
+                全部過帳
+                {allDraftEntries.length > 0 && `（草稿 ${allDraftEntries.length} 筆）`}
               </Button>
             </div>
           </div>
@@ -557,7 +581,7 @@ export default function VoucherListPage({
 
       <VoucherBatchPostDialog
         clientId={clientId}
-        entries={selectedDraftEntries}
+        entries={postEntries}
         open={postOpen}
         onOpenChange={setPostOpen}
         onPosted={(results) => {

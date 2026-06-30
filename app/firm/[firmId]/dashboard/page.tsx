@@ -11,12 +11,15 @@ import {
 } from "@/components/ui/table";
 import { PeriodStatusBadge } from "@/components/period-status-badge";
 import { LeadsTable } from "@/components/leads-table";
+import { TodoWidget } from "@/components/todo-widget";
 import { listPeriodsReadyForReview } from "@/lib/services/tax-period";
 import {
   getCurrentPeriodUploadCounts,
   listStuckOrFailedExtractions,
 } from "@/lib/services/firm-dashboard";
 import { listLeads } from "@/lib/services/leads";
+import { listTodos } from "@/lib/services/todo";
+import { listAssignableLineAccounts } from "@/lib/services/line";
 import { RocPeriod } from "@/lib/domain/roc-period";
 import { cn, formatDateToYYYYMMDD, formatDateZhTW } from "@/lib/utils";
 
@@ -42,12 +45,15 @@ export default async function DashboardPage({
         : "text-muted-foreground",
   );
 
-  const [readyForReview, stuckOrFailed, uploadCounts, leads] = await Promise.all([
-    listPeriodsReadyForReview(firmId),
-    listStuckOrFailedExtractions(firmId),
-    getCurrentPeriodUploadCounts(firmId, currentPeriod.toString()),
-    listLeads(),
-  ]);
+  const [readyForReview, stuckOrFailed, uploadCounts, leads, todos, lineAccounts] =
+    await Promise.all([
+      listPeriodsReadyForReview(firmId),
+      listStuckOrFailedExtractions(firmId),
+      getCurrentPeriodUploadCounts(firmId, currentPeriod.toString()),
+      listLeads(),
+      listTodos(firmId),
+      listAssignableLineAccounts(),
+    ]);
 
   return (
     <div className="space-y-6">
@@ -57,6 +63,8 @@ export default async function DashboardPage({
           本期：{currentPeriod.format()} · 截止日 {formatDateToYYYYMMDD(cutoff)} · 距今 {daysRemaining} 天
         </p>
       </div>
+
+      <TodoWidget firmId={firmId} todos={todos} lineAccounts={lineAccounts} />
 
       {leads.length > 0 && (
         <Card>

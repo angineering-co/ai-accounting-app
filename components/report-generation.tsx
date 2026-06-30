@@ -84,7 +84,7 @@ export function ReportGeneration({
       // 否則 SWR 重新驗證時會覆蓋使用者在對話框內已改的選擇。
       declarationType: client.tax_filing_config?.declaration_type ?? "1",
       countyCity: client.tax_filing_config?.county_city ?? "臺北市",
-      declarationMethod: "1",
+      declarationMethod: client.tax_filing_config?.declaration_method ?? "1",
       declarerId: "",
       declarerName: "",
       declarerPhoneAreaCode: "",

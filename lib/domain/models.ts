@@ -78,11 +78,13 @@ export const COUNTY_CITY_NAMES = [
 ] as const;
 
 export const declarationTypeSchema = z.enum(["1", "2"]); // 1=按期申報, 2=按月申報
+export const declarationMethodSchema = z.enum(["1", "2"]); // 1=自行申報, 2=委託申報
 
 // 客戶層級的申報書（.TET_U）預設值，免去每次產表時重新選填。
-// 未來其他每客戶固定的申報欄位（如申報方式、總繳代號）也歸在這裡。
+// 未來其他每客戶固定的申報欄位（如總繳代號）也歸在這裡。
 export const taxFilingConfigSchema = z.object({
   declaration_type: declarationTypeSchema.default("1"),
+  declaration_method: declarationMethodSchema.default("1"),
   county_city: z.enum(COUNTY_CITY_NAMES).default("臺北市"),
 });
 

@@ -54,6 +54,7 @@ export function FilingConfigSection({
     defaultValues: {
       tax_filing_config: {
         declaration_type: client.tax_filing_config?.declaration_type ?? "1",
+        declaration_method: client.tax_filing_config?.declaration_method ?? "1",
         county_city: client.tax_filing_config?.county_city ?? "臺北市",
       },
     },
@@ -75,7 +76,7 @@ export function FilingConfigSection({
       <CardHeader>
         <CardTitle>申報書設定</CardTitle>
         <CardDescription>
-          產生 .TET_U 申報書時的預設申報種類與縣市別，設定後即免逐次選填。
+          產生 .TET_U 申報書時的預設申報種類、申報方式與縣市別，設定後即免逐次選填。
         </CardDescription>
       </CardHeader>
       <Form {...form}>
@@ -96,6 +97,27 @@ export function FilingConfigSection({
                     <SelectContent>
                       <SelectItem value="1">1: 按期申報</SelectItem>
                       <SelectItem value="2">2: 按月申報</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="tax_filing_config.declaration_method"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>申報方式</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="1">1: 自行申報</SelectItem>
+                      <SelectItem value="2">2: 委託申報</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />

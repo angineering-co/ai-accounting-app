@@ -226,6 +226,7 @@ export type Database = {
           platform_credentials: Json | null
           responsible_person: Json | null
           shareholders: Json | null
+          tax_filing_config: Json | null
           tax_id: string
           tax_payer_id: string
         }
@@ -245,6 +246,7 @@ export type Database = {
           platform_credentials?: Json | null
           responsible_person?: Json | null
           shareholders?: Json | null
+          tax_filing_config?: Json | null
           tax_id: string
           tax_payer_id: string
         }
@@ -264,6 +266,7 @@ export type Database = {
           platform_credentials?: Json | null
           responsible_person?: Json | null
           shareholders?: Json | null
+          tax_filing_config?: Json | null
           tax_id?: string
           tax_payer_id?: string
         }

@@ -69,6 +69,25 @@ export const taxIdValidator = z
   .min(8, "統一編號格式錯誤")
   .max(8, "統一編號格式錯誤");
 
+// 申報書（.TET_U）共用選項。縣市別存縣市名稱，產表時再對應政府代碼。
+export const COUNTY_CITY_NAMES = [
+  "臺北市", "新北市", "桃園市", "臺中市", "臺南市", "高雄市",
+  "基隆市", "新竹市", "嘉義市", "新竹縣", "苗栗縣", "彰化縣",
+  "南投縣", "雲林縣", "嘉義縣", "屏東縣", "宜蘭縣", "花蓮縣",
+  "臺東縣", "澎湖縣", "金門縣", "連江縣",
+] as const;
+
+export const declarationTypeSchema = z.enum(["1", "2"]); // 1=按期申報, 2=按月申報
+
+// 客戶層級的申報書（.TET_U）預設值，免去每次產表時重新選填。
+// 未來其他每客戶固定的申報欄位（如申報方式、總繳代號）也歸在這裡。
+export const taxFilingConfigSchema = z.object({
+  declaration_type: declarationTypeSchema.default("1"),
+  county_city: z.string().default("臺北市"),
+});
+
+export type TaxFilingConfig = z.infer<typeof taxFilingConfigSchema>;
+
 // ===== Client Schemas =====
 export const clientSchema = z.object({
   id: z.string().uuid(),
@@ -82,6 +101,7 @@ export const clientSchema = z.object({
   mailing_address: z.string().nullable().optional(),
   phone: z.string().nullable().optional(),
   email: z.string().nullable().optional(),
+  tax_filing_config: taxFilingConfigSchema.nullable().optional(),
   responsible_person: responsiblePersonSchema.nullable().optional(),
   shareholders: z.array(shareholderSchema).nullable().optional(),
   platform_credentials: platformCredentialsSchema.nullable().optional(),
@@ -114,6 +134,7 @@ export const updateClientSettingsSchema = z.object({
   mailing_address: z.string().optional(),
   phone: z.string().optional(),
   email: z.string().email("信箱格式錯誤").or(z.literal("")).optional(),
+  tax_filing_config: taxFilingConfigSchema.nullable().optional(),
   responsible_person: responsiblePersonSchema.nullable().optional(),
   shareholders: z.array(shareholderSchema).nullable().optional(),
   platform_credentials: platformCredentialsSchema.nullable().optional(),

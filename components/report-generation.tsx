@@ -39,6 +39,7 @@ import {
   type Client,
   tetUConfigSchema,
   type TetUConfig,
+  COUNTY_CITY_NAMES,
 } from "@/lib/domain/models";
 import { generateTxtReport, generateTetUReport } from "@/lib/services/reports";
 import { getFirmSettings } from "@/lib/services/firm";
@@ -78,8 +79,8 @@ export function ReportGeneration({
       consolidatedDeclarationCode: "0",
       declarationCode: "",
       taxPayerId: client.tax_payer_id || "",
-      declarationType: "1",
-      countyCity: "臺北市",
+      declarationType: client.tax_filing_config?.declaration_type ?? "1",
+      countyCity: client.tax_filing_config?.county_city ?? "臺北市",
       declarationMethod: "1",
       declarerId: "",
       declarerName: "",
@@ -323,12 +324,7 @@ export function ReportGeneration({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {[
-                            "臺北市", "新北市", "桃園市", "臺中市", "臺南市", "高雄市",
-                            "基隆市", "新竹市", "嘉義市", "新竹縣", "苗栗縣", "彰化縣",
-                            "南投縣", "雲林縣", "嘉義縣", "屏東縣", "宜蘭縣", "花蓮縣",
-                            "臺東縣", "澎湖縣", "金門縣", "連江縣"
-                          ].map((city) => (
+                          {COUNTY_CITY_NAMES.map((city) => (
                             <SelectItem key={city} value={city}>
                               {city}
                             </SelectItem>

@@ -1,5 +1,5 @@
 import { authUsers as users } from "drizzle-orm/supabase";
-import { pgTable, index, unique, uuid, text, jsonb, timestamp, uniqueIndex, foreignKey, boolean, pgPolicy, check, integer, bigint, date, smallint, varchar, primaryKey } from "drizzle-orm/pg-core"
+import { pgTable, index, unique, uuid, text, jsonb, timestamp, foreignKey, pgPolicy, date, uniqueIndex, boolean, check, integer, bigint, smallint, varchar, primaryKey } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 
@@ -16,6 +16,46 @@ export const leads = pgTable("leads", {
 	index("idx_leads_created_at").using("btree", table.created_at.desc().nullsFirst().op("timestamptz_ops")),
 	index("idx_leads_status").using("btree", table.status.asc().nullsLast().op("text_ops")),
 	unique("leads_lead_code_key").on(table.lead_code),
+]);
+
+export const todos = pgTable("todos", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	firm_id: uuid().notNull(),
+	title: text().notNull(),
+	description: text(),
+	line_account_id: uuid(),
+	due_date: date(),
+	status: text().default('open').notNull(),
+	completed_at: timestamp({ withTimezone: true, mode: 'string' }),
+	assignee_id: uuid(),
+	created_by: uuid(),
+	created_at: timestamp({ withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	updated_at: timestamp({ withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	index("todos_assignee_id_idx").using("btree", table.assignee_id.asc().nullsLast().op("uuid_ops")).where(sql`(assignee_id IS NOT NULL)`),
+	index("todos_firm_id_status_idx").using("btree", table.firm_id.asc().nullsLast().op("text_ops"), table.status.asc().nullsLast().op("text_ops")),
+	index("todos_line_account_id_idx").using("btree", table.line_account_id.asc().nullsLast().op("uuid_ops")).where(sql`(line_account_id IS NOT NULL)`),
+	foreignKey({
+			columns: [table.assignee_id],
+			foreignColumns: [profiles.id],
+			name: "todos_assignee_id_fkey"
+		}).onDelete("set null"),
+	foreignKey({
+			columns: [table.created_by],
+			foreignColumns: [profiles.id],
+			name: "todos_created_by_fkey"
+		}).onDelete("set null"),
+	foreignKey({
+			columns: [table.firm_id],
+			foreignColumns: [firms.id],
+			name: "todos_firm_id_fkey"
+		}).onDelete("cascade"),
+	foreignKey({
+			columns: [table.line_account_id],
+			foreignColumns: [line_accounts.id],
+			name: "todos_line_account_id_fkey"
+		}).onDelete("cascade"),
+	pgPolicy("Users can manage todos in their firm", { as: "permissive", for: "all", to: ["public"], using: sql`((firm_id = get_auth_user_firm_id()) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`, withCheck: sql`((firm_id = get_auth_user_firm_id()) OR ((auth.jwt() ->> 'role'::text) = 'super_admin'::text))`  }),
 ]);
 
 export const line_accounts = pgTable("line_accounts", {

@@ -1,8 +1,77 @@
 import { relations } from "drizzle-orm/relations";
 import { authUsers as usersInAuth } from "drizzle-orm/supabase";
-import { clients, line_accounts, leads, ecpay_payments, firms, documents, profiles, journal_entries, journal_entry_lines, invoices, tax_filing_periods, allowances, invoice_ranges, fiscal_year_closes, audit_trails, voucher_sequences } from "./schema";
+import { profiles, todos, firms, line_accounts, clients, leads, ecpay_payments, documents, journal_entries, journal_entry_lines, invoices, tax_filing_periods, allowances, invoice_ranges, fiscal_year_closes, audit_trails, voucher_sequences } from "./schema";
 
-export const line_accountsRelations = relations(line_accounts, ({one}) => ({
+export const todosRelations = relations(todos, ({one}) => ({
+	profile_assignee_id: one(profiles, {
+		fields: [todos.assignee_id],
+		references: [profiles.id],
+		relationName: "todos_assignee_id_profiles_id"
+	}),
+	profile_created_by: one(profiles, {
+		fields: [todos.created_by],
+		references: [profiles.id],
+		relationName: "todos_created_by_profiles_id"
+	}),
+	firm: one(firms, {
+		fields: [todos.firm_id],
+		references: [firms.id]
+	}),
+	line_account: one(line_accounts, {
+		fields: [todos.line_account_id],
+		references: [line_accounts.id]
+	}),
+}));
+
+export const profilesRelations = relations(profiles, ({one, many}) => ({
+	todos_assignee_id: many(todos, {
+		relationName: "todos_assignee_id_profiles_id"
+	}),
+	todos_created_by: many(todos, {
+		relationName: "todos_created_by_profiles_id"
+	}),
+	documents: many(documents),
+	journal_entries_created_by: many(journal_entries, {
+		relationName: "journal_entries_created_by_profiles_id"
+	}),
+	journal_entries_posted_by: many(journal_entries, {
+		relationName: "journal_entries_posted_by_profiles_id"
+	}),
+	invoices: many(invoices),
+	allowances: many(allowances),
+	client: one(clients, {
+		fields: [profiles.client_id],
+		references: [clients.id]
+	}),
+	firm: one(firms, {
+		fields: [profiles.firm_id],
+		references: [firms.id]
+	}),
+	usersInAuth: one(usersInAuth, {
+		fields: [profiles.id],
+		references: [usersInAuth.id]
+	}),
+	fiscal_year_closes: many(fiscal_year_closes),
+	audit_trails: many(audit_trails),
+}));
+
+export const firmsRelations = relations(firms, ({many}) => ({
+	todos: many(todos),
+	ecpay_payments: many(ecpay_payments),
+	documents: many(documents),
+	journal_entries: many(journal_entries),
+	invoices: many(invoices),
+	allowances: many(allowances),
+	invoice_ranges: many(invoice_ranges),
+	tax_filing_periods: many(tax_filing_periods),
+	profiles: many(profiles),
+	fiscal_year_closes: many(fiscal_year_closes),
+	audit_trails: many(audit_trails),
+	clients: many(clients),
+}));
+
+export const line_accountsRelations = relations(line_accounts, ({one, many}) => ({
+	todos: many(todos),
 	client: one(clients, {
 		fields: [line_accounts.client_id],
 		references: [clients.id]
@@ -46,20 +115,6 @@ export const ecpay_paymentsRelations = relations(ecpay_payments, ({one}) => ({
 	}),
 }));
 
-export const firmsRelations = relations(firms, ({many}) => ({
-	ecpay_payments: many(ecpay_payments),
-	documents: many(documents),
-	journal_entries: many(journal_entries),
-	invoices: many(invoices),
-	allowances: many(allowances),
-	invoice_ranges: many(invoice_ranges),
-	tax_filing_periods: many(tax_filing_periods),
-	profiles: many(profiles),
-	fiscal_year_closes: many(fiscal_year_closes),
-	audit_trails: many(audit_trails),
-	clients: many(clients),
-}));
-
 export const documentsRelations = relations(documents, ({one, many}) => ({
 	client: one(clients, {
 		fields: [documents.client_id],
@@ -76,32 +131,6 @@ export const documentsRelations = relations(documents, ({one, many}) => ({
 	journal_entries: many(journal_entries),
 	invoices: many(invoices),
 	allowances: many(allowances),
-}));
-
-export const profilesRelations = relations(profiles, ({one, many}) => ({
-	documents: many(documents),
-	journal_entries_created_by: many(journal_entries, {
-		relationName: "journal_entries_created_by_profiles_id"
-	}),
-	journal_entries_posted_by: many(journal_entries, {
-		relationName: "journal_entries_posted_by_profiles_id"
-	}),
-	invoices: many(invoices),
-	allowances: many(allowances),
-	client: one(clients, {
-		fields: [profiles.client_id],
-		references: [clients.id]
-	}),
-	firm: one(firms, {
-		fields: [profiles.firm_id],
-		references: [firms.id]
-	}),
-	usersInAuth: one(usersInAuth, {
-		fields: [profiles.id],
-		references: [usersInAuth.id]
-	}),
-	fiscal_year_closes: many(fiscal_year_closes),
-	audit_trails: many(audit_trails),
 }));
 
 export const journal_entriesRelations = relations(journal_entries, ({one, many}) => ({

@@ -38,6 +38,29 @@ import {
 
 const PAGE_SIZE = 24;
 
+const RECEIPT_EXAMPLES = [
+  {
+    title: "員工、商業保險",
+    detail:
+      "員工團體保險、雇主為員工投保的商業保險，以及公司投保的產物、責任等商業保險費收據。",
+  },
+  {
+    title: "車票、捷運、火車票（高鐵有統編）",
+    detail:
+      "因公出差的交通票證。高鐵可在購票時輸入統一編號開立電子發票，記得留存明細。",
+  },
+  {
+    title: "執行業務與規費收據",
+    detail:
+      "律師、會計師、地政士、記帳士等執行業務者開立的收據，以及向政府機關繳納的登記費、規費、罰鍰等收據。",
+  },
+  {
+    title: "免用統一發票收據",
+    detail:
+      "小規模營業人或依規定免用統一發票的商家所開立的收據，例如攤商、部分小店家。",
+  },
+];
+
 const IMAGE_EXTENSIONS = new Set([
   "jpg",
   "jpeg",
@@ -188,6 +211,24 @@ export function DocumentsView({ firmId, clientId, canManage = false }: Documents
             <Label className="text-slate-700">
               上傳非發票 / 折讓的文件（收據、帳單、其他單據；僅支援 PDF / 圖片）
             </Label>
+            <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+              <p className="text-base font-medium text-slate-700">
+                常見的收據範例
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                拿不到統一發票、但仍可列為費用的單據，都可以放這裡。
+              </p>
+              <ul className="mt-3 space-y-3">
+                {RECEIPT_EXAMPLES.map((example) => (
+                  <li key={example.title} className="text-base text-slate-700">
+                    <span className="font-medium">{example.title}</span>
+                    <span className="mt-0.5 block text-sm text-slate-500">
+                      {example.detail}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
             <Dropzone {...uploadProps}>
               <div className="md:hidden">
                 <MobileUploadActions

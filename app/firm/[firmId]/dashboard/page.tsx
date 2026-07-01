@@ -16,6 +16,7 @@ import { listPeriodsReadyForReview } from "@/lib/services/tax-period";
 import {
   getCurrentPeriodUploadCounts,
   listStuckOrFailedExtractions,
+  listFirmStaff,
 } from "@/lib/services/firm-dashboard";
 import { listLeads } from "@/lib/services/leads";
 import { listTodos } from "@/lib/services/todo";
@@ -45,15 +46,23 @@ export default async function DashboardPage({
         : "text-muted-foreground",
   );
 
-  const [readyForReview, stuckOrFailed, uploadCounts, leads, todos, lineAccounts] =
-    await Promise.all([
-      listPeriodsReadyForReview(firmId),
-      listStuckOrFailedExtractions(firmId),
-      getCurrentPeriodUploadCounts(firmId, currentPeriod.toString()),
-      listLeads(),
-      listTodos(firmId),
-      listAssignableLineAccounts(),
-    ]);
+  const [
+    readyForReview,
+    stuckOrFailed,
+    uploadCounts,
+    leads,
+    todos,
+    lineAccounts,
+    staff,
+  ] = await Promise.all([
+    listPeriodsReadyForReview(firmId),
+    listStuckOrFailedExtractions(firmId),
+    getCurrentPeriodUploadCounts(firmId, currentPeriod.toString()),
+    listLeads(),
+    listTodos(firmId),
+    listAssignableLineAccounts(),
+    listFirmStaff(firmId),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -64,7 +73,12 @@ export default async function DashboardPage({
         </p>
       </div>
 
-      <TodoWidget firmId={firmId} todos={todos} lineAccounts={lineAccounts} />
+      <TodoWidget
+        firmId={firmId}
+        todos={todos}
+        lineAccounts={lineAccounts}
+        staff={staff}
+      />
 
       {leads.length > 0 && (
         <Card>

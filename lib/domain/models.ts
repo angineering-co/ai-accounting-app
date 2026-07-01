@@ -163,6 +163,7 @@ export const todoSchema = z.object({
   description: z.string().nullable().optional(),
   line_account_id: z.string().uuid({ message: "請指定一個 LINE 帳號" }),
   due_date: z.string().nullable().optional(), // YYYY-MM-DD
+  assignee_id: z.string().uuid().nullable().optional(), // 指派給的事務所成員；null = 未指派
   status: z.enum(TODO_STATUSES),
 });
 
@@ -172,6 +173,7 @@ export const createTodoSchema = todoSchema.pick({
   description: true,
   line_account_id: true,
   due_date: true,
+  assignee_id: true,
 });
 
 export const updateTodoSchema = todoSchema.pick({
@@ -179,6 +181,7 @@ export const updateTodoSchema = todoSchema.pick({
   description: true,
   line_account_id: true,
   due_date: true,
+  assignee_id: true,
 });
 
 export type Todo = z.infer<typeof todoSchema>;

@@ -10,9 +10,11 @@ import {
   TodoStatus,
 } from "@/lib/domain/models";
 import { listAssignableLineAccounts } from "@/lib/services/line";
+import { listFirmStaff } from "@/lib/services/firm-dashboard";
 import { revalidatePath } from "next/cache";
 
-// A todo joined with its LINE account's display name and (if bound) client name.
+// A todo joined with its LINE account's display name and (if bound) client name,
+// plus the assignee's name.
 export type TodoRecord = {
   id: string;
   firm_id: string;
@@ -22,9 +24,11 @@ export type TodoRecord = {
   due_date: string | null;
   status: string;
   completed_at: string | null;
+  assignee_id: string | null;
   created_at: string;
   line_account_display_name: string | null;
   client_name: string | null;
+  assignee_name: string | null;
 };
 
 export async function createTodo(data: CreateTodoInput) {
@@ -97,6 +101,25 @@ export async function setTodoStatus(todoId: string, status: TodoStatus) {
   revalidatePath(`/firm/${updated.firm_id}/dashboard`);
 }
 
+export async function setTodoAssignee(
+  todoId: string,
+  assigneeId: string | null,
+) {
+  const supabase = await createSupabaseClient();
+  const { data: updated, error } = await supabase
+    .from("todos")
+    .update({ assignee_id: assigneeId, updated_at: new Date().toISOString() })
+    .eq("id", todoId)
+    .select("firm_id")
+    .single();
+
+  if (error) {
+    throw new Error("Database error: " + error.message);
+  }
+
+  revalidatePath(`/firm/${updated.firm_id}/dashboard`);
+}
+
 export async function deleteTodo(todoId: string) {
   const supabase = await createSupabaseClient();
   const { data: deleted, error } = await supabase
@@ -118,7 +141,7 @@ export async function listTodos(firmId: string): Promise<TodoRecord[]> {
   const { data, error } = await supabase
     .from("todos")
     .select(
-      "id, firm_id, title, description, line_account_id, due_date, status, completed_at, created_at",
+      "id, firm_id, title, description, line_account_id, due_date, status, completed_at, assignee_id, created_at",
     )
     .eq("firm_id", firmId)
     .order("due_date", { ascending: true, nullsFirst: false })
@@ -130,15 +153,25 @@ export async function listTodos(firmId: string): Promise<TodoRecord[]> {
 
   // LINE account names cannot be embedded from todos (line_accounts RLS is
   // closed to the auth role), so enrich from the admin-fetched account map.
-  const accounts = await listAssignableLineAccounts();
-  const byId = new Map(accounts.map((a) => [a.id, a]));
+  // Staff names come from the firm-scoped profiles list.
+  const [accounts, staff] = await Promise.all([
+    listAssignableLineAccounts(),
+    listFirmStaff(firmId),
+  ]);
+  const accountById = new Map(accounts.map((a) => [a.id, a]));
+  const staffById = new Map(staff.map((s) => [s.id, s]));
 
   return (data ?? []).map((row) => {
-    const account = row.line_account_id ? byId.get(row.line_account_id) : undefined;
+    const account = row.line_account_id
+      ? accountById.get(row.line_account_id)
+      : undefined;
     return {
       ...row,
       line_account_display_name: account?.display_name ?? null,
       client_name: account?.client_name ?? null,
+      assignee_name: row.assignee_id
+        ? (staffById.get(row.assignee_id)?.name ?? null)
+        : null,
     };
   });
 }

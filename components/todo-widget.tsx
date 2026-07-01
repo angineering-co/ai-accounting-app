@@ -21,14 +21,29 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn, formatDateZhTW } from "@/lib/utils";
 import type { AssignableLineAccount } from "@/lib/services/line";
+import type { FirmStaff } from "@/lib/services/firm-dashboard";
 import {
   createTodo,
   deleteTodo,
+  setTodoAssignee,
   setTodoStatus,
   type TodoRecord,
 } from "@/lib/services/todo";
+
+const UNASSIGNED = "unassigned";
+
+function staffLabel(staff: FirmStaff): string {
+  return staff.name ?? "（未命名成員）";
+}
 
 function lineAccountLabel(account: AssignableLineAccount): string {
   const name = account.display_name ?? "（未命名）";
@@ -132,14 +147,50 @@ function LineAccountCombobox({
   );
 }
 
+function AssigneeSelect({
+  staff,
+  value,
+  onChange,
+  disabled,
+  triggerClassName,
+}: {
+  staff: FirmStaff[];
+  value: string | null;
+  onChange: (id: string | null) => void;
+  disabled?: boolean;
+  triggerClassName?: string;
+}) {
+  return (
+    <Select
+      value={value ?? UNASSIGNED}
+      onValueChange={(v) => onChange(v === UNASSIGNED ? null : v)}
+      disabled={disabled}
+    >
+      <SelectTrigger className={cn("font-normal", triggerClassName)}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={UNASSIGNED}>未指派</SelectItem>
+        {staff.map((member) => (
+          <SelectItem key={member.id} value={member.id}>
+            {staffLabel(member)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 export function TodoWidget({
   firmId,
   todos,
   lineAccounts,
+  staff,
 }: {
   firmId: string;
   todos: TodoRecord[];
   lineAccounts: AssignableLineAccount[];
+  staff: FirmStaff[];
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -150,6 +201,7 @@ export function TodoWidget({
   const [description, setDescription] = useState("");
   const [lineAccountId, setLineAccountId] = useState<string | null>(null);
   const [dueDate, setDueDate] = useState("");
+  const [assigneeId, setAssigneeId] = useState<string | null>(null);
 
   const openTodos = todos.filter((t) => t.status !== "done");
   const doneTodos = todos.filter((t) => t.status === "done");
@@ -159,6 +211,7 @@ export function TodoWidget({
     setDescription("");
     setLineAccountId(null);
     setDueDate("");
+    setAssigneeId(null);
   };
 
   const handleCreate = () => {
@@ -178,6 +231,7 @@ export function TodoWidget({
           description: description.trim() || null,
           line_account_id: lineAccountId,
           due_date: dueDate || null,
+          assignee_id: assigneeId,
         });
         toast.success("已新增待辦。");
         resetForm();
@@ -196,6 +250,17 @@ export function TodoWidget({
         router.refresh();
       } catch {
         toast.error("更新失敗，請稍後再試。");
+      }
+    });
+  };
+
+  const handleAssign = (todo: TodoRecord, nextAssigneeId: string | null) => {
+    startTransition(async () => {
+      try {
+        await setTodoAssignee(todo.id, nextAssigneeId);
+        router.refresh();
+      } catch {
+        toast.error("指派失敗，請稍後再試。");
       }
     });
   };
@@ -253,6 +318,13 @@ export function TodoWidget({
             )}
           </div>
         </div>
+        <AssigneeSelect
+          staff={staff}
+          value={todo.assignee_id}
+          onChange={(id) => handleAssign(todo, id)}
+          disabled={isPending}
+          triggerClassName="h-8 w-32 shrink-0 text-sm"
+        />
         <Button
           type="button"
           variant="ghost"
@@ -362,6 +434,16 @@ export function TodoWidget({
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
                 className="w-full"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label>指派給（選填）</Label>
+              <AssigneeSelect
+                staff={staff}
+                value={assigneeId}
+                onChange={setAssigneeId}
+                disabled={isPending}
+                triggerClassName="w-full"
               />
             </div>
           </div>

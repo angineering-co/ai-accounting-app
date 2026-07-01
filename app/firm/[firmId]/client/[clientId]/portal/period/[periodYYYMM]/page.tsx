@@ -4,11 +4,15 @@ import { use, useCallback, useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import dynamic from "next/dynamic";
 import {
+  ArrowDownToLine,
   ArrowLeft,
+  ArrowUpFromLine,
   BellRing,
   CheckCircle2,
   Download,
   FileText,
+  Hash,
+  LayoutGrid,
   Loader2,
   Receipt,
 } from "lucide-react";
@@ -451,29 +455,33 @@ export default function PortalPeriodDetailPage({
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid h-auto w-full grid-cols-4 rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1.5">
+        <TabsList className="grid h-auto w-full grid-cols-4 gap-2 rounded-2xl bg-transparent p-0">
           <TabsTrigger
             value="overview"
-            className="rounded-xl text-slate-600 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/80"
+            className="flex h-auto flex-col items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-3 text-base font-semibold text-slate-600 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50/60 hover:text-emerald-700 hover:shadow-md data-[state=active]:border-emerald-500 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:shadow-emerald-200/80"
           >
+            <LayoutGrid className="h-5 w-5" />
             總覽
           </TabsTrigger>
           <TabsTrigger
             value="input"
-            className="rounded-xl text-slate-600 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/80"
+            className="flex h-auto flex-col items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-3 text-base font-semibold text-slate-600 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50/60 hover:text-emerald-700 hover:shadow-md data-[state=active]:border-emerald-500 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:shadow-emerald-200/80"
           >
+            <ArrowDownToLine className="h-5 w-5" />
             進項
           </TabsTrigger>
           <TabsTrigger
             value="output"
-            className="rounded-xl text-slate-600 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/80"
+            className="flex h-auto flex-col items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-3 text-base font-semibold text-slate-600 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50/60 hover:text-emerald-700 hover:shadow-md data-[state=active]:border-emerald-500 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:shadow-emerald-200/80"
           >
+            <ArrowUpFromLine className="h-5 w-5" />
             銷項
           </TabsTrigger>
           <TabsTrigger
             value="ranges"
-            className="rounded-xl text-slate-600 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/80"
+            className="flex h-auto flex-col items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-3 text-base font-semibold text-slate-600 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50/60 hover:text-emerald-700 hover:shadow-md data-[state=active]:border-emerald-500 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:shadow-emerald-200/80"
           >
+            <Hash className="h-5 w-5" />
             字軌
           </TabsTrigger>
         </TabsList>

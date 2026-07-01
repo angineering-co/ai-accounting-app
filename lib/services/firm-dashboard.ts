@@ -140,3 +140,26 @@ export async function getCurrentPeriodUploadCounts(
     a.client_name.localeCompare(b.client_name, "zh-Hant"),
   );
 }
+
+export interface FirmStaff {
+  id: string;
+  name: string | null;
+}
+
+// Firm staff (admin / staff / super_admin) eligible to be assigned a todo.
+// Readable via the regular server client thanks to the "Users can view profiles
+// in their firm" RLS policy; client-portal profiles are excluded by role.
+export async function listFirmStaff(firmId: string): Promise<FirmStaff[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, name")
+    .eq("firm_id", firmId)
+    .in("role", ["admin", "staff", "super_admin"]);
+
+  if (error) throw error;
+
+  return (data ?? []).sort((a, b) =>
+    (a.name ?? "").localeCompare(b.name ?? "", "zh-Hant"),
+  );
+}

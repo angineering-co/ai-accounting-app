@@ -65,7 +65,7 @@ function LineAccountCombobox({
 }: {
   accounts: AssignableLineAccount[];
   value: string | null;
-  onChange: (id: string) => void;
+  onChange: (id: string | null) => void;
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -92,7 +92,7 @@ function LineAccountCombobox({
           className="w-full justify-between font-normal"
         >
           <span className={cn("truncate", !selected && "text-muted-foreground")}>
-            {selected ? lineAccountLabel(selected) : "選擇 LINE 帳號"}
+            {selected ? lineAccountLabel(selected) : "未指定"}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -111,6 +111,22 @@ function LineAccountCombobox({
           />
         </div>
         <div className="max-h-60 overflow-auto p-1">
+          {!q && (
+            <button
+              type="button"
+              onClick={() => {
+                onChange(null);
+                setQuery("");
+                setOpen(false);
+              }}
+              className={cn(
+                "flex w-full items-center rounded-sm px-2 py-2 text-left text-base text-muted-foreground hover:bg-accent",
+                value === null && "bg-accent",
+              )}
+            >
+              未指定
+            </button>
+          )}
           {filtered.length === 0 ? (
             <p className="px-2 py-4 text-center text-sm text-muted-foreground">
               找不到 LINE 帳號
@@ -219,10 +235,6 @@ export function TodoWidget({
       toast.error("請輸入標題。");
       return;
     }
-    if (!lineAccountId) {
-      toast.error("請選擇 LINE 帳號。");
-      return;
-    }
     startTransition(async () => {
       try {
         await createTodo({
@@ -304,9 +316,11 @@ export function TodoWidget({
             </span>
           )}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-            <span>
-              LINE · {todo.line_account_display_name ?? "（未命名）"}
-            </span>
+            {todo.line_account_id && (
+              <span>
+                LINE · {todo.line_account_display_name ?? "（未命名）"}
+              </span>
+            )}
             {todo.client_name && <span>客戶：{todo.client_name}</span>}
             {todo.due_date && (
               <span
@@ -418,7 +432,7 @@ export function TodoWidget({
               />
             </div>
             <div className="flex flex-col gap-2">
-              <Label>LINE 帳號</Label>
+              <Label>LINE 帳號（選填）</Label>
               <LineAccountCombobox
                 accounts={lineAccounts}
                 value={lineAccountId}

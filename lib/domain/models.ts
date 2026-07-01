@@ -151,8 +151,8 @@ export type UpdateClientSettingsInput = z.infer<typeof updateClientSettingsSchem
 
 // ===== TODO Schemas =====
 // Tasks shown on the firm dashboard. Validation lives here (not in the DB):
-// `status` is constrained to the enum below and every task must target a LINE
-// account (`line_account_id` is required, not nullable, on create/update).
+// `status` is constrained to the enum below. line_account_id is optional — a
+// task may relate to a LINE contact or be a general firm to-do with none.
 export const TODO_STATUSES = ["open", "done"] as const;
 export type TodoStatus = (typeof TODO_STATUSES)[number];
 
@@ -161,7 +161,7 @@ export const todoSchema = z.object({
   firm_id: z.string().uuid(),
   title: z.string().min(1, "標題為必填"),
   description: z.string().nullable().optional(),
-  line_account_id: z.string().uuid({ message: "請指定一個 LINE 帳號" }),
+  line_account_id: z.string().uuid().nullable().optional(), // 關聯的 LINE 帳號（選填）
   due_date: z.string().nullable().optional(), // YYYY-MM-DD
   assignee_id: z.string().uuid().nullable().optional(), // 指派給的事務所成員；null = 未指派
   status: z.enum(TODO_STATUSES),

@@ -458,30 +458,30 @@ export default function PortalPeriodDetailPage({
         <TabsList className="grid h-auto w-full grid-cols-4 gap-2 rounded-2xl bg-transparent p-0">
           <TabsTrigger
             value="overview"
-            className="flex h-auto flex-col items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-3 text-base font-semibold text-slate-600 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50/60 hover:text-emerald-700 hover:shadow-md data-[state=active]:border-emerald-500 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:shadow-emerald-200/80"
+            className="flex h-auto items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-2.5 text-base font-semibold text-slate-600 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50/60 hover:text-emerald-700 hover:shadow-md data-[state=active]:border-emerald-500 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:shadow-emerald-200/80"
           >
-            <LayoutGrid className="h-5 w-5" />
+            <LayoutGrid className="h-4 w-4" />
             總覽
           </TabsTrigger>
           <TabsTrigger
             value="input"
-            className="flex h-auto flex-col items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-3 text-base font-semibold text-slate-600 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50/60 hover:text-emerald-700 hover:shadow-md data-[state=active]:border-emerald-500 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:shadow-emerald-200/80"
+            className="flex h-auto items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-2.5 text-base font-semibold text-slate-600 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50/60 hover:text-emerald-700 hover:shadow-md data-[state=active]:border-emerald-500 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:shadow-emerald-200/80"
           >
-            <ArrowDownToLine className="h-5 w-5" />
+            <ArrowDownToLine className="h-4 w-4" />
             進項
           </TabsTrigger>
           <TabsTrigger
             value="output"
-            className="flex h-auto flex-col items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-3 text-base font-semibold text-slate-600 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50/60 hover:text-emerald-700 hover:shadow-md data-[state=active]:border-emerald-500 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:shadow-emerald-200/80"
+            className="flex h-auto items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-2.5 text-base font-semibold text-slate-600 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50/60 hover:text-emerald-700 hover:shadow-md data-[state=active]:border-emerald-500 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:shadow-emerald-200/80"
           >
-            <ArrowUpFromLine className="h-5 w-5" />
+            <ArrowUpFromLine className="h-4 w-4" />
             銷項
           </TabsTrigger>
           <TabsTrigger
             value="ranges"
-            className="flex h-auto flex-col items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-3 text-base font-semibold text-slate-600 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50/60 hover:text-emerald-700 hover:shadow-md data-[state=active]:border-emerald-500 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:shadow-emerald-200/80"
+            className="flex h-auto items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-2.5 text-base font-semibold text-slate-600 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50/60 hover:text-emerald-700 hover:shadow-md data-[state=active]:border-emerald-500 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:shadow-emerald-200/80"
           >
-            <Hash className="h-5 w-5" />
+            <Hash className="h-4 w-4" />
             字軌
           </TabsTrigger>
         </TabsList>
@@ -511,7 +511,7 @@ export default function PortalPeriodDetailPage({
                         </p>
                       </div>
                       <div className="rounded-2xl bg-emerald-100 p-3 text-emerald-700">
-                        <Icon className="h-5 w-5" />
+                        <Icon className="h-4 w-4" />
                       </div>
                     </div>
                   </div>

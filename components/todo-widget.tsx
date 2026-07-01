@@ -54,7 +54,9 @@ function isOverdue(dueDate: string | null): boolean {
   if (!dueDate) return false;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  return new Date(dueDate) < today;
+  // Parse the date-only string as local midnight, not UTC, so the overdue
+  // comparison doesn't shift a day in non-UTC+ timezones.
+  return new Date(dueDate + "T00:00:00") < today;
 }
 
 function LineAccountCombobox({
@@ -326,7 +328,7 @@ export function TodoWidget({
               <span
                 className={cn(overdue && "font-medium text-destructive")}
               >
-                截止 {formatDateZhTW(new Date(todo.due_date))}
+                截止 {formatDateZhTW(new Date(todo.due_date + "T00:00:00"))}
                 {overdue && "（已逾期）"}
               </span>
             )}

@@ -60,7 +60,7 @@ export default async function DashboardPage({
     getCurrentPeriodUploadCounts(firmId, currentPeriod.toString()),
     listLeads(),
     listTodos(firmId),
-    listAssignableLineAccounts(),
+    listAssignableLineAccounts(firmId),
     listFirmStaff(firmId),
   ]);
 

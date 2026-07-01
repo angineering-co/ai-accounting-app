@@ -9,7 +9,10 @@ import {
   TODO_STATUSES,
   TodoStatus,
 } from "@/lib/domain/models";
-import { listAssignableLineAccounts } from "@/lib/services/line";
+import {
+  listAssignableLineAccounts,
+  isLineAccountAssignableToFirm,
+} from "@/lib/services/line";
 import { listFirmStaff } from "@/lib/services/firm-dashboard";
 import { revalidatePath } from "next/cache";
 
@@ -38,6 +41,18 @@ export async function createTodo(data: CreateTodoInput) {
     throw new Error("Invalid data: " + validation.error.message);
   }
 
+  // RLS on todos only checks todos.firm_id, so verify the chosen LINE account
+  // (if any) isn't bound to a different firm's client before inserting.
+  if (
+    validation.data.line_account_id &&
+    !(await isLineAccountAssignableToFirm(
+      validation.data.firm_id,
+      validation.data.line_account_id,
+    ))
+  ) {
+    throw new Error("Invalid data: 指定的 LINE 帳號不屬於此事務所");
+  }
+
   const supabase = await createSupabaseClient();
   const {
     data: { user },
@@ -63,6 +78,27 @@ export async function updateTodo(todoId: string, data: UpdateTodoInput) {
   }
 
   const supabase = await createSupabaseClient();
+
+  const { data: existing, error: fetchError } = await supabase
+    .from("todos")
+    .select("firm_id")
+    .eq("id", todoId)
+    .single();
+
+  if (fetchError) {
+    throw new Error("Database error: " + fetchError.message);
+  }
+
+  if (
+    validation.data.line_account_id &&
+    !(await isLineAccountAssignableToFirm(
+      existing.firm_id,
+      validation.data.line_account_id,
+    ))
+  ) {
+    throw new Error("Invalid data: 指定的 LINE 帳號不屬於此事務所");
+  }
+
   const { data: updated, error } = await supabase
     .from("todos")
     .update({ ...validation.data, updated_at: new Date().toISOString() })
@@ -155,7 +191,7 @@ export async function listTodos(firmId: string): Promise<TodoRecord[]> {
   // closed to the auth role), so enrich from the admin-fetched account map.
   // Staff names come from the firm-scoped profiles list.
   const [accounts, staff] = await Promise.all([
-    listAssignableLineAccounts(),
+    listAssignableLineAccounts(firmId),
     listFirmStaff(firmId),
   ]);
   const accountById = new Map(accounts.map((a) => [a.id, a]));

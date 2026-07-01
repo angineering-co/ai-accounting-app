@@ -320,18 +320,25 @@ export type AssignableLineAccount = {
   client_name: string | null;
 };
 
+function embeddedClient<T>(client: T | T[] | null): T | null {
+  return Array.isArray(client) ? (client[0] ?? null) : client;
+}
+
 // Lists real LINE accounts (those with a line_user_id — excludes pending
 // binding-code placeholder rows) for assigning tasks. line_accounts has no
 // firm_id and its RLS is closed to the anon/auth roles, so this reads via the
-// admin client; SnapBooks is effectively single-firm so all real accounts are
-// listed. The client name is embedded for context (admin client bypasses RLS).
-export async function listAssignableLineAccounts(): Promise<
-  AssignableLineAccount[]
-> {
+// admin client (which bypasses RLS). When firmId is given, results are scoped
+// to that firm: accounts bound to a client are only returned if the client
+// belongs to firmId; unbound accounts (no client) are firm-agnostic and always
+// returned. Passing no firmId returns everything (kept for callers that don't
+// need scoping).
+export async function listAssignableLineAccounts(
+  firmId?: string,
+): Promise<AssignableLineAccount[]> {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("line_accounts")
-    .select("id, display_name, client_id, client:clients(name)")
+    .select("id, display_name, client_id, client:clients(name, firm_id)")
     .not("line_user_id", "is", null)
     .order("display_name", { nullsFirst: false });
 
@@ -340,16 +347,49 @@ export async function listAssignableLineAccounts(): Promise<
     return [];
   }
 
-  return (data ?? []).map((row) => {
-    const client = row.client as { name: string } | { name: string }[] | null;
-    const clientName = Array.isArray(client) ? (client[0]?.name ?? null) : (client?.name ?? null);
-    return {
-      id: row.id,
-      display_name: row.display_name,
-      client_id: row.client_id,
-      client_name: clientName,
-    };
-  });
+  return (data ?? [])
+    .filter((row) => {
+      if (!firmId) return true;
+      if (row.client_id === null) return true; // unbound: firm-agnostic
+      const client = embeddedClient(
+        row.client as { firm_id: string | null } | { firm_id: string | null }[] | null,
+      );
+      return client?.firm_id === firmId;
+    })
+    .map((row) => {
+      const client = embeddedClient(
+        row.client as { name: string } | { name: string }[] | null,
+      );
+      return {
+        id: row.id,
+        display_name: row.display_name,
+        client_id: row.client_id,
+        client_name: client?.name ?? null,
+      };
+    });
+}
+
+// Whether a LINE account may be attached to a todo owned by firmId: it must
+// exist and either be unbound or bound to a client in that firm. Guards the
+// write path since the todos RLS policy only checks todos.firm_id, not the
+// referenced LINE account's tenant.
+export async function isLineAccountAssignableToFirm(
+  firmId: string,
+  lineAccountId: string,
+): Promise<boolean> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("line_accounts")
+    .select("client_id, client:clients(firm_id)")
+    .eq("id", lineAccountId)
+    .maybeSingle();
+
+  if (error || !data) return false;
+  if (data.client_id === null) return true; // unbound: firm-agnostic
+  const client = embeddedClient(
+    data.client as { firm_id: string | null } | { firm_id: string | null }[] | null,
+  );
+  return client?.firm_id === firmId;
 }
 
 // ---------------------------------------------------------------------------
